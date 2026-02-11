@@ -1,0 +1,28 @@
+Analyzing diary_edit_page.dart...                               
+
+warning • The value of the field '_isRewriting' isn't used • lib/diary_edit_page.dart:42:8 • unused_field
+   info • 'dialogBackgroundColor' is deprecated and shouldn't be used. Use DialogThemeData.backgroundColor instead. This feature was deprecated after v3.27.0-0.1.pre • lib/diary_edit_page.dart:142:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:153:50 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:157:52 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:171:52 • deprecated_member_use
+   info • 'dialogBackgroundColor' is deprecated and shouldn't be used. Use DialogThemeData.backgroundColor instead. This feature was deprecated after v3.27.0-0.1.pre • lib/diary_edit_page.dart:219:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:233:52 • deprecated_member_use
+   info • 'dialogBackgroundColor' is deprecated and shouldn't be used. Use DialogThemeData.backgroundColor instead. This feature was deprecated after v3.27.0-0.1.pre • lib/diary_edit_page.dart:273:36 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:291:56 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:303:56 • deprecated_member_use
+   info • Use interpolation to compose strings and values • lib/diary_edit_page.dart:364:22 • prefer_interpolation_to_compose_strings
+   info • Use interpolation to compose strings and values • lib/diary_edit_page.dart:368:22 • prefer_interpolation_to_compose_strings
+   info • Use interpolation to compose strings and values • lib/diary_edit_page.dart:372:22 • prefer_interpolation_to_compose_strings
+   info • Use interpolation to compose strings and values • lib/diary_edit_page.dart:378:22 • prefer_interpolation_to_compose_strings
+   info • Use interpolation to compose strings and values • lib/diary_edit_page.dart:386:24 • prefer_interpolation_to_compose_strings
+   info • Use interpolation to compose strings and values • lib/diary_edit_page.dart:395:22 • prefer_interpolation_to_compose_strings
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:518:59 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:603:59 • deprecated_member_use
+   info • 'dialogBackgroundColor' is deprecated and shouldn't be used. Use DialogThemeData.backgroundColor instead. This feature was deprecated after v3.27.0-0.1.pre • lib/diary_edit_page.dart:656:32 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:669:48 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:679:52 • deprecated_member_use
+   info • Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check • lib/diary_edit_page.dart:837:44 • use_build_context_synchronously
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:857:68 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:934:50 • deprecated_member_use
+   info • 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss • lib/diary_edit_page.dart:1081:45 • deprecated_member_use
+
