@@ -3,6 +3,7 @@ Application configuration settings loaded from environment variables.
 """
 
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 
 
@@ -16,6 +17,13 @@ class Settings(BaseSettings):
     
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/archset"
+
+    @field_validator("database_url")
+    @classmethod
+    def assemble_db_connection(cls, v: str) -> str:
+        if v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
     
     # JWT Authentication
     secret_key: str = "change-this-in-production"
