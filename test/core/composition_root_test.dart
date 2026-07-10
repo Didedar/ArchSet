@@ -30,6 +30,7 @@ void main() {
     expect(dependencies.locale.repository, isNotNull);
     expect(dependencies.auth.repository, isNotNull);
     expect(dependencies.sync.service, isNotNull);
+    expect(dependencies.notes.repository, isNotNull);
   });
 
   test('logs initialization start and completion', () async {

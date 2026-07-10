@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../notes.dart';
+import '../../notes/pages/notes_page.dart';
 import '../bloc/auth_bloc.dart';
 import '../../sync/bloc/sync_bloc.dart';
 
@@ -73,7 +73,8 @@ class _SignInEmailPageState extends State<SignInEmailPage> {
       listener: _onAuthStateChanged,
       builder: (context, authState) {
         final isLoading = authState is AuthLoading;
-        final errorMessage = _validationError ??
+        final errorMessage =
+            _validationError ??
             (authState is AuthFailure
                 ? authState.message.replaceAll('Exception: ', '')
                 : null);
@@ -137,7 +138,9 @@ class _SignInEmailPageState extends State<SignInEmailPage> {
                     width: double.infinity,
                     height: 56,
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200],
+                      color: isDark
+                          ? const Color(0xFF2C2C2E)
+                          : Colors.grey[200],
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: TextField(
@@ -157,8 +160,9 @@ class _SignInEmailPageState extends State<SignInEmailPage> {
                           color: theme.colorScheme.onSurface.withOpacity(0.5),
                         ),
                         border: InputBorder.none,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                        ),
                         prefixIcon: Icon(
                           Icons.email_outlined,
                           color: theme.colorScheme.onSurface.withOpacity(0.7),
@@ -174,7 +178,9 @@ class _SignInEmailPageState extends State<SignInEmailPage> {
                     width: double.infinity,
                     height: 56,
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF2C2C2E) : Colors.grey[200],
+                      color: isDark
+                          ? const Color(0xFF2C2C2E)
+                          : Colors.grey[200],
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: TextField(
@@ -194,8 +200,9 @@ class _SignInEmailPageState extends State<SignInEmailPage> {
                           color: theme.colorScheme.onSurface.withOpacity(0.5),
                         ),
                         border: InputBorder.none,
-                        contentPadding:
-                            const EdgeInsets.symmetric(horizontal: 16),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                        ),
                         prefixIcon: Icon(
                           Icons.lock_outline,
                           color: theme.colorScheme.onSurface.withOpacity(0.7),

@@ -1,7 +1,7 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../../notes.dart';
+import '../../notes/pages/notes_page.dart';
 import '../bloc/auth_bloc.dart';
 import '../../sync/bloc/sync_bloc.dart';
 import 'welcome_page.dart';

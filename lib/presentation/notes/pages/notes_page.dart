@@ -1,20 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animations/animations.dart';
-import 'core/localization/app_strings.dart';
-import 'data/database/app_database.dart';
-import 'diary_edit_page.dart';
+import '../../../core/localization/app_strings.dart';
+import '../../../data/database/app_database.dart';
+import '../../../diary_edit_page.dart';
+import '../../pages/settings_page.dart';
+import '../../widgets/note_card.dart';
+import '../../widgets/empty_state.dart';
+import '../../widgets/loading_skeleton.dart';
+import '../../widgets/folder_card.dart';
+import '../../widgets/create_folder_dialog.dart';
+import '../bloc/folders_bloc.dart';
+import '../bloc/notes_bloc.dart';
 import 'folder_detail_page.dart';
-import 'presentation/providers/notes_provider.dart';
-import 'presentation/widgets/note_card.dart';
-import 'presentation/widgets/empty_state.dart';
-import 'presentation/widgets/loading_skeleton.dart';
-import 'presentation/widgets/folder_card.dart';
-import 'presentation/widgets/create_folder_dialog.dart';
-import 'presentation/pages/settings_page.dart';
 
 class NotesPage extends ConsumerStatefulWidget {
   const NotesPage({super.key});
@@ -35,6 +37,8 @@ class _NotesPageState extends ConsumerState<NotesPage>
       duration: const Duration(milliseconds: 200),
       vsync: this,
     );
+    context.read<NotesBloc>().add(const NotesSubscriptionRequested());
+    context.read<FoldersBloc>().add(const FoldersSubscriptionRequested());
   }
 
   @override
@@ -92,7 +96,6 @@ class _NotesPageState extends ConsumerState<NotesPage>
 
   @override
   Widget build(BuildContext context) {
-    final notesAsync = ref.watch(notesStreamProvider);
     final theme = Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
     final iconColor = theme.iconTheme.color ?? textColor;
@@ -185,7 +188,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
               // Content Body
               Expanded(
                 child: _isAllTabSelected
-                    ? _buildAllNotes(notesAsync)
+                    ? _buildAllNotes()
                     : _buildFoldersView(),
               ),
             ],
@@ -269,9 +272,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
     required double width,
   }) {
     final theme = Theme.of(context);
-    final selectedColor = theme.colorScheme.surface; // White/Light usually
     final unselectedColor = theme.cardColor; // Dark grey/Off white
-    final selectedTextColor = theme.colorScheme.onSurface; // Black/Dark
     final unselectedTextColor = theme.colorScheme.onSurface; // White/Dark
 
     // Refined logic for tab colors based on theme
@@ -306,88 +307,103 @@ class _NotesPageState extends ConsumerState<NotesPage>
     );
   }
 
-  Widget _buildAllNotes(AsyncValue<List<Note>> notesAsync) {
-    final foldersAsync = ref.watch(foldersStreamProvider);
+  Widget _buildAllNotes() {
+    return BlocBuilder<FoldersBloc, FoldersState>(
+      builder: (context, foldersState) {
+        final folderMap = <String, String>{
+          if (foldersState is FoldersLoadSuccess)
+            for (final folder in foldersState.folders) folder.id: folder.name,
+        };
 
-    // Build a map of folderId -> folderName for quick lookup
-    final folderMap = <String, String>{};
-    if (foldersAsync.hasValue) {
-      for (final folder in foldersAsync.value!) {
-        folderMap[folder.id] = folder.name;
-      }
-    }
-
-    return notesAsync.when(
-      loading: () => const LoadingSkeleton(),
-      error: (error, stack) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Text(
-            'Error: $error\n\nStack: $stack',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(color: Colors.redAccent, fontSize: 14),
-          ),
-        ),
-      ),
-      data: (notes) {
-        if (notes.isEmpty) {
-          return const EmptyState();
-        }
-
-        return ListView.separated(
-          padding: EdgeInsets.zero,
-          itemCount: notes.length,
-          separatorBuilder: (context, index) => const SizedBox(height: 12),
-          itemBuilder: (context, index) {
-            final note = notes[index];
-            // Look up folder name: if note has folderId, get folder name; otherwise "All notes"
-            final folderName = note.folderId != null
-                ? (folderMap[note.folderId] ??
-                      AppStrings.tr(ref, AppStrings.allNotes))
-                : AppStrings.tr(ref, AppStrings.allNotes);
-
-            return Dismissible(
-              key: Key(note.id),
-              direction: DismissDirection.endToStart,
-              onDismissed: (direction) {
-                ref.read(notesRepositoryProvider).deleteNote(note.id);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${note.title} deleted')),
-                );
-              },
-              background: Container(
-                color: Colors.red,
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 20),
-                child: const Icon(Icons.delete, color: Colors.white),
+        return BlocBuilder<NotesBloc, NotesState>(
+          builder: (context, notesState) {
+            return switch (notesState) {
+              NotesInitial() ||
+              NotesLoadInProgress() => const LoadingSkeleton(),
+              NotesLoadFailure(:final message) => Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    'Error: $message',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      color: Colors.redAccent,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
               ),
-              child: OpenContainer(
-                closedElevation: 0,
-                openElevation: 0,
-                closedColor: Colors.transparent,
-                openColor: Theme.of(
-                  context,
-                ).scaffoldBackgroundColor, // Was hardcoded to 1F2123
-                transitionDuration: const Duration(milliseconds: 500),
-                closedBuilder: (context, action) {
-                  return NoteCard(
-                    note: note,
-                    index: index,
-                    onTap: action,
-                    folderName: folderName,
-                  );
-                },
-                openBuilder: (context, action) {
-                  return DiaryEditPage(
-                    noteId: note.id,
-                    initialTitle: note.title,
-                    initialContent: note.content,
-                    initialFolderId: note.folderId,
-                    initialAudioPath: note.audioPath,
-                  );
-                },
-              ),
-            );
+              NotesLoadSuccess(:final notes) =>
+                notes.isEmpty
+                    ? const EmptyState()
+                    : ListView.separated(
+                        padding: EdgeInsets.zero,
+                        itemCount: notes.length,
+                        separatorBuilder: (context, index) =>
+                            const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final note = notes[index];
+                          // Look up folder name: if note has folderId, get
+                          // folder name; otherwise "All notes"
+                          final folderName = note.folderId != null
+                              ? (folderMap[note.folderId] ??
+                                    AppStrings.tr(ref, AppStrings.allNotes))
+                              : AppStrings.tr(ref, AppStrings.allNotes);
+
+                          return Dismissible(
+                            key: Key(note.id),
+                            direction: DismissDirection.endToStart,
+                            onDismissed: (direction) {
+                              context.read<NotesBloc>().add(
+                                NotesDeleteRequested(note.id),
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('${note.title} deleted'),
+                                ),
+                              );
+                            },
+                            background: Container(
+                              color: Colors.red,
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              child: const Icon(
+                                Icons.delete,
+                                color: Colors.white,
+                              ),
+                            ),
+                            child: OpenContainer(
+                              closedElevation: 0,
+                              openElevation: 0,
+                              closedColor: Colors.transparent,
+                              openColor: Theme.of(
+                                context,
+                              ).scaffoldBackgroundColor,
+                              transitionDuration: const Duration(
+                                milliseconds: 500,
+                              ),
+                              closedBuilder: (context, action) {
+                                return NoteCard(
+                                  note: note,
+                                  index: index,
+                                  onTap: action,
+                                  folderName: folderName,
+                                );
+                              },
+                              openBuilder: (context, action) {
+                                return DiaryEditPage(
+                                  noteId: note.id,
+                                  initialTitle: note.title,
+                                  initialContent: note.content,
+                                  initialFolderId: note.folderId,
+                                  initialAudioPath: note.audioPath,
+                                );
+                              },
+                            ),
+                          );
+                        },
+                      ),
+            };
           },
         );
       },
@@ -395,80 +411,85 @@ class _NotesPageState extends ConsumerState<NotesPage>
   }
 
   Widget _buildFoldersView() {
-    final foldersAsync = ref.watch(foldersStreamProvider);
-    final folderCountsAsync = ref.watch(folderNoteCountsProvider);
-    final allNotesCountAsync = ref.watch(allNotesCountProvider);
+    return BlocBuilder<FoldersBloc, FoldersState>(
+      builder: (context, state) {
+        return switch (state) {
+          FoldersInitial() ||
+          FoldersLoadInProgress() => const LoadingSkeleton(),
+          FoldersLoadFailure(:final message) => Center(
+            child: Text('Error: $message'),
+          ),
+          FoldersLoadSuccess(
+            :final folders,
+            :final folderCounts,
+            :final allNotesCount,
+          ) =>
+            folders.isEmpty
+                ? Column(
+                    children: [
+                      // All Notes card always shown
+                      AllNotesCard(
+                        noteCount: allNotesCount,
+                        onTap: () {
+                          // Navigate to all notes (could filter to uncategorized)
+                        },
+                        index: 0,
+                      ),
+                      const SizedBox(height: 24),
+                      Expanded(
+                        child: EmptyState(
+                          icon: Icons.folder_outlined,
+                          title: AppStrings.tr(ref, AppStrings.noFoldersYet),
+                          subtitle: AppStrings.tr(
+                            ref,
+                            AppStrings.tapToCreateFolder,
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : ListView.builder(
+                    itemCount: folders.length + 1, // +1 for All Notes
+                    itemBuilder: (context, index) {
+                      if (index == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: AllNotesCard(
+                            noteCount: allNotesCount,
+                            onTap: () {
+                              // Show all uncategorized notes
+                            },
+                            index: 0,
+                          ),
+                        );
+                      }
 
-    return foldersAsync.when(
-      loading: () => const LoadingSkeleton(),
-      error: (error, stack) => Center(child: Text('Error: $error')),
-      data: (folders) {
-        final counts = folderCountsAsync.valueOrNull ?? {};
-        final allNotesCount = allNotesCountAsync.valueOrNull ?? 0;
+                      final folder = folders[index - 1];
+                      final noteCount = folderCounts[folder.id] ?? 0;
 
-        if (folders.isEmpty) {
-          return Column(
-            children: [
-              // All Notes card always shown
-              AllNotesCard(
-                noteCount: allNotesCount,
-                onTap: () {
-                  // Navigate to all notes (could filter to uncategorized)
-                },
-                index: 0,
-              ),
-              const SizedBox(height: 24),
-              Expanded(
-                child: EmptyState(
-                  icon: Icons.folder_outlined,
-                  title: AppStrings.tr(ref, AppStrings.noFoldersYet),
-                  subtitle: AppStrings.tr(ref, AppStrings.tapToCreateFolder),
-                ),
-              ),
-            ],
-          );
-        }
-
-        return ListView.builder(
-          itemCount: folders.length + 1, // +1 for All Notes
-          itemBuilder: (context, index) {
-            if (index == 0) {
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: AllNotesCard(
-                  noteCount: allNotesCount,
-                  onTap: () {
-                    // Show all uncategorized notes
-                  },
-                  index: 0,
-                ),
-              );
-            }
-
-            final folder = folders[index - 1];
-            final noteCount = counts[folder.id] ?? 0;
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: FolderCard(
-                folder: folder,
-                noteCount: noteCount,
-                index: index,
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => FolderDetailPage(folder: folder),
-                    ),
-                  );
-                },
-                onLongPress: () {
-                  _showFolderOptions(folder);
-                },
-              ),
-            );
-          },
-        );
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: FolderCard(
+                          folder: folder,
+                          noteCount: noteCount,
+                          index: index,
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) =>
+                                    FolderDetailPage(folder: folder),
+                              ),
+                            );
+                          },
+                          onLongPress: () {
+                            _showFolderOptions(folder);
+                          },
+                        ),
+                      );
+                    },
+                  ),
+        };
       },
     );
   }
@@ -518,10 +539,10 @@ class _NotesPageState extends ConsumerState<NotesPage>
               onTap: () async {
                 Navigator.pop(context);
                 final confirm = await _confirmDeleteFolder(folder);
-                if (confirm == true) {
-                  await ref
-                      .read(notesRepositoryProvider)
-                      .deleteFolder(folder.id);
+                if (confirm == true && context.mounted) {
+                  context.read<FoldersBloc>().add(
+                    FoldersDeleteRequested(folder.id),
+                  );
                 }
               },
             ),
@@ -569,60 +590,6 @@ class _NotesPageState extends ConsumerState<NotesPage>
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildFolderItem({required String title, required String count}) {
-    return _FloatingWrapper(
-      child: Container(
-        width: double.infinity,
-        height: 85,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF2C2C2E), // TODO: check usages usage
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          children: [
-            // Yellow Folder Icon
-            SvgPicture.string(
-              '''<svg width="45" height="45" viewBox="0 0 45 45" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M7.5 37.5C6.46875 37.5 5.58625 37.1331 4.8525 36.3994C4.11875 35.6656 3.75125 34.7825 3.75 33.75V11.25C3.75 10.2188 4.1175 9.33625 4.8525 8.6025C5.5875 7.86875 6.47 7.50125 7.5 7.5H18.75L22.5 11.25H37.5C38.5312 11.25 39.4144 11.6175 40.1494 12.3525C40.8844 13.0875 41.2513 13.97 41.25 15V33.75C41.25 34.7812 40.8831 35.6644 40.1494 36.3994C39.4156 37.1344 38.5325 37.5012 37.5 37.5H7.5Z" fill="#E8B731" />
-</svg>''',
-              width: 40,
-              height: 40,
-            ),
-            const SizedBox(width: 16),
-            // Text Column
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    count,
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                      color: const Color(0xFF8C8C8C),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            // Chevron
-            const Icon(Icons.chevron_right, color: Color(0xFF8C8C8C), size: 20),
-          ],
-        ),
       ),
     );
   }

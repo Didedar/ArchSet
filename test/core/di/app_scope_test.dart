@@ -10,11 +10,15 @@ import 'package:archset_r2/data/services/auth_service.dart';
 import 'package:archset_r2/data/services/sync_service.dart';
 import 'package:archset_r2/domain/repositories/locale_repository.dart';
 import 'package:archset_r2/domain/repositories/theme_repository.dart';
+import 'package:archset_r2/data/repository/notes_repository.dart';
 import 'package:archset_r2/presentation/auth/auth_dependencies.dart';
 import 'package:archset_r2/presentation/auth/bloc/auth_bloc.dart';
 import 'package:archset_r2/presentation/core_deps/core_dependencies.dart';
 import 'package:archset_r2/presentation/locale/bloc/locale_bloc.dart';
 import 'package:archset_r2/presentation/locale/locale_dependencies.dart';
+import 'package:archset_r2/presentation/notes/bloc/folders_bloc.dart';
+import 'package:archset_r2/presentation/notes/bloc/notes_bloc.dart';
+import 'package:archset_r2/presentation/notes/notes_dependencies.dart';
 import 'package:archset_r2/presentation/sync/bloc/sync_bloc.dart';
 import 'package:archset_r2/presentation/sync/sync_dependencies.dart';
 import 'package:archset_r2/presentation/theme/bloc/theme_bloc.dart';
@@ -49,9 +53,10 @@ void main() {
     when(() => syncService.resultStream)
         .thenAnswer((_) => const Stream<SyncResult>.empty());
 
+    final database = FakeAppDatabase();
     dependencies = Dependencies(
       core: CoreDependencies(
-        database: FakeAppDatabase(),
+        database: database,
         secureStorage: const FlutterSecureStorage(),
         logger: Logger(),
       ),
@@ -59,6 +64,7 @@ void main() {
       locale: LocaleDependencies(repository: localeRepository),
       auth: AuthDependencies(repository: _MockAuthService()),
       sync: SyncDependencies(service: syncService),
+      notes: NotesDependencies(repository: NotesRepository(database)),
     );
   });
 
@@ -99,6 +105,8 @@ void main() {
     expect(BlocProvider.of<LocaleBloc>(capturedContext), isA<LocaleBloc>());
     expect(BlocProvider.of<AuthBloc>(capturedContext), isA<AuthBloc>());
     expect(BlocProvider.of<SyncBloc>(capturedContext), isA<SyncBloc>());
+    expect(BlocProvider.of<NotesBloc>(capturedContext), isA<NotesBloc>());
+    expect(BlocProvider.of<FoldersBloc>(capturedContext), isA<FoldersBloc>());
   });
 
   testWidgets(

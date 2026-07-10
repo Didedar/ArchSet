@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/localization/app_strings.dart';
 import '../../data/database/app_database.dart';
-import '../providers/notes_provider.dart';
+import '../notes/bloc/folders_bloc.dart';
 
 /// Animated dialog for creating a new folder
 class CreateFolderDialog extends ConsumerStatefulWidget {
@@ -59,7 +60,7 @@ class _CreateFolderDialogState extends ConsumerState<CreateFolderDialog>
     super.dispose();
   }
 
-  Future<void> _createFolder() async {
+  void _createFolder() {
     final name = _nameController.text.trim();
     if (name.isEmpty) return;
 
@@ -71,7 +72,7 @@ class _CreateFolderDialogState extends ConsumerState<CreateFolderDialog>
       isDeleted: false,
     );
 
-    await ref.read(notesRepositoryProvider).createFolder(folder);
+    context.read<FoldersBloc>().add(FoldersCreateRequested(folder));
     HapticFeedback.mediumImpact();
 
     if (mounted) {

@@ -7,9 +7,11 @@ import 'package:archset_r2/data/repository/secure_storage_theme_repository.dart'
 import 'package:archset_r2/data/services/auth_service.dart';
 import 'package:archset_r2/data/services/api_service.dart';
 import 'package:archset_r2/data/services/sync_service.dart';
+import 'package:archset_r2/data/repository/notes_repository.dart';
 import 'package:archset_r2/presentation/auth/auth_dependencies.dart';
 import 'package:archset_r2/presentation/core_deps/core_dependencies.dart';
 import 'package:archset_r2/presentation/locale/locale_dependencies.dart';
+import 'package:archset_r2/presentation/notes/notes_dependencies.dart';
 import 'package:archset_r2/presentation/sync/sync_dependencies.dart';
 import 'package:archset_r2/presentation/theme/theme_dependencies.dart';
 import '../support/fake_app_database.dart';
@@ -41,6 +43,7 @@ void main() {
         database: database,
       ),
     );
+    final notes = NotesDependencies(repository: NotesRepository(database));
 
     final dependencies = Dependencies(
       core: core,
@@ -48,6 +51,7 @@ void main() {
       locale: locale,
       auth: auth,
       sync: sync,
+      notes: notes,
     );
 
     expect(dependencies.core, same(core));
@@ -55,5 +59,6 @@ void main() {
     expect(dependencies.locale, same(locale));
     expect(dependencies.auth, same(auth));
     expect(dependencies.sync, same(sync));
+    expect(dependencies.notes, same(notes));
   });
 }

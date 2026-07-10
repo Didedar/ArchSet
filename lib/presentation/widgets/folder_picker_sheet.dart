@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/localization/app_strings.dart';
-import '../providers/notes_provider.dart';
+import '../../data/database/app_database.dart';
+import '../notes/bloc/folders_bloc.dart';
 import 'create_folder_dialog.dart';
 
 /// Bottom sheet for selecting a destination folder
@@ -49,8 +51,6 @@ class _FolderPickerSheetState extends ConsumerState<FolderPickerSheet>
 
   @override
   Widget build(BuildContext context) {
-    final foldersAsync = ref.watch(foldersStreamProvider);
-    final folderCountsAsync = ref.watch(folderNoteCountsProvider);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -126,85 +126,25 @@ class _FolderPickerSheetState extends ConsumerState<FolderPickerSheet>
 
             // Folder list
             Flexible(
-              child: foldersAsync.when(
-                loading: () => const Center(
-                  child: CircularProgressIndicator(color: Color(0xFFE8B731)),
-                ),
-                error: (e, _) => Center(
-                  child: Text(
-                    AppStrings.tr(ref, AppStrings.errorLoadingFolders),
-                    style: GoogleFonts.inter(
-                      color: theme.colorScheme.onSurface.withOpacity(0.5),
+              child: BlocBuilder<FoldersBloc, FoldersState>(
+                builder: (context, state) {
+                  return switch (state) {
+                    FoldersInitial() || FoldersLoadInProgress() => const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFE8B731),
+                      ),
                     ),
-                  ),
-                ),
-                data: (folders) {
-                  final counts = folderCountsAsync.valueOrNull ?? {};
-
-                  return ListView(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    children: [
-                      // All Notes option
-                      _FolderOption(
-                        name: AppStrings.tr(ref, AppStrings.allNotes),
-                        color: const Color(0xFFFF9000),
-                        isSelected: widget.currentFolderId == null,
-                        noteCount: counts['all_notes'] ?? 0,
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          Navigator.pop(
-                            context,
-                            '',
-                          ); // Empty string = null folderId
-                        },
-                        isAllNotes: true,
-                      ),
-
-                      // Separator
-                      if (folders.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 8,
-                          ),
-                          child: Divider(
-                            color: theme.colorScheme.onSurface.withOpacity(0.1),
-                            height: 1,
-                          ),
-                        ),
-
-                      // Folder options
-                      ...folders.map((folder) {
-                        final count = counts[folder.id] ?? 0;
-                        return _FolderOption(
-                          name: folder.name,
-                          color: _parseColor(folder.color),
-                          isSelected: widget.currentFolderId == folder.id,
-                          noteCount: count,
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            Navigator.pop(context, folder.id);
-                          },
-                        );
-                      }),
-
-                      // Create new folder option
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-                        child: _CreateFolderButton(
-                          onTap: () async {
-                            final newFolder = await showCreateFolderDialog(
-                              context,
-                            );
-                            if (newFolder != null && mounted) {
-                              Navigator.pop(context, newFolder.id);
-                            }
-                          },
+                    FoldersLoadFailure() => Center(
+                      child: Text(
+                        AppStrings.tr(ref, AppStrings.errorLoadingFolders),
+                        style: GoogleFonts.inter(
+                          color: theme.colorScheme.onSurface.withOpacity(0.5),
                         ),
                       ),
-                    ],
-                  );
+                    ),
+                    FoldersLoadSuccess(:final folders, :final folderCounts) =>
+                      _buildFolderList(context, theme, folders, folderCounts),
+                  };
                 },
               ),
             ),
@@ -214,6 +154,70 @@ class _FolderPickerSheetState extends ConsumerState<FolderPickerSheet>
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildFolderList(
+    BuildContext context,
+    ThemeData theme,
+    List<Folder> folders,
+    Map<String, int> counts,
+  ) {
+    return ListView(
+      shrinkWrap: true,
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      children: [
+        // All Notes option
+        _FolderOption(
+          name: AppStrings.tr(ref, AppStrings.allNotes),
+          color: const Color(0xFFFF9000),
+          isSelected: widget.currentFolderId == null,
+          noteCount: counts['all_notes'] ?? 0,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            Navigator.pop(context, ''); // Empty string = null folderId
+          },
+          isAllNotes: true,
+        ),
+
+        // Separator
+        if (folders.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Divider(
+              color: theme.colorScheme.onSurface.withOpacity(0.1),
+              height: 1,
+            ),
+          ),
+
+        // Folder options
+        ...folders.map((folder) {
+          final count = counts[folder.id] ?? 0;
+          return _FolderOption(
+            name: folder.name,
+            color: _parseColor(folder.color),
+            isSelected: widget.currentFolderId == folder.id,
+            noteCount: count,
+            onTap: () {
+              HapticFeedback.selectionClick();
+              Navigator.pop(context, folder.id);
+            },
+          );
+        }),
+
+        // Create new folder option
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+          child: _CreateFolderButton(
+            onTap: () async {
+              final newFolder = await showCreateFolderDialog(context);
+              if (newFolder != null && mounted) {
+                Navigator.pop(context, newFolder.id);
+              }
+            },
+          ),
+        ),
+      ],
     );
   }
 

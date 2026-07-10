@@ -1,6 +1,7 @@
 import '../presentation/auth/auth_dependencies_builder.dart';
 import '../presentation/core_deps/core_dependencies_builder.dart';
 import '../presentation/locale/locale_dependencies_builder.dart';
+import '../presentation/notes/notes_dependencies_builder.dart';
 import '../presentation/sync/sync_dependencies_builder.dart';
 import '../presentation/theme/theme_dependencies_builder.dart';
 import 'dependencies.dart';
@@ -22,6 +23,7 @@ class CompositionRoot {
       final locale = LocaleDependenciesBuilder.build(core);
       final auth = AuthDependenciesBuilder.build(core);
       final sync = SyncDependenciesBuilder.build(core, auth);
+      final notes = NotesDependenciesBuilder.build(core);
 
       stopwatch.stop();
       logger.info(
@@ -33,6 +35,7 @@ class CompositionRoot {
         locale: locale,
         auth: auth,
         sync: sync,
+        notes: notes,
       );
     } catch (error, stackTrace) {
       logger.error('Failed to initialize dependencies', error, stackTrace);

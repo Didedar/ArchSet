@@ -1,6 +1,7 @@
 import '../presentation/auth/auth_dependencies.dart';
 import '../presentation/core_deps/core_dependencies.dart';
 import '../presentation/locale/locale_dependencies.dart';
+import '../presentation/notes/notes_dependencies.dart';
 import '../presentation/sync/sync_dependencies.dart';
 import '../presentation/theme/theme_dependencies.dart';
 
@@ -13,6 +14,7 @@ class Dependencies {
     required this.locale,
     required this.auth,
     required this.sync,
+    required this.notes,
   });
 
   final CoreDependencies core;
@@ -20,4 +22,5 @@ class Dependencies {
   final LocaleDependencies locale;
   final AuthDependencies auth;
   final SyncDependencies sync;
+  final NotesDependencies notes;
 }

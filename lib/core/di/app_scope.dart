@@ -5,6 +5,8 @@ import '../dependencies.dart';
 import '../../presentation/auth/bloc/auth_bloc.dart';
 import '../../presentation/core_deps/core_dependencies.dart';
 import '../../presentation/locale/bloc/locale_bloc.dart';
+import '../../presentation/notes/bloc/folders_bloc.dart';
+import '../../presentation/notes/bloc/notes_bloc.dart';
 import '../../presentation/sync/bloc/sync_bloc.dart';
 import '../../presentation/theme/bloc/theme_bloc.dart';
 
@@ -43,6 +45,16 @@ class AppScope extends StatelessWidget {
             lazy: false,
             create: (_) => SyncBloc(service: dependencies.sync.service)
               ..add(const SyncMonitoringStarted()),
+          ),
+          // Notes/Folders stay lazy (default): unlike Theme/Locale/Sync,
+          // nothing needs to happen before a notes-related page actually
+          // mounts and requests data.
+          BlocProvider<NotesBloc>(
+            create: (_) => NotesBloc(repository: dependencies.notes.repository),
+          ),
+          BlocProvider<FoldersBloc>(
+            create: (_) =>
+                FoldersBloc(repository: dependencies.notes.repository),
           ),
         ],
         child: child,
