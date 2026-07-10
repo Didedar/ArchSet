@@ -52,3 +52,7 @@ __pycache__/
 # Secrets - never commit real credentials
 backend/.env
 .env
+
+# User/diary data - contains real personal content, not fixtures
+backend/archset.db
+backend/storage/
