@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../providers/auth_provider.dart';
+import '../auth/bloc/auth_bloc.dart';
+import '../locale/bloc/locale_bloc.dart';
+import '../providers/locale_provider.dart' as legacy_locale;
 import '../providers/sync_provider.dart';
-import '../providers/theme_provider.dart';
-import '../providers/locale_provider.dart';
+import '../theme/bloc/theme_bloc.dart';
 import '../../core/localization/app_strings.dart';
-import '../../welcome_page.dart';
+import '../auth/pages/welcome_page.dart';
 import '../providers/transcription_provider.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -15,21 +17,15 @@ class SettingsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Watch the auth provider to react to changes (login/logout/update)
-    final authService = ref.watch(authServiceProvider);
+    final authState = context.watch<AuthBloc>().state;
+    final user = authState is AuthAuthenticated ? authState.user : null;
 
-    // Attempt to use the cached user.
-    // If null, it might be because the app was restarted and state lost,
-    // but authService should have loaded it in main/splash.
-    // To be safe, we can check if we need to reload it asynchronously,
-    // but for UI build, we just use what we have.
-    final user = authService.currentUser;
-    final themeMode = ref.watch(themeProvider);
+    final themeMode = context.watch<ThemeBloc>().state.mode;
     final isDarkMode =
         themeMode == ThemeMode.dark ||
         (themeMode == ThemeMode.system &&
             MediaQuery.of(context).platformBrightness == Brightness.dark);
-    final currentLocale = ref.watch(localeProvider);
+    final currentLocale = context.watch<LocaleBloc>().state.locale;
 
     final colorScheme = Theme.of(context).colorScheme;
     final textColor = colorScheme.onSurface;
@@ -131,15 +127,15 @@ class SettingsPage extends ConsumerWidget {
                           : Icons.wb_sunny,
                       text: AppStrings.tr(ref, AppStrings.darkMode),
                       onTap: () {
-                        ref
-                            .read(themeProvider.notifier)
-                            .toggleTheme(!isDarkMode);
+                        context
+                            .read<ThemeBloc>()
+                            .add(ThemeModeChanged(!isDarkMode));
                       },
                       textColor: textColor,
                       trailing: Switch(
                         value: isDarkMode,
                         onChanged: (val) {
-                          ref.read(themeProvider.notifier).toggleTheme(val);
+                          context.read<ThemeBloc>().add(ThemeModeChanged(val));
                         },
                         activeColor: Colors.white,
                         activeTrackColor: Colors.green,
@@ -493,7 +489,13 @@ class SettingsPage extends ConsumerWidget {
         ),
       ),
       onTap: () {
-        ref.read(localeProvider.notifier).setLocale(code);
+        context.read<LocaleBloc>().add(LocaleChanged(code));
+        // Dual-write: AppStrings.tr(ref, ...) (used across ~11 not-yet-
+        // migrated pages) still reads the legacy Riverpod localeProvider
+        // directly, so it needs updating too or those pages would show
+        // stale-language text until restart. Remove once AppStrings.tr
+        // no longer depends on Riverpod.
+        ref.read(legacy_locale.localeProvider.notifier).setLocale(code);
         Navigator.pop(context);
       },
     );
@@ -544,9 +546,14 @@ class SettingsPage extends ConsumerWidget {
       } catch (e) {
         debugPrint('Sync failed before logout: $e');
       }
+      if (!context.mounted) return;
 
-      final authService = ref.read(authServiceProvider);
-      await authService.logout();
+      final authBloc = context.read<AuthBloc>();
+      final loggedOut = authBloc.stream.firstWhere(
+        (state) => state is AuthUnauthenticated,
+      );
+      authBloc.add(const AuthLogoutRequested());
+      await loggedOut;
 
       if (context.mounted) {
         Navigator.of(context).pushAndRemoveUntil(

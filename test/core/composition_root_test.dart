@@ -22,6 +22,9 @@ void main() {
     expect(dependencies.core.logger, same(logger));
     expect(dependencies.core.database, isNotNull);
     expect(dependencies.core.secureStorage, isNotNull);
+    expect(dependencies.theme.repository, isNotNull);
+    expect(dependencies.locale.repository, isNotNull);
+    expect(dependencies.auth.repository, isNotNull);
   });
 
   test('logs initialization start and completion', () async {

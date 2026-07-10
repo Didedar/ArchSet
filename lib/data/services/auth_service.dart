@@ -4,10 +4,11 @@
 library;
 
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'api_service.dart';
+import '../../domain/repositories/auth_repository.dart';
 import '../database/app_database.dart';
 
 /// Storage keys for tokens
@@ -51,7 +52,7 @@ class AuthTokens {
 }
 
 /// Authentication service
-class AuthService extends ChangeNotifier {
+class AuthService implements AuthRepository {
   final FlutterSecureStorage _storage;
   final String _baseUrl;
   final AppDatabase _database;
@@ -59,14 +60,15 @@ class AuthService extends ChangeNotifier {
   AuthUser? _currentUser;
 
   AuthService({
+    required AppDatabase database,
     FlutterSecureStorage? storage,
     String? baseUrl,
-    AppDatabase? database,
   }) : _storage = storage ?? const FlutterSecureStorage(),
        _baseUrl = baseUrl ?? ApiConfig.apiUrl,
-       _database = database ?? AppDatabase();
+       _database = database;
 
   /// Get current cached user
+  @override
   AuthUser? get currentUser => _currentUser;
 
   /// Check if user is logged in
@@ -86,6 +88,7 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Register a new user
+  @override
   Future<AuthUser> register(String email, String password) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/auth/register'),
@@ -103,6 +106,7 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Login with email and password
+  @override
   Future<AuthUser> login(String email, String password) async {
     // Get tokens
     final tokenResponse = await http.post(
@@ -140,7 +144,6 @@ class AuthService extends ChangeNotifier {
     if (userResponse.statusCode == 200) {
       final user = AuthUser.fromJson(jsonDecode(userResponse.body));
       _currentUser = user;
-      notifyListeners();
 
       // Store user info
       await _storage.write(key: AuthStorageKeys.userId, value: user.id);
@@ -185,6 +188,7 @@ class AuthService extends ChangeNotifier {
   }
 
   /// Logout and clear stored data
+  @override
   Future<void> logout() async {
     _currentUser = null;
     await _storage.delete(key: AuthStorageKeys.accessToken);
@@ -192,10 +196,10 @@ class AuthService extends ChangeNotifier {
     await _storage.delete(key: AuthStorageKeys.userId);
     await _storage.delete(key: AuthStorageKeys.userEmail);
     await _database.clearAllData();
-    notifyListeners();
   }
 
   /// Load user from storage (for app startup)
+  @override
   Future<AuthUser?> loadStoredUser() async {
     final userId = await _storage.read(key: AuthStorageKeys.userId);
     final userEmail = await _storage.read(key: AuthStorageKeys.userEmail);

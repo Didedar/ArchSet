@@ -11,6 +11,7 @@ import '../../data/services/whisper_service.dart';
 import '../../data/models/audio_segment.dart';
 import '../../data/services/api_service.dart'; // Import ApiService
 import '../../data/services/auth_service.dart'; // Import AuthService
+import '../../data/database/app_database.dart';
 
 import 'transcription_provider.dart'; // Import TranscriptionProvider
 import 'locale_provider.dart'; // Import LocaleProvider
@@ -641,7 +642,9 @@ final audioServiceProvider = Provider<AudioService>((ref) {
 
 /// Provider for BackendGeminiService
 final backendGeminiServiceProvider = Provider<BackendGeminiService>((ref) {
-  final authService = AuthService();
+  // AppDatabase() still returns the shared singleton (removed once every
+  // caller is on explicit DI in Phase 4), so this is behavior-preserving.
+  final authService = AuthService(database: AppDatabase());
   final apiService = ApiService(authService: authService);
   return BackendGeminiService(apiService: apiService);
 });

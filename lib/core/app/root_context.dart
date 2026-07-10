@@ -1,17 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../theme/app_theme.dart';
-import '../../presentation/providers/locale_provider.dart';
+import '../../presentation/auth/pages/splash_page.dart';
+import '../../presentation/locale/bloc/locale_bloc.dart';
 import '../../presentation/providers/sync_provider.dart';
-import '../../presentation/providers/theme_provider.dart';
-import '../../splash_page.dart';
+import '../../presentation/theme/bloc/theme_bloc.dart';
 
-/// UI host mounted under [AppScope]. For now this still wraps a nested
-/// [ProviderScope] internally — nothing has migrated off Riverpod yet, so
-/// this preserves the old `MyApp` behavior exactly. The nested scope goes
-/// away in the cleanup phase once every feature has its own BLoC.
+/// UI host mounted under [AppScope]. Still wraps a nested [ProviderScope]
+/// internally for the features that haven't migrated off Riverpod yet
+/// (sync — Phase 3; notes/folders — Phase 4; audio/transcription/editor —
+/// Phase 5). `themeMode`/`locale` now come from [ThemeBloc]/[LocaleBloc]
+/// (both live above this in [AppScope]'s MultiBlocProvider) instead of
+/// their old Riverpod providers. The nested scope goes away entirely once
+/// every feature has migrated.
 class RootContext extends StatelessWidget {
   const RootContext({super.key});
 
@@ -29,33 +33,38 @@ class _LegacyRiverpodApp extends ConsumerWidget {
     // Keeps SyncService alive by watching its provider.
     ref.watch(syncServiceProvider);
 
-    final themeMode = ref.watch(themeProvider);
-    final locale = ref.watch(localeProvider);
-
-    return MaterialApp(
-      title: 'ArchSet',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: themeMode,
-      locale: locale,
-      supportedLocales: const [
-        Locale('en'),
-        Locale('ru'),
-        Locale('kk'),
-        Locale('zh'),
-      ],
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-        FlutterQuillLocalizations.delegate,
-      ],
-      home: const SplashPage(),
-      builder: (context, child) => GestureDetector(
-        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
-        child: child,
-      ),
+    return BlocBuilder<ThemeBloc, ThemeState>(
+      builder: (context, themeState) {
+        return BlocBuilder<LocaleBloc, LocaleState>(
+          builder: (context, localeState) {
+            return MaterialApp(
+              title: 'ArchSet',
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeState.mode,
+              locale: localeState.locale,
+              supportedLocales: const [
+                Locale('en'),
+                Locale('ru'),
+                Locale('kk'),
+                Locale('zh'),
+              ],
+              localizationsDelegates: const [
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+                FlutterQuillLocalizations.delegate,
+              ],
+              home: const SplashPage(),
+              builder: (context, child) => GestureDetector(
+                onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+                child: child,
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
