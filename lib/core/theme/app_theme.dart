@@ -1,54 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'ui_theme.dart';
 
 class AppTheme {
-  static final lightTheme = ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.light,
-    scaffoldBackgroundColor: const Color(0xFFF2F2F7), // iOS Light Gray
-    colorScheme: const ColorScheme.light(
-      primary: Colors.black,
-      surface: Colors.white,
-      onSurface: Colors.black,
-      secondary: Color(0xFFE5E5EA),
-    ),
-    appBarTheme: AppBarTheme(
-      backgroundColor: const Color(0xFFF2F2F7),
-      elevation: 0,
-      iconTheme: const IconThemeData(color: Colors.black),
-      titleTextStyle: GoogleFonts.inter(
-        color: Colors.black,
-        fontSize: 17,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-    textTheme: GoogleFonts.interTextTheme(ThemeData.light().textTheme),
-    dialogBackgroundColor: Colors.white,
-    dividerColor: const Color(0xFFC6C6C8),
-  );
+  static final lightTheme = _build(const UiTheme.light(), Brightness.light);
+  static final darkTheme = _build(const UiTheme.dark(), Brightness.dark);
 
-  static final darkTheme = ThemeData(
-    useMaterial3: true,
-    brightness: Brightness.dark,
-    scaffoldBackgroundColor: Colors.black,
-    colorScheme: const ColorScheme.dark(
-      primary: Colors.white,
-      surface: Color(0xFF2C2C2E),
-      onSurface: Colors.white,
-      secondary: Color(0xFF1C1C1E),
-    ),
-    appBarTheme: AppBarTheme(
-      backgroundColor: Colors.black,
-      elevation: 0,
-      iconTheme: const IconThemeData(color: Colors.white),
-      titleTextStyle: GoogleFonts.inter(
-        color: Colors.white,
-        fontSize: 17,
-        fontWeight: FontWeight.w600,
+  static ThemeData _build(UiTheme uiTheme, Brightness brightness) {
+    final colors = uiTheme.colors;
+    final base = brightness == Brightness.light
+        ? ColorScheme.light(
+            primary: colors.primary,
+            surface: colors.surface,
+            onSurface: colors.primary,
+            secondary: colors.secondary,
+          )
+        : ColorScheme.dark(
+            primary: colors.primary,
+            surface: colors.surface,
+            onSurface: colors.primary,
+            secondary: colors.secondary,
+          );
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      scaffoldBackgroundColor: colors.background,
+      colorScheme: base,
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.background,
+        elevation: 0,
+        iconTheme: IconThemeData(color: colors.primary),
+        titleTextStyle: GoogleFonts.inter(
+          color: colors.primary,
+          fontSize: uiTheme.typography.titleLarge.fontSize,
+          fontWeight: uiTheme.typography.titleLarge.fontWeight,
+        ),
       ),
-    ),
-    textTheme: GoogleFonts.interTextTheme(ThemeData.dark().textTheme),
-    dialogBackgroundColor: const Color(0xFF2C2C2E),
-    dividerColor: const Color(0xFF38383A),
-  );
+      textTheme: GoogleFonts.interTextTheme(
+        brightness == Brightness.light
+            ? ThemeData.light().textTheme
+            : ThemeData.dark().textTheme,
+      ),
+      dialogTheme: DialogThemeData(backgroundColor: colors.surface),
+      dividerColor: colors.divider,
+      extensions: [uiTheme],
+    );
+  }
 }
