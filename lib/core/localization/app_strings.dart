@@ -1,5 +1,4 @@
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../presentation/providers/locale_provider.dart';
+import 'package:flutter/widgets.dart' show Locale;
 
 class AppStrings {
   // Locale keys
@@ -496,8 +495,7 @@ class AppStrings {
     },
   };
 
-  static String tr(WidgetRef ref, String key) {
-    final locale = ref.watch(localeProvider);
+  static String tr(Locale locale, String key) {
     return _localizedValues[locale.languageCode]?[key] ??
         _localizedValues['en']![key]!;
   }

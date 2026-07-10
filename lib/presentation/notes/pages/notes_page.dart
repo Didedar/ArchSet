@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animations/animations.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../data/database/app_database.dart';
 import '../../editor/pages/diary_edit_page.dart';
+import '../../locale/bloc/locale_bloc.dart';
 import '../../pages/settings_page.dart';
 import '../../widgets/note_card.dart';
 import '../../widgets/empty_state.dart';
@@ -18,14 +18,14 @@ import '../bloc/folders_bloc.dart';
 import '../bloc/notes_bloc.dart';
 import 'folder_detail_page.dart';
 
-class NotesPage extends ConsumerStatefulWidget {
+class NotesPage extends StatefulWidget {
   const NotesPage({super.key});
 
   @override
-  ConsumerState<NotesPage> createState() => _NotesPageState();
+  State<NotesPage> createState() => _NotesPageState();
 }
 
-class _NotesPageState extends ConsumerState<NotesPage>
+class _NotesPageState extends State<NotesPage>
     with SingleTickerProviderStateMixin {
   bool _isAllTabSelected = true;
   late AnimationController _fabController;
@@ -99,6 +99,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
     final theme = Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
     final iconColor = theme.iconTheme.color ?? textColor;
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -114,7 +115,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    AppStrings.tr(ref, AppStrings.myNotes),
+                    AppStrings.tr(locale, AppStrings.myNotes),
                     style: GoogleFonts.inter(
                       fontWeight: FontWeight.w600,
                       fontSize: 25,
@@ -156,7 +157,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
                   // "All" Tab
                   _buildTab(
                     context,
-                    label: AppStrings.tr(ref, AppStrings.all),
+                    label: AppStrings.tr(locale, AppStrings.all),
                     isSelected: _isAllTabSelected,
                     onTap: () {
                       HapticFeedback.selectionClick();
@@ -171,7 +172,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
                   // "Folders" Tab
                   _buildTab(
                     context,
-                    label: AppStrings.tr(ref, AppStrings.folders),
+                    label: AppStrings.tr(locale, AppStrings.folders),
                     isSelected: !_isAllTabSelected,
                     onTap: () {
                       HapticFeedback.selectionClick();
@@ -343,12 +344,16 @@ class _NotesPageState extends ConsumerState<NotesPage>
                             const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final note = notes[index];
+                          final locale = context
+                              .watch<LocaleBloc>()
+                              .state
+                              .locale;
                           // Look up folder name: if note has folderId, get
                           // folder name; otherwise "All notes"
                           final folderName = note.folderId != null
                               ? (folderMap[note.folderId] ??
-                                    AppStrings.tr(ref, AppStrings.allNotes))
-                              : AppStrings.tr(ref, AppStrings.allNotes);
+                                    AppStrings.tr(locale, AppStrings.allNotes))
+                              : AppStrings.tr(locale, AppStrings.allNotes);
 
                           return Dismissible(
                             key: Key(note.id),
@@ -413,6 +418,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
   Widget _buildFoldersView() {
     return BlocBuilder<FoldersBloc, FoldersState>(
       builder: (context, state) {
+        final locale = context.watch<LocaleBloc>().state.locale;
         return switch (state) {
           FoldersInitial() ||
           FoldersLoadInProgress() => const LoadingSkeleton(),
@@ -439,9 +445,9 @@ class _NotesPageState extends ConsumerState<NotesPage>
                       Expanded(
                         child: EmptyState(
                           icon: Icons.folder_outlined,
-                          title: AppStrings.tr(ref, AppStrings.noFoldersYet),
+                          title: AppStrings.tr(locale, AppStrings.noFoldersYet),
                           subtitle: AppStrings.tr(
-                            ref,
+                            locale,
                             AppStrings.tapToCreateFolder,
                           ),
                         ),
@@ -495,6 +501,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
   }
 
   void _showFolderOptions(Folder folder) {
+    final locale = context.read<LocaleBloc>().state.locale;
     showModalBottomSheet(
       context: context,
       backgroundColor: Theme.of(context).cardColor,
@@ -520,7 +527,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
                 color: Theme.of(context).iconTheme.color,
               ),
               title: Text(
-                AppStrings.tr(ref, AppStrings.rename),
+                AppStrings.tr(locale, AppStrings.rename),
                 style: GoogleFonts.inter(
                   color: Theme.of(context).colorScheme.onSurface,
                 ),
@@ -533,7 +540,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.redAccent),
               title: Text(
-                AppStrings.tr(ref, AppStrings.delete),
+                AppStrings.tr(locale, AppStrings.delete),
                 style: GoogleFonts.inter(color: Colors.redAccent),
               ),
               onTap: () async {
@@ -553,13 +560,14 @@ class _NotesPageState extends ConsumerState<NotesPage>
   }
 
   Future<bool?> _confirmDeleteFolder(Folder folder) {
+    final locale = context.read<LocaleBloc>().state.locale;
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).dialogBackgroundColor,
         title: Text(
           AppStrings.tr(
-            ref,
+            locale,
             AppStrings.confirmDeleteFolder,
           ).replaceAll('%s', folder.name),
           style: GoogleFonts.inter(
@@ -567,7 +575,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
           ),
         ),
         content: Text(
-          AppStrings.tr(ref, AppStrings.notesMovedToAll),
+          AppStrings.tr(locale, AppStrings.notesMovedToAll),
           style: GoogleFonts.inter(
             color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
           ),
@@ -576,7 +584,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text(
-              AppStrings.tr(ref, AppStrings.cancel),
+              AppStrings.tr(locale, AppStrings.cancel),
               style: GoogleFonts.inter(
                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
               ),
@@ -585,7 +593,7 @@ class _NotesPageState extends ConsumerState<NotesPage>
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
-              AppStrings.tr(ref, AppStrings.delete),
+              AppStrings.tr(locale, AppStrings.delete),
               style: GoogleFonts.inter(color: Colors.redAccent),
             ),
           ),

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../data/database/app_database.dart';
 import '../../core/localization/app_strings.dart';
+import '../locale/bloc/locale_bloc.dart';
 
 /// Animated note card with hero transition support
-class NoteCard extends ConsumerStatefulWidget {
+class NoteCard extends StatefulWidget {
   final Note note;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
@@ -23,10 +24,10 @@ class NoteCard extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<NoteCard> createState() => _NoteCardState();
+  State<NoteCard> createState() => _NoteCardState();
 }
 
-class _NoteCardState extends ConsumerState<NoteCard>
+class _NoteCardState extends State<NoteCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
@@ -59,7 +60,7 @@ class _NoteCardState extends ConsumerState<NoteCard>
     super.dispose();
   }
 
-  String _getRelativeTime(DateTime date) {
+  String _getRelativeTime(DateTime date, Locale locale) {
     final now = DateTime.now();
     final difference = now.difference(date);
 
@@ -69,10 +70,10 @@ class _NoteCardState extends ConsumerState<NoteCard>
     // or just use 'ago' from AppStrings.
     // Better: Helper formatted strings.
 
-    final ago = AppStrings.tr(ref, AppStrings.ago);
+    final ago = AppStrings.tr(locale, AppStrings.ago);
 
     if (difference.inMinutes < 1) {
-      return AppStrings.tr(ref, AppStrings.justNow);
+      return AppStrings.tr(locale, AppStrings.justNow);
     } else if (difference.inMinutes < 60) {
       return '${difference.inMinutes}m $ago';
     } else if (difference.inHours < 24) {
@@ -100,6 +101,7 @@ class _NoteCardState extends ConsumerState<NoteCard>
 
   @override
   Widget build(BuildContext context) {
+    final locale = context.watch<LocaleBloc>().state.locale;
     final noteColor = _getNoteColor(context, widget.index);
     final isLightCard = noteColor.computeLuminance() > 0.5;
     final textColor = isLightCard ? Colors.black : Colors.white;
@@ -149,7 +151,7 @@ class _NoteCardState extends ConsumerState<NoteCard>
                         children: [
                           Text(
                             widget.note.title.isEmpty
-                                ? AppStrings.tr(ref, AppStrings.untitled)
+                                ? AppStrings.tr(locale, AppStrings.untitled)
                                 : widget.note.title,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
@@ -160,7 +162,7 @@ class _NoteCardState extends ConsumerState<NoteCard>
                             ),
                           ),
                           Text(
-                            '${_getRelativeTime(widget.note.date)}${widget.note.audioPath != null ? ' Audio' : ''}',
+                            '${_getRelativeTime(widget.note.date, locale)}${widget.note.audioPath != null ? ' Audio' : ''}',
                             style: GoogleFonts.inter(
                               fontWeight: FontWeight.w600,
                               fontSize: 12,
@@ -182,7 +184,7 @@ class _NoteCardState extends ConsumerState<NoteCard>
                       ),
                       child: Text(
                         widget.folderName ??
-                            AppStrings.tr(ref, AppStrings.allNotes),
+                            AppStrings.tr(locale, AppStrings.allNotes),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.inter(

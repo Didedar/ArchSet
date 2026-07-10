@@ -1,18 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/cupertino.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/localization/app_strings.dart';
+import '../../locale/bloc/locale_bloc.dart';
 import 'sign_in_email_page.dart';
 
-class WelcomePage extends ConsumerStatefulWidget {
+class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
 
   @override
-  ConsumerState<WelcomePage> createState() => _WelcomePageState();
+  State<WelcomePage> createState() => _WelcomePageState();
 }
 
-class _WelcomePageState extends ConsumerState<WelcomePage>
+class _WelcomePageState extends State<WelcomePage>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
 
@@ -116,6 +117,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
     final screenHeight = MediaQuery.of(context).size.height;
     final theme = Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -144,7 +146,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
                           child: Column(
                             children: [
                               Text(
-                                AppStrings.tr(ref, AppStrings.welcomeTo),
+                                AppStrings.tr(locale, AppStrings.welcomeTo),
                                 style: GoogleFonts.inter(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 32,
@@ -154,7 +156,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
                                 textAlign: TextAlign.center,
                               ),
                               Text(
-                                AppStrings.tr(ref, AppStrings.archset),
+                                AppStrings.tr(locale, AppStrings.archset),
                                 style: GoogleFonts.poppins(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 42,
@@ -180,7 +182,10 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
                           position: _btn1Slide,
                           child: _buildButton(
                             context,
-                            text: AppStrings.tr(ref, AppStrings.signInGoogle),
+                            text: AppStrings.tr(
+                              locale,
+                              AppStrings.signInGoogle,
+                            ),
                             iconPath: 'assets/images/icon_google.png',
                             onPressed: () {},
                           ),
@@ -195,7 +200,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
                           position: _btn2Slide,
                           child: _buildButton(
                             context,
-                            text: AppStrings.tr(ref, AppStrings.signInApple),
+                            text: AppStrings.tr(locale, AppStrings.signInApple),
                             iconPath: 'assets/images/icon_apple.png',
                             onPressed: () {},
                           ),
@@ -210,7 +215,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage>
                           position: _btn3Slide,
                           child: _buildButton(
                             context,
-                            text: AppStrings.tr(ref, AppStrings.signInEmail),
+                            text: AppStrings.tr(locale, AppStrings.signInEmail),
                             iconPath: 'assets/images/icon_email.png',
                             onPressed: () {
                               Navigator.push(

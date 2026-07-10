@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/di/app_scope.dart';
 import '../../core/localization/app_strings.dart';
 import '../../data/services/api_service.dart';
 import '../../data/services/backend_gemini_service.dart';
+import '../locale/bloc/locale_bloc.dart';
 import '../sync/bloc/sync_bloc.dart';
 
-class AIChatPage extends ConsumerStatefulWidget {
+class AIChatPage extends StatefulWidget {
   const AIChatPage({super.key});
 
   @override
-  ConsumerState<AIChatPage> createState() => _AIChatPageState();
+  State<AIChatPage> createState() => _AIChatPageState();
 }
 
-class _AIChatPageState extends ConsumerState<AIChatPage> {
+class _AIChatPageState extends State<AIChatPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   final List<Map<String, String>> _messages = [];
@@ -38,6 +38,7 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
 
   Future<void> _sendMessage(String text) async {
     if (text.trim().isEmpty) return;
+    final locale = context.read<LocaleBloc>().state.locale;
 
     setState(() {
       _messages.add({'role': 'user', 'content': text});
@@ -72,7 +73,7 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
           } else {
             _messages.add({
               'role': 'error',
-              'content': AppStrings.tr(ref, AppStrings.failedToGetResponse),
+              'content': AppStrings.tr(locale, AppStrings.failedToGetResponse),
             });
           }
         });
@@ -84,7 +85,7 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
           _isLoading = false;
           _messages.add({
             'role': 'error',
-            'content': '${AppStrings.tr(ref, AppStrings.errorLabel)}$e',
+            'content': '${AppStrings.tr(locale, AppStrings.errorLabel)}$e',
           });
         });
       }
@@ -109,6 +110,7 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
     final cardColor = theme.cardColor;
     final textColor = theme.colorScheme.onSurface;
     final hintColor = theme.colorScheme.onSurface.withOpacity(0.5);
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -120,7 +122,7 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          AppStrings.tr(ref, AppStrings.aiChat),
+          AppStrings.tr(locale, AppStrings.aiChat),
           style: TextStyle(
             color: textColor,
             fontSize: 20,
@@ -138,16 +140,21 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
         children: [
           Expanded(
             child: _messages.isEmpty
-                ? _buildEmptyState(cardColor, textColor, hintColor)
+                ? _buildEmptyState(cardColor, textColor, hintColor, locale)
                 : _buildChatList(textColor),
           ),
-          _buildInputArea(cardColor, textColor, hintColor),
+          _buildInputArea(cardColor, textColor, hintColor, locale),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState(Color cardColor, Color textColor, Color hintColor) {
+  Widget _buildEmptyState(
+    Color cardColor,
+    Color textColor,
+    Color hintColor,
+    Locale locale,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -155,8 +162,8 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
           _buildFeatureCard(
             cardColor,
             Icons.storage,
-            AppStrings.tr(ref, AppStrings.diaryBase),
-            AppStrings.tr(ref, AppStrings.diaryBaseDesc),
+            AppStrings.tr(locale, AppStrings.diaryBase),
+            AppStrings.tr(locale, AppStrings.diaryBaseDesc),
             textColor,
             hintColor,
           ),
@@ -164,8 +171,8 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
           _buildFeatureCard(
             cardColor,
             Icons.help_outline,
-            AppStrings.tr(ref, AppStrings.askQuestions),
-            AppStrings.tr(ref, AppStrings.askQuestionsDesc),
+            AppStrings.tr(locale, AppStrings.askQuestions),
+            AppStrings.tr(locale, AppStrings.askQuestionsDesc),
             textColor,
             hintColor,
           ),
@@ -173,8 +180,8 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
           _buildFeatureCard(
             cardColor,
             Icons.school_outlined,
-            AppStrings.tr(ref, AppStrings.study),
-            AppStrings.tr(ref, AppStrings.studyDesc),
+            AppStrings.tr(locale, AppStrings.study),
+            AppStrings.tr(locale, AppStrings.studyDesc),
             textColor,
             hintColor,
           ),
@@ -275,7 +282,12 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
     );
   }
 
-  Widget _buildInputArea(Color cardColor, Color textColor, Color hintColor) {
+  Widget _buildInputArea(
+    Color cardColor,
+    Color textColor,
+    Color hintColor,
+    Locale locale,
+  ) {
     return Container(
       padding: EdgeInsets.fromLTRB(
         20,
@@ -297,7 +309,7 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
                 controller: _controller,
                 style: TextStyle(color: textColor),
                 decoration: InputDecoration(
-                  hintText: AppStrings.tr(ref, AppStrings.yourText),
+                  hintText: AppStrings.tr(locale, AppStrings.yourText),
                   hintStyle: TextStyle(color: hintColor),
                   border: InputBorder.none,
                   contentPadding: const EdgeInsets.symmetric(vertical: 15),

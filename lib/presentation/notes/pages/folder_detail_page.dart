@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animations/animations.dart';
@@ -9,6 +8,7 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../data/database/app_database.dart';
 import '../../editor/pages/diary_edit_page.dart';
+import '../../locale/bloc/locale_bloc.dart';
 import '../../widgets/note_card.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/folder_picker_sheet.dart';
@@ -22,16 +22,16 @@ import '../bloc/notes_bloc.dart';
 /// that [NotesPage] also subscribes to for "all notes" — retargeting it
 /// to this folder via [NotesSubscriptionRequested] would leave [NotesPage]
 /// showing folder-filtered notes after popping back.
-class FolderDetailPage extends ConsumerStatefulWidget {
+class FolderDetailPage extends StatefulWidget {
   final Folder folder;
 
   const FolderDetailPage({super.key, required this.folder});
 
   @override
-  ConsumerState<FolderDetailPage> createState() => _FolderDetailPageState();
+  State<FolderDetailPage> createState() => _FolderDetailPageState();
 }
 
-class _FolderDetailPageState extends ConsumerState<FolderDetailPage>
+class _FolderDetailPageState extends State<FolderDetailPage>
     with SingleTickerProviderStateMixin {
   late AnimationController _fabController;
   late NotesBloc _notesBloc;
@@ -108,6 +108,7 @@ class _FolderDetailPageState extends ConsumerState<FolderDetailPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     return BlocProvider<NotesBloc>.value(
       value: _notesBloc,
@@ -170,7 +171,7 @@ class _FolderDetailPageState extends ConsumerState<FolderDetailPage>
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        AppStrings.tr(ref, AppStrings.deleteFolder),
+                        AppStrings.tr(locale, AppStrings.deleteFolder),
                         style: GoogleFonts.inter(color: Colors.redAccent),
                       ),
                     ],
@@ -202,11 +203,11 @@ class _FolderDetailPageState extends ConsumerState<FolderDetailPage>
                         ? EmptyState(
                             icon: Icons.note_add_outlined,
                             title: AppStrings.tr(
-                              ref,
+                              locale,
                               AppStrings.noNotesInFolder,
                             ),
                             subtitle: AppStrings.tr(
-                              ref,
+                              locale,
                               AppStrings.tapToCreateNote,
                             ),
                           )
@@ -307,6 +308,7 @@ class _FolderDetailPageState extends ConsumerState<FolderDetailPage>
     final theme = Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
     final notesBloc = context.read<NotesBloc>();
+    final locale = context.read<LocaleBloc>().state.locale;
 
     return showModalBottomSheet<bool>(
       context: context,
@@ -330,7 +332,7 @@ class _FolderDetailPageState extends ConsumerState<FolderDetailPage>
             ListTile(
               leading: Icon(Icons.drive_file_move, color: textColor),
               title: Text(
-                AppStrings.tr(ref, AppStrings.moveToFolder),
+                AppStrings.tr(locale, AppStrings.moveToFolder),
                 style: GoogleFonts.inter(color: textColor),
               ),
               onTap: () async {
@@ -349,7 +351,7 @@ class _FolderDetailPageState extends ConsumerState<FolderDetailPage>
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.redAccent),
               title: Text(
-                AppStrings.tr(ref, AppStrings.deleteNote),
+                AppStrings.tr(locale, AppStrings.deleteNote),
                 style: GoogleFonts.inter(color: Colors.redAccent),
               ),
               onTap: () {
@@ -370,6 +372,7 @@ class _FolderDetailPageState extends ConsumerState<FolderDetailPage>
   Future<bool?> _confirmDelete() {
     final theme = Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
+    final locale = context.read<LocaleBloc>().state.locale;
 
     return showDialog<bool>(
       context: context,
@@ -377,27 +380,27 @@ class _FolderDetailPageState extends ConsumerState<FolderDetailPage>
         backgroundColor: theme.dialogBackgroundColor,
         title: Text(
           AppStrings.tr(
-            ref,
+            locale,
             AppStrings.confirmDeleteFolder,
           ).replaceFirst('%s', widget.folder.name),
           style: GoogleFonts.inter(color: textColor),
         ),
         content: Text(
-          AppStrings.tr(ref, AppStrings.notesMovedToAll),
+          AppStrings.tr(locale, AppStrings.notesMovedToAll),
           style: GoogleFonts.inter(color: textColor.withOpacity(0.7)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text(
-              AppStrings.tr(ref, AppStrings.cancel),
+              AppStrings.tr(locale, AppStrings.cancel),
               style: GoogleFonts.inter(color: textColor.withOpacity(0.5)),
             ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
-              AppStrings.tr(ref, AppStrings.delete),
+              AppStrings.tr(locale, AppStrings.delete),
               style: GoogleFonts.inter(color: Colors.redAccent),
             ),
           ),

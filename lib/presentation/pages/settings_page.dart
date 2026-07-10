@@ -1,22 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../auth/bloc/auth_bloc.dart';
 import '../locale/bloc/locale_bloc.dart';
-import '../providers/locale_provider.dart' as legacy_locale;
 import '../sync/bloc/sync_bloc.dart';
 import '../theme/bloc/theme_bloc.dart';
 import '../transcription/bloc/transcription_bloc.dart';
 import '../../core/localization/app_strings.dart';
 import '../auth/pages/welcome_page.dart';
 
-class SettingsPage extends ConsumerWidget {
+class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final authState = context.watch<AuthBloc>().state;
     final user = authState is AuthAuthenticated ? authState.user : null;
 
@@ -51,7 +49,7 @@ class SettingsPage extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        AppStrings.tr(ref, AppStrings.hello),
+                        AppStrings.tr(currentLocale, AppStrings.hello),
                         style: GoogleFonts.inter(
                           color: textColor,
                           fontSize: 16,
@@ -59,7 +57,8 @@ class SettingsPage extends ConsumerWidget {
                         ),
                       ),
                       Text(
-                        user?.email ?? AppStrings.tr(ref, AppStrings.unknown),
+                        user?.email ??
+                            AppStrings.tr(currentLocale, AppStrings.unknown),
                         style: GoogleFonts.inter(
                           color: textColor,
                           fontSize: 16,
@@ -87,7 +86,7 @@ class SettingsPage extends ConsumerWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.description_outlined,
-                      text: AppStrings.tr(ref, AppStrings.termsOfUse),
+                      text: AppStrings.tr(currentLocale, AppStrings.termsOfUse),
                       onTap: () {}, // TODO: Implement URL launch
                       textColor: textColor,
                     ),
@@ -95,7 +94,10 @@ class SettingsPage extends ConsumerWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.privacy_tip_outlined,
-                      text: AppStrings.tr(ref, AppStrings.privacyPolicy),
+                      text: AppStrings.tr(
+                        currentLocale,
+                        AppStrings.privacyPolicy,
+                      ),
                       onTap: () {}, // TODO: Implement URL launch
                       textColor: textColor,
                     ),
@@ -103,7 +105,10 @@ class SettingsPage extends ConsumerWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.card_membership_outlined,
-                      text: AppStrings.tr(ref, AppStrings.featureRequest),
+                      text: AppStrings.tr(
+                        currentLocale,
+                        AppStrings.featureRequest,
+                      ),
                       onTap: () {}, // TODO: Implement URL launch
                       textColor: textColor,
                     ),
@@ -125,7 +130,7 @@ class SettingsPage extends ConsumerWidget {
                       icon: isDarkMode
                           ? Icons.wb_sunny_outlined
                           : Icons.wb_sunny,
-                      text: AppStrings.tr(ref, AppStrings.darkMode),
+                      text: AppStrings.tr(currentLocale, AppStrings.darkMode),
                       onTap: () {
                         context.read<ThemeBloc>().add(
                           ThemeModeChanged(!isDarkMode),
@@ -145,8 +150,8 @@ class SettingsPage extends ConsumerWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.language,
-                      text: AppStrings.tr(ref, AppStrings.language),
-                      onTap: () => _showLanguageDialog(context, ref),
+                      text: AppStrings.tr(currentLocale, AppStrings.language),
+                      onTap: () => _showLanguageDialog(context, currentLocale),
                       textColor: textColor,
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -188,7 +193,7 @@ class SettingsPage extends ConsumerWidget {
                           context,
                           icon: Icons.record_voice_over_outlined,
                           text: AppStrings.tr(
-                            ref,
+                            currentLocale,
                             AppStrings.transcriptionMode,
                           ),
                           onTap: () {},
@@ -199,7 +204,10 @@ class SettingsPage extends ConsumerWidget {
                         // Engine Selection
                         RadioListTile<TranscriptionEngine>(
                           title: Text(
-                            AppStrings.tr(ref, AppStrings.onlineGemini),
+                            AppStrings.tr(
+                              currentLocale,
+                              AppStrings.onlineGemini,
+                            ),
                             style: GoogleFonts.inter(color: textColor),
                           ),
                           value: TranscriptionEngine.gemini,
@@ -211,7 +219,10 @@ class SettingsPage extends ConsumerWidget {
                         ),
                         RadioListTile<TranscriptionEngine>(
                           title: Text(
-                            AppStrings.tr(ref, AppStrings.offlineWhisper),
+                            AppStrings.tr(
+                              currentLocale,
+                              AppStrings.offlineWhisper,
+                            ),
                             style: GoogleFonts.inter(color: textColor),
                           ),
                           value: TranscriptionEngine.whisper,
@@ -231,7 +242,7 @@ class SettingsPage extends ConsumerWidget {
                             ),
                             child: Text(
                               AppStrings.tr(
-                                ref,
+                                currentLocale,
                                 AppStrings.downloadWhisperDesc,
                               ),
                               style: GoogleFonts.inter(
@@ -253,7 +264,10 @@ class SettingsPage extends ConsumerWidget {
                                   foregroundColor: Colors.black,
                                 ),
                                 child: Text(
-                                  AppStrings.tr(ref, AppStrings.downloadModel),
+                                  AppStrings.tr(
+                                    currentLocale,
+                                    AppStrings.downloadModel,
+                                  ),
                                 ),
                               ),
                             ),
@@ -292,7 +306,7 @@ class SettingsPage extends ConsumerWidget {
                                   const SizedBox(width: 8),
                                   Text(
                                     AppStrings.tr(
-                                      ref,
+                                      currentLocale,
                                       AppStrings.modelDownloaded,
                                     ),
                                     style: GoogleFonts.inter(
@@ -322,11 +336,12 @@ class SettingsPage extends ConsumerWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.person,
-                      text: AppStrings.tr(ref, AppStrings.userId),
+                      text: AppStrings.tr(currentLocale, AppStrings.userId),
                       onTap: () {},
                       textColor: textColor,
                       trailing: Text(
-                        user?.id ?? AppStrings.tr(ref, AppStrings.unknown),
+                        user?.id ??
+                            AppStrings.tr(currentLocale, AppStrings.unknown),
                         style: GoogleFonts.inter(
                           color: textColor.withOpacity(0.5),
                           fontSize: 14,
@@ -337,11 +352,12 @@ class SettingsPage extends ConsumerWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.email_outlined,
-                      text: AppStrings.tr(ref, AppStrings.email),
+                      text: AppStrings.tr(currentLocale, AppStrings.email),
                       onTap: () {},
                       textColor: textColor,
                       trailing: Text(
-                        user?.email ?? AppStrings.tr(ref, AppStrings.unknown),
+                        user?.email ??
+                            AppStrings.tr(currentLocale, AppStrings.unknown),
                         style: GoogleFonts.inter(
                           color: textColor.withOpacity(0.5),
                           fontSize: 14,
@@ -352,8 +368,8 @@ class SettingsPage extends ConsumerWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.logout,
-                      text: AppStrings.tr(ref, AppStrings.signOut),
-                      onTap: () => _handleSignOut(context, ref),
+                      text: AppStrings.tr(currentLocale, AppStrings.signOut),
+                      onTap: () => _handleSignOut(context, currentLocale),
                       textColor: textColor,
                     ),
                   ],
@@ -370,7 +386,7 @@ class SettingsPage extends ConsumerWidget {
                 child: _buildMenuItem(
                   context,
                   icon: Icons.delete_outline,
-                  text: AppStrings.tr(ref, AppStrings.deleteAccount),
+                  text: AppStrings.tr(currentLocale, AppStrings.deleteAccount),
                   color: const Color(0xFFE99C9C), // Keep red tint
                   onTap: () {}, // TODO: Implement delete account
                   textColor: const Color(0xFFE99C9C),
@@ -456,13 +472,13 @@ class SettingsPage extends ConsumerWidget {
     }
   }
 
-  void _showLanguageDialog(BuildContext context, WidgetRef ref) {
+  void _showLanguageDialog(BuildContext context, Locale locale) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).dialogBackgroundColor,
         title: Text(
-          AppStrings.tr(ref, AppStrings.language),
+          AppStrings.tr(locale, AppStrings.language),
           style: GoogleFonts.inter(
             color: Theme.of(context).colorScheme.onSurface,
           ),
@@ -470,22 +486,17 @@ class SettingsPage extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildLanguageOption(context, ref, 'English', 'en'),
-            _buildLanguageOption(context, ref, 'Русский', 'ru'),
-            _buildLanguageOption(context, ref, 'Қазақша', 'kk'),
-            _buildLanguageOption(context, ref, '中文', 'zh'),
+            _buildLanguageOption(context, 'English', 'en'),
+            _buildLanguageOption(context, 'Русский', 'ru'),
+            _buildLanguageOption(context, 'Қазақша', 'kk'),
+            _buildLanguageOption(context, '中文', 'zh'),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLanguageOption(
-    BuildContext context,
-    WidgetRef ref,
-    String name,
-    String code,
-  ) {
+  Widget _buildLanguageOption(BuildContext context, String name, String code) {
     return ListTile(
       title: Text(
         name,
@@ -495,30 +506,24 @@ class SettingsPage extends ConsumerWidget {
       ),
       onTap: () {
         context.read<LocaleBloc>().add(LocaleChanged(code));
-        // Dual-write: AppStrings.tr(ref, ...) (used across ~11 not-yet-
-        // migrated pages) still reads the legacy Riverpod localeProvider
-        // directly, so it needs updating too or those pages would show
-        // stale-language text until restart. Remove once AppStrings.tr
-        // no longer depends on Riverpod.
-        ref.read(legacy_locale.localeProvider.notifier).setLocale(code);
         Navigator.pop(context);
       },
     );
   }
 
-  Future<void> _handleSignOut(BuildContext context, WidgetRef ref) async {
+  Future<void> _handleSignOut(BuildContext context, Locale locale) async {
     final shouldLogout = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Theme.of(context).dialogBackgroundColor,
         title: Text(
-          AppStrings.tr(ref, AppStrings.signOutConfirmTitle),
+          AppStrings.tr(locale, AppStrings.signOutConfirmTitle),
           style: GoogleFonts.inter(
             color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         content: Text(
-          AppStrings.tr(ref, AppStrings.signOutConfirmMessage),
+          AppStrings.tr(locale, AppStrings.signOutConfirmMessage),
           style: GoogleFonts.inter(
             color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
           ),
@@ -527,7 +532,7 @@ class SettingsPage extends ConsumerWidget {
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text(
-              AppStrings.tr(ref, AppStrings.cancel),
+              AppStrings.tr(locale, AppStrings.cancel),
               style: GoogleFonts.inter(
                 color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
               ),
@@ -536,7 +541,7 @@ class SettingsPage extends ConsumerWidget {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
-              AppStrings.tr(ref, AppStrings.confirm),
+              AppStrings.tr(locale, AppStrings.confirm),
               style: GoogleFonts.inter(color: Colors.redAccent),
             ),
           ),

@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/localization/app_strings.dart';
 import '../../data/database/app_database.dart';
+import '../locale/bloc/locale_bloc.dart';
 import '../notes/bloc/folders_bloc.dart';
 import 'create_folder_dialog.dart';
 
 /// Bottom sheet for selecting a destination folder
-class FolderPickerSheet extends ConsumerStatefulWidget {
+class FolderPickerSheet extends StatefulWidget {
   final String? currentFolderId;
   final String noteTitle;
 
@@ -21,10 +21,10 @@ class FolderPickerSheet extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<FolderPickerSheet> createState() => _FolderPickerSheetState();
+  State<FolderPickerSheet> createState() => _FolderPickerSheetState();
 }
 
-class _FolderPickerSheetState extends ConsumerState<FolderPickerSheet>
+class _FolderPickerSheetState extends State<FolderPickerSheet>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<Offset> _slideAnimation;
@@ -53,6 +53,7 @@ class _FolderPickerSheetState extends ConsumerState<FolderPickerSheet>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     return SlideTransition(
       position: _slideAnimation,
@@ -88,7 +89,7 @@ class _FolderPickerSheetState extends ConsumerState<FolderPickerSheet>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          AppStrings.tr(ref, AppStrings.moveToFolder),
+                          AppStrings.tr(locale, AppStrings.moveToFolder),
                           style: GoogleFonts.inter(
                             fontWeight: FontWeight.w600,
                             fontSize: 18,
@@ -136,14 +137,20 @@ class _FolderPickerSheetState extends ConsumerState<FolderPickerSheet>
                     ),
                     FoldersLoadFailure() => Center(
                       child: Text(
-                        AppStrings.tr(ref, AppStrings.errorLoadingFolders),
+                        AppStrings.tr(locale, AppStrings.errorLoadingFolders),
                         style: GoogleFonts.inter(
                           color: theme.colorScheme.onSurface.withOpacity(0.5),
                         ),
                       ),
                     ),
                     FoldersLoadSuccess(:final folders, :final folderCounts) =>
-                      _buildFolderList(context, theme, folders, folderCounts),
+                      _buildFolderList(
+                        context,
+                        theme,
+                        locale,
+                        folders,
+                        folderCounts,
+                      ),
                   };
                 },
               ),
@@ -160,6 +167,7 @@ class _FolderPickerSheetState extends ConsumerState<FolderPickerSheet>
   Widget _buildFolderList(
     BuildContext context,
     ThemeData theme,
+    Locale locale,
     List<Folder> folders,
     Map<String, int> counts,
   ) {
@@ -169,7 +177,7 @@ class _FolderPickerSheetState extends ConsumerState<FolderPickerSheet>
       children: [
         // All Notes option
         _FolderOption(
-          name: AppStrings.tr(ref, AppStrings.allNotes),
+          name: AppStrings.tr(locale, AppStrings.allNotes),
           color: const Color(0xFFFF9000),
           isSelected: widget.currentFolderId == null,
           noteCount: counts['all_notes'] ?? 0,
@@ -361,6 +369,7 @@ class _CreateFolderButtonState extends State<_CreateFolderButton> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     // If I use withValues, I should use the correct method from Color.
     // .withValues is Dart 3.2? or ui.Color?
@@ -391,27 +400,19 @@ class _CreateFolderButtonState extends State<_CreateFolderButton> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Consumer(
-                builder: (context, ref, child) {
-                  return const Icon(
-                    Icons.add,
-                    color: Color(0xFFE8B731),
-                    size: 20,
-                  ); // Keep gold/orange for action
-                },
-              ),
+              const Icon(
+                Icons.add,
+                color: Color(0xFFE8B731),
+                size: 20,
+              ), // Keep gold/orange for action
               const SizedBox(width: 8),
-              Consumer(
-                builder: (context, ref, child) {
-                  return Text(
-                    AppStrings.tr(ref, AppStrings.createNewFolder),
-                    style: GoogleFonts.inter(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 15,
-                      color: const Color(0xFFE8B731),
-                    ),
-                  );
-                },
+              Text(
+                AppStrings.tr(locale, AppStrings.createNewFolder),
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 15,
+                  color: const Color(0xFFE8B731),
+                ),
               ),
             ],
           ),

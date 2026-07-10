@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:uuid/uuid.dart';
@@ -27,7 +26,7 @@ import 'package:printing/printing.dart';
 import 'package:drift/drift.dart' as drift;
 import '../bloc/editor_bloc.dart';
 
-class DiaryEditPage extends ConsumerStatefulWidget {
+class DiaryEditPage extends StatefulWidget {
   final String? noteId;
   final String? initialTitle;
   final String? initialContent;
@@ -44,10 +43,10 @@ class DiaryEditPage extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<DiaryEditPage> createState() => _DiaryEditPageState();
+  State<DiaryEditPage> createState() => _DiaryEditPageState();
 }
 
-class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
+class _DiaryEditPageState extends State<DiaryEditPage> {
   late QuillController _quillController;
   late TextEditingController _titleController;
   bool _isRewriting = false;
@@ -154,20 +153,21 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
   void _showLinkDialog() {
     final linkController = TextEditingController();
     final theme = Theme.of(context);
+    final locale = context.read<LocaleBloc>().state.locale;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.dialogBackgroundColor,
         title: Text(
-          AppStrings.tr(ref, AppStrings.insertLink),
+          AppStrings.tr(locale, AppStrings.insertLink),
           style: TextStyle(color: theme.colorScheme.onSurface),
         ),
         content: TextField(
           controller: linkController,
           style: TextStyle(color: theme.colorScheme.onSurface),
           decoration: InputDecoration(
-            hintText: AppStrings.tr(ref, AppStrings.enterLinkUrl),
+            hintText: AppStrings.tr(locale, AppStrings.enterLinkUrl),
             hintStyle: TextStyle(
               color: theme.colorScheme.onSurface.withOpacity(0.5),
             ),
@@ -185,7 +185,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
-              AppStrings.tr(ref, AppStrings.cancel),
+              AppStrings.tr(locale, AppStrings.cancel),
               style: TextStyle(
                 color: theme.colorScheme.onSurface.withOpacity(0.5),
               ),
@@ -200,7 +200,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
               Navigator.pop(context);
             },
             child: Text(
-              AppStrings.tr(ref, AppStrings.insert),
+              AppStrings.tr(locale, AppStrings.insert),
               style: const TextStyle(color: Color(0xFFFF9000)),
             ),
           ),
@@ -213,11 +213,12 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
   Future<void> _performAIRewrite() async {
     final plainText = _quillController.document.toPlainText().trim();
     final theme = Theme.of(context);
+    final locale = context.read<LocaleBloc>().state.locale;
 
     if (plainText.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppStrings.tr(ref, AppStrings.noTextToRewrite)),
+          content: Text(AppStrings.tr(locale, AppStrings.noTextToRewrite)),
           backgroundColor: theme.brightness == Brightness.dark
               ? const Color(0xFF2C2C2E)
               : Colors.grey[800],
@@ -244,7 +245,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
             ),
             const SizedBox(height: 16),
             Text(
-              AppStrings.tr(ref, AppStrings.rewriteLoading),
+              AppStrings.tr(locale, AppStrings.rewriteLoading),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: 'Inter',
@@ -278,7 +279,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
         if (mounted) {
           final message = exceptionMessage != null
               ? 'Error: $exceptionMessage'
-              : AppStrings.tr(ref, AppStrings.rewriteFail);
+              : AppStrings.tr(locale, AppStrings.rewriteFail);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(message),
@@ -294,12 +295,13 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
   }
 
   void _showAiRewriteResultDialog(String rewrittenText, ThemeData theme) {
+    final locale = context.read<LocaleBloc>().state.locale;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: theme.dialogBackgroundColor,
         title: Text(
-          AppStrings.tr(ref, AppStrings.aiRewriteResult),
+          AppStrings.tr(locale, AppStrings.aiRewriteResult),
           style: TextStyle(
             fontFamily: 'Inter',
             fontWeight: FontWeight.w600,
@@ -325,7 +327,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: Text(
-              AppStrings.tr(ref, AppStrings.cancel),
+              AppStrings.tr(locale, AppStrings.cancel),
               style: TextStyle(
                 color: theme.colorScheme.onSurface.withOpacity(0.5),
               ),
@@ -339,7 +341,9 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text(AppStrings.tr(ref, AppStrings.rewriteSuccess)),
+                  content: Text(
+                    AppStrings.tr(locale, AppStrings.rewriteSuccess),
+                  ),
                   backgroundColor: theme.brightness == Brightness.dark
                       ? const Color(0xFF2C2C2E)
                       : Colors.grey[800],
@@ -347,7 +351,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
               );
             },
             child: Text(
-              AppStrings.tr(ref, AppStrings.apply),
+              AppStrings.tr(locale, AppStrings.apply),
               style: const TextStyle(color: Color(0xFFFF9000)),
             ),
           ),
@@ -457,6 +461,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
     }
 
     final theme = Theme.of(context);
+    final locale = context.read<LocaleBloc>().state.locale;
 
     _overlayEntry = OverlayEntry(
       builder: (context) => Stack(
@@ -499,12 +504,12 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
                         const SizedBox(height: 10),
                         _buildMenuItem(
                           Icons.picture_as_pdf_outlined,
-                          AppStrings.tr(ref, AppStrings.pdf),
+                          AppStrings.tr(locale, AppStrings.pdf),
                           onTap: () => _generatePdf(),
                         ),
                         _buildMenuItem(
                           Icons.chat_bubble_outline,
-                          AppStrings.tr(ref, AppStrings.aiChat),
+                          AppStrings.tr(locale, AppStrings.aiChat),
                           onTap: () {
                             Navigator.push(
                               context,
@@ -529,22 +534,22 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
                         const SizedBox(height: 5),
                         _buildMenuItem(
                           Icons.image_outlined,
-                          AppStrings.tr(ref, AppStrings.image),
+                          AppStrings.tr(locale, AppStrings.image),
                           onTap: () => _pickImage(ImageSource.gallery),
                         ),
                         _buildMenuItem(
                           Icons.camera_alt_outlined,
-                          AppStrings.tr(ref, AppStrings.camera),
+                          AppStrings.tr(locale, AppStrings.camera),
                           onTap: () => _pickImage(ImageSource.camera),
                         ),
                         _buildMenuItem(
                           Icons.crop_free,
-                          AppStrings.tr(ref, AppStrings.scan),
+                          AppStrings.tr(locale, AppStrings.scan),
                           onTap: () => _scanImage(),
                         ),
                         _buildMenuItem(
                           Icons.palette_outlined,
-                          AppStrings.tr(ref, AppStrings.drawing),
+                          AppStrings.tr(locale, AppStrings.drawing),
                           onTap: () async {
                             final imagePath = await Navigator.push(
                               context,
@@ -581,21 +586,21 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
                         ),
                         _buildMenuItem(
                           Icons.description_outlined,
-                          AppStrings.tr(ref, AppStrings.transcription),
+                          AppStrings.tr(locale, AppStrings.transcription),
                           onTap: () {
                             _navigateToTranscriptionPage();
                           },
                         ),
                         _buildMenuItem(
                           Icons.auto_fix_high_outlined,
-                          AppStrings.tr(ref, AppStrings.aiRewrite),
+                          AppStrings.tr(locale, AppStrings.aiRewrite),
                           onTap: () {
                             _performAIRewrite();
                           },
                         ),
                         _buildMenuItem(
                           Icons.mic_none_outlined,
-                          AppStrings.tr(ref, AppStrings.audioRecording),
+                          AppStrings.tr(locale, AppStrings.audioRecording),
                           onTap: _toggleRecording,
                         ),
                         const SizedBox(height: 5),
@@ -639,6 +644,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
   }
 
   Widget _buildDeleteMenuItem() {
+    final locale = context.read<LocaleBloc>().state.locale;
     return _HoverMenuItem(
       onTap: () async {
         _removeOverlay();
@@ -648,19 +654,20 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
         }
       },
       icon: Icons.delete_outline,
-      text: AppStrings.tr(ref, AppStrings.delete),
+      text: AppStrings.tr(locale, AppStrings.delete),
       isDestructive: true,
     );
   }
 
   Future<bool?> _confirmDelete() {
     final theme = Theme.of(context);
+    final locale = context.read<LocaleBloc>().state.locale;
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: theme.dialogBackgroundColor,
         title: Text(
-          AppStrings.tr(ref, AppStrings.deleteDiaryConfirmTitle),
+          AppStrings.tr(locale, AppStrings.deleteDiaryConfirmTitle),
           style: TextStyle(
             fontFamily: 'Inter',
             fontWeight: FontWeight.w600,
@@ -668,7 +675,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
           ),
         ),
         content: Text(
-          AppStrings.tr(ref, AppStrings.deleteDiaryConfirmMessage),
+          AppStrings.tr(locale, AppStrings.deleteDiaryConfirmMessage),
           style: TextStyle(
             fontFamily: 'Inter',
             color: theme.colorScheme.onSurface.withOpacity(0.7),
@@ -678,7 +685,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: Text(
-              AppStrings.tr(ref, AppStrings.cancel),
+              AppStrings.tr(locale, AppStrings.cancel),
               style: TextStyle(
                 fontFamily: 'Inter',
                 color: theme.colorScheme.onSurface.withOpacity(0.5),
@@ -688,7 +695,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
           TextButton(
             onPressed: () => Navigator.pop(context, true),
             child: Text(
-              AppStrings.tr(ref, AppStrings.delete),
+              AppStrings.tr(locale, AppStrings.delete),
               style: const TextStyle(
                 fontFamily: 'Inter',
                 color: Colors.redAccent,
@@ -954,6 +961,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
   void _navigateToTranscriptionPage() {
     final audioState = context.read<AudioBloc>().state;
     final theme = Theme.of(context);
+    final locale = context.read<LocaleBloc>().state.locale;
 
     // Get transcription text from the Quill document
     final transcriptionText = _quillController.document.toPlainText().trim();
@@ -975,7 +983,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
       // Show snackbar if there's no transcription
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(AppStrings.tr(ref, AppStrings.noTranscription)),
+          content: Text(AppStrings.tr(locale, AppStrings.noTranscription)),
           backgroundColor: theme.brightness == Brightness.dark
               ? const Color(0xFF2C2C2E)
               : Colors.grey[800],
@@ -1004,6 +1012,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     return BlocListener<AudioBloc, AudioState>(
       listenWhen: (previous, current) =>
@@ -1069,7 +1078,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
                                   ),
                                   decoration: InputDecoration(
                                     hintText: AppStrings.tr(
-                                      ref,
+                                      locale,
                                       AppStrings.diary,
                                     ),
                                     hintStyle: TextStyle(
@@ -1323,10 +1332,14 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
                         Row(
                           children: [
                             Expanded(
-                              child: _buildAudioButton(audioState, isDark),
+                              child: _buildAudioButton(
+                                audioState,
+                                isDark,
+                                locale,
+                              ),
                             ),
                             const SizedBox(width: 12),
-                            Expanded(child: _buildAiButton(isDark)),
+                            Expanded(child: _buildAiButton(isDark, locale)),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -1405,7 +1418,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
     );
   }
 
-  Widget _buildAudioButton(AudioState audioState, bool isDark) {
+  Widget _buildAudioButton(AudioState audioState, bool isDark, Locale locale) {
     final isRecording = audioState.isRecording;
 
     return InkWell(
@@ -1446,10 +1459,10 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
             Text(
               isRecording
                   ? AppStrings.tr(
-                      ref,
+                      locale,
                       AppStrings.audioRecording,
                     ) // or just "Recording"
-                  : AppStrings.tr(ref, AppStrings.audioRecording).replaceAll(
+                  : AppStrings.tr(locale, AppStrings.audioRecording).replaceAll(
                       'Recording',
                       'Audio',
                     ), // Hacky fallback if string encompasses both
@@ -1488,7 +1501,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
     );
   }
 
-  Widget _buildAiButton(bool isDark) {
+  Widget _buildAiButton(bool isDark, Locale locale) {
     return InkWell(
       onTap: () {
         _performAIRewrite();
@@ -1510,7 +1523,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
             ),
             const SizedBox(width: 8),
             Text(
-              AppStrings.tr(ref, AppStrings.aiAssistant), // "AI Assistant"
+              AppStrings.tr(locale, AppStrings.aiAssistant), // "AI Assistant"
               style: TextStyle(
                 fontFamily: 'Inter',
                 fontWeight: FontWeight.w600,

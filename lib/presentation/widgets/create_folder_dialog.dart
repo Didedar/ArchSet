@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/localization/app_strings.dart';
 import '../../data/database/app_database.dart';
+import '../locale/bloc/locale_bloc.dart';
 import '../notes/bloc/folders_bloc.dart';
 
 /// Animated dialog for creating a new folder
-class CreateFolderDialog extends ConsumerStatefulWidget {
+class CreateFolderDialog extends StatefulWidget {
   const CreateFolderDialog({super.key});
 
   @override
-  ConsumerState<CreateFolderDialog> createState() => _CreateFolderDialogState();
+  State<CreateFolderDialog> createState() => _CreateFolderDialogState();
 }
 
-class _CreateFolderDialogState extends ConsumerState<CreateFolderDialog>
+class _CreateFolderDialogState extends State<CreateFolderDialog>
     with SingleTickerProviderStateMixin {
   final _nameController = TextEditingController();
   String _selectedColor = '#E8B731'; // Default yellow
@@ -85,6 +85,7 @@ class _CreateFolderDialogState extends ConsumerState<CreateFolderDialog>
     final theme = Theme.of(context);
     final cardColor = theme.cardColor;
     final textColor = theme.colorScheme.onSurface;
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     return AnimatedBuilder(
       animation: _controller,
@@ -105,7 +106,7 @@ class _CreateFolderDialogState extends ConsumerState<CreateFolderDialog>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      AppStrings.tr(ref, AppStrings.createNewFolder),
+                      AppStrings.tr(locale, AppStrings.createNewFolder),
                       style: GoogleFonts.inter(
                         fontWeight: FontWeight.w600,
                         fontSize: 20,
@@ -131,7 +132,10 @@ class _CreateFolderDialogState extends ConsumerState<CreateFolderDialog>
                         ),
                         cursorColor: theme.colorScheme.primary,
                         decoration: InputDecoration(
-                          hintText: AppStrings.tr(ref, AppStrings.folderName),
+                          hintText: AppStrings.tr(
+                            locale,
+                            AppStrings.folderName,
+                          ),
                           hintStyle: GoogleFonts.inter(
                             fontSize: 16,
                             color: textColor.withOpacity(0.5),
@@ -148,7 +152,7 @@ class _CreateFolderDialogState extends ConsumerState<CreateFolderDialog>
 
                     // Color picker
                     Text(
-                      AppStrings.tr(ref, AppStrings.colorLabel),
+                      AppStrings.tr(locale, AppStrings.colorLabel),
                       style: GoogleFonts.inter(
                         fontWeight: FontWeight.w500,
                         fontSize: 14,
@@ -203,7 +207,7 @@ class _CreateFolderDialogState extends ConsumerState<CreateFolderDialog>
                       children: [
                         Expanded(
                           child: _DialogButton(
-                            label: AppStrings.tr(ref, AppStrings.cancel),
+                            label: AppStrings.tr(locale, AppStrings.cancel),
                             onTap: () => Navigator.of(context).pop(),
                             isOutlined: true,
                           ),
@@ -211,7 +215,7 @@ class _CreateFolderDialogState extends ConsumerState<CreateFolderDialog>
                         const SizedBox(width: 12),
                         Expanded(
                           child: _DialogButton(
-                            label: AppStrings.tr(ref, AppStrings.create),
+                            label: AppStrings.tr(locale, AppStrings.create),
                             onTap: _createFolder,
                             color: Color(
                               int.parse(

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:just_audio/just_audio.dart';
 import '../../core/localization/app_strings.dart';
 import '../../data/models/audio_segment.dart';
+import '../locale/bloc/locale_bloc.dart';
 
 /// Model class for a transcription segment with timing
 class TranscriptionSegment {
@@ -110,7 +111,7 @@ class TranscriptionSegment {
 }
 
 /// TranscriptionPage displays the full audio transcription with tabs for each audio
-class TranscriptionPage extends ConsumerStatefulWidget {
+class TranscriptionPage extends StatefulWidget {
   /// Audio file paths for playlist playback
   final List<String>? audioPaths;
 
@@ -140,10 +141,10 @@ class TranscriptionPage extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<TranscriptionPage> createState() => _TranscriptionPageState();
+  State<TranscriptionPage> createState() => _TranscriptionPageState();
 }
 
-class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
+class _TranscriptionPageState extends State<TranscriptionPage>
     with SingleTickerProviderStateMixin {
   late List<TranscriptionSegment> _segments;
   late TabController _tabController;
@@ -288,6 +289,7 @@ class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textColor = theme.colorScheme.onSurface;
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -299,7 +301,7 @@ class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(
-          AppStrings.tr(ref, AppStrings.transcription),
+          AppStrings.tr(locale, AppStrings.transcription),
           style: GoogleFonts.inter(
             fontWeight: FontWeight.w600,
             fontSize: 18,
@@ -322,7 +324,7 @@ class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
               )
             : null,
       ),
-      body: _segments.isEmpty ? _buildEmptyState() : _buildContent(),
+      body: _segments.isEmpty ? _buildEmptyState(locale) : _buildContent(),
     );
   }
 
@@ -478,7 +480,7 @@ class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(Locale locale) {
     final theme = Theme.of(context);
     return Center(
       child: Column(
@@ -491,7 +493,7 @@ class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
           ),
           const SizedBox(height: 16),
           Text(
-            AppStrings.tr(ref, AppStrings.noTranscriptionAvailable),
+            AppStrings.tr(locale, AppStrings.noTranscriptionAvailable),
             style: GoogleFonts.inter(
               color: theme.colorScheme.onSurface.withOpacity(0.5),
               fontSize: 16,
@@ -504,6 +506,7 @@ class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
 
   void _showOptionsMenu(BuildContext context) {
     final theme = Theme.of(context);
+    final locale = context.read<LocaleBloc>().state.locale;
     showModalBottomSheet(
       context: context,
       backgroundColor: theme.cardColor,
@@ -526,7 +529,7 @@ class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
             ListTile(
               leading: Icon(Icons.copy, color: theme.colorScheme.onSurface),
               title: Text(
-                AppStrings.tr(ref, AppStrings.copyTranscription),
+                AppStrings.tr(locale, AppStrings.copyTranscription),
                 style: GoogleFonts.inter(color: theme.colorScheme.onSurface),
               ),
               onTap: () {
@@ -537,7 +540,7 @@ class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
             ListTile(
               leading: Icon(Icons.share, color: theme.colorScheme.onSurface),
               title: Text(
-                AppStrings.tr(ref, AppStrings.share),
+                AppStrings.tr(locale, AppStrings.share),
                 style: GoogleFonts.inter(color: theme.colorScheme.onSurface),
               ),
               onTap: () {
@@ -553,7 +556,7 @@ class _TranscriptionPageState extends ConsumerState<TranscriptionPage>
 }
 
 /// Individual transcription segment card widget
-class _TranscriptionSegmentCard extends ConsumerWidget {
+class _TranscriptionSegmentCard extends StatelessWidget {
   final TranscriptionSegment segment;
   final Duration currentPosition;
   final VoidCallback onTimeStampTap;
@@ -565,8 +568,9 @@ class _TranscriptionSegmentCard extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final locale = context.watch<LocaleBloc>().state.locale;
     final isActive =
         currentPosition >= segment.startTime &&
         currentPosition < segment.endTime;
@@ -634,7 +638,7 @@ class _TranscriptionSegmentCard extends ConsumerWidget {
             )
           else
             Text(
-              AppStrings.tr(ref, AppStrings.noTranscriptionTextAvailable),
+              AppStrings.tr(locale, AppStrings.noTranscriptionTextAvailable),
               style: GoogleFonts.inter(
                 fontWeight: FontWeight.w400,
                 fontSize: 15,

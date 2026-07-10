@@ -1,19 +1,20 @@
 import 'dart:ui' as ui;
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 import '../../core/localization/app_strings.dart';
+import '../locale/bloc/locale_bloc.dart';
 
-class DrawingPage extends ConsumerStatefulWidget {
+class DrawingPage extends StatefulWidget {
   const DrawingPage({super.key});
 
   @override
-  ConsumerState<DrawingPage> createState() => _DrawingPageState();
+  State<DrawingPage> createState() => _DrawingPageState();
 }
 
-class _DrawingPageState extends ConsumerState<DrawingPage> {
+class _DrawingPageState extends State<DrawingPage> {
   // State for drawing
   List<DrawingPoint?> points = [];
   Color selectedColor = Colors.white;
@@ -197,6 +198,7 @@ class _DrawingPageState extends ConsumerState<DrawingPage> {
     final theme = Theme.of(context);
     final cardColor = theme.cardColor;
     final iconColor = theme.colorScheme.onSurface;
+    final locale = context.watch<LocaleBloc>().state.locale;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -246,7 +248,7 @@ class _DrawingPageState extends ConsumerState<DrawingPage> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                AppStrings.tr(ref, AppStrings.done),
+                AppStrings.tr(locale, AppStrings.done),
                 style: TextStyle(
                   color: theme.colorScheme.onPrimary,
                   fontWeight: FontWeight.w600,
@@ -299,7 +301,7 @@ class _DrawingPageState extends ConsumerState<DrawingPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${AppStrings.tr(ref, AppStrings.errorSavingDrawing)}: $e',
+              '${AppStrings.tr(context.read<LocaleBloc>().state.locale, AppStrings.errorSavingDrawing)}: $e',
             ),
           ),
         );
