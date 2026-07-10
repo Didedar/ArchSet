@@ -2,19 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../notes.dart';
-import '../../providers/sync_provider.dart';
 import '../bloc/auth_bloc.dart';
+import '../../sync/bloc/sync_bloc.dart';
 
-class SignInEmailPage extends ConsumerStatefulWidget {
+class SignInEmailPage extends StatefulWidget {
   const SignInEmailPage({super.key});
 
   @override
-  ConsumerState<SignInEmailPage> createState() => _SignInEmailPageState();
+  State<SignInEmailPage> createState() => _SignInEmailPageState();
 }
 
-class _SignInEmailPageState extends ConsumerState<SignInEmailPage> {
+class _SignInEmailPageState extends State<SignInEmailPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
@@ -56,13 +55,8 @@ class _SignInEmailPageState extends ConsumerState<SignInEmailPage> {
   void _onAuthStateChanged(BuildContext context, AuthState state) {
     if (state is! AuthAuthenticated) return;
 
-    // Sync stays on Riverpod until Phase 3; fire-and-forget so it doesn't
-    // block navigation.
-    try {
-      ref.read(syncServiceProvider).sync();
-    } catch (e) {
-      debugPrint('Sync failed after login: $e');
-    }
+    // Fire-and-forget so it doesn't block navigation.
+    context.read<SyncBloc>().add(const SyncRequested());
 
     Navigator.pushReplacement(
       context,

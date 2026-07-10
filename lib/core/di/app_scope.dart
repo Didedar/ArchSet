@@ -5,6 +5,7 @@ import '../dependencies.dart';
 import '../../presentation/auth/bloc/auth_bloc.dart';
 import '../../presentation/core_deps/core_dependencies.dart';
 import '../../presentation/locale/bloc/locale_bloc.dart';
+import '../../presentation/sync/bloc/sync_bloc.dart';
 import '../../presentation/theme/bloc/theme_bloc.dart';
 
 /// The DI boundary. Exposes [Dependencies]/[CoreDependencies] via
@@ -37,6 +38,11 @@ class AppScope extends StatelessWidget {
           ),
           BlocProvider<AuthBloc>(
             create: (_) => AuthBloc(repository: dependencies.auth.repository),
+          ),
+          BlocProvider<SyncBloc>(
+            lazy: false,
+            create: (_) => SyncBloc(service: dependencies.sync.service)
+              ..add(const SyncMonitoringStarted()),
           ),
         ],
         child: child,

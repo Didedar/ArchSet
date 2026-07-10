@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:archset_r2/core/composition_root.dart';
 import 'package:archset_r2/core/logging/logger.dart';
 import '../support/fake_path_provider.dart';
+import '../support/fake_secure_storage.dart';
 
 class _RecordingObserver implements LogObserver {
   final messages = <String>[];
@@ -12,7 +13,10 @@ class _RecordingObserver implements LogObserver {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUp(installFakePathProvider);
+  setUp(() {
+    installFakePathProvider();
+    installFakeSecureStorage();
+  });
 
   test('builds a Dependencies graph with a wired CoreDependencies', () async {
     final logger = Logger();
@@ -25,6 +29,7 @@ void main() {
     expect(dependencies.theme.repository, isNotNull);
     expect(dependencies.locale.repository, isNotNull);
     expect(dependencies.auth.repository, isNotNull);
+    expect(dependencies.sync.service, isNotNull);
   });
 
   test('logs initialization start and completion', () async {

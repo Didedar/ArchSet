@@ -1,20 +1,19 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../notes.dart';
-import '../../providers/sync_provider.dart';
 import '../bloc/auth_bloc.dart';
+import '../../sync/bloc/sync_bloc.dart';
 import 'welcome_page.dart';
 
-class SplashPage extends ConsumerStatefulWidget {
+class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
 
   @override
-  ConsumerState<SplashPage> createState() => _SplashPageState();
+  State<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends ConsumerState<SplashPage> {
+class _SplashPageState extends State<SplashPage> {
   @override
   void initState() {
     super.initState();
@@ -33,12 +32,7 @@ class _SplashPageState extends ConsumerState<SplashPage> {
     switch (state) {
       case AuthAuthenticated():
         // Fire-and-forget: don't block navigation on sync completing.
-        // Sync stays on Riverpod until Phase 3.
-        try {
-          ref.read(syncServiceProvider).sync();
-        } catch (e) {
-          debugPrint('Sync failed on startup: $e');
-        }
+        context.read<SyncBloc>().add(const SyncRequested());
         Navigator.pushReplacement(
           context,
           CupertinoPageRoute(builder: (context) => const NotesPage()),

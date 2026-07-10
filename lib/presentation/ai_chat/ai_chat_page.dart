@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/localization/app_strings.dart';
 import '../providers/audio_provider.dart';
-import '../providers/sync_provider.dart';
+import '../sync/bloc/sync_bloc.dart';
 
 class AIChatPage extends ConsumerStatefulWidget {
   const AIChatPage({super.key});
@@ -22,7 +23,7 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
     super.initState();
     // Trigger sync when entering chat to ensure RAG has latest data
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(syncServiceProvider).sync();
+      context.read<SyncBloc>().add(const SyncRequested());
     });
   }
 

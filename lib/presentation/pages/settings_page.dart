@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../auth/bloc/auth_bloc.dart';
 import '../locale/bloc/locale_bloc.dart';
 import '../providers/locale_provider.dart' as legacy_locale;
-import '../providers/sync_provider.dart';
+import '../sync/bloc/sync_bloc.dart';
 import '../theme/bloc/theme_bloc.dart';
 import '../../core/localization/app_strings.dart';
 import '../auth/pages/welcome_page.dart';
@@ -541,8 +541,12 @@ class SettingsPage extends ConsumerWidget {
 
     if (shouldLogout == true) {
       try {
-        final syncService = ref.read(syncServiceProvider);
-        await syncService.sync();
+        final syncBloc = context.read<SyncBloc>();
+        final syncFinished = syncBloc.stream.firstWhere(
+          (state) => state is SyncSuccess || state is SyncFailure,
+        );
+        syncBloc.add(const SyncRequested());
+        await syncFinished;
       } catch (e) {
         debugPrint('Sync failed before logout: $e');
       }

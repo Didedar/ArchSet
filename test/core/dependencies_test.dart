@@ -5,17 +5,25 @@ import 'package:archset_r2/core/logging/logger.dart';
 import 'package:archset_r2/data/repository/secure_storage_locale_repository.dart';
 import 'package:archset_r2/data/repository/secure_storage_theme_repository.dart';
 import 'package:archset_r2/data/services/auth_service.dart';
+import 'package:archset_r2/data/services/api_service.dart';
+import 'package:archset_r2/data/services/sync_service.dart';
 import 'package:archset_r2/presentation/auth/auth_dependencies.dart';
 import 'package:archset_r2/presentation/core_deps/core_dependencies.dart';
 import 'package:archset_r2/presentation/locale/locale_dependencies.dart';
+import 'package:archset_r2/presentation/sync/sync_dependencies.dart';
 import 'package:archset_r2/presentation/theme/theme_dependencies.dart';
 import '../support/fake_app_database.dart';
+import '../support/fake_secure_storage.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(installFakeSecureStorage);
+
   test('exposes every feature dependency container it was built with', () {
     final storage = const FlutterSecureStorage();
+    final database = FakeAppDatabase();
     final core = CoreDependencies(
-      database: FakeAppDatabase(),
+      database: database,
       secureStorage: storage,
       logger: Logger(),
     );
@@ -25,8 +33,13 @@ void main() {
     final locale = LocaleDependencies(
       repository: SecureStorageLocaleRepository(storage: storage),
     );
-    final auth = AuthDependencies(
-      repository: AuthService(database: core.database),
+    final authService = AuthService(database: database);
+    final auth = AuthDependencies(repository: authService);
+    final sync = SyncDependencies(
+      service: SyncService(
+        apiService: ApiService(authService: authService),
+        database: database,
+      ),
     );
 
     final dependencies = Dependencies(
@@ -34,11 +47,13 @@ void main() {
       theme: theme,
       locale: locale,
       auth: auth,
+      sync: sync,
     );
 
     expect(dependencies.core, same(core));
     expect(dependencies.theme, same(theme));
     expect(dependencies.locale, same(locale));
     expect(dependencies.auth, same(auth));
+    expect(dependencies.sync, same(sync));
   });
 }
