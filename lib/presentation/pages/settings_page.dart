@@ -447,6 +447,8 @@ class SettingsPage extends ConsumerWidget {
         return 'Русский';
       case 'kk':
         return 'Қазақша';
+      case 'zh':
+        return '中文';
       case 'en':
       default:
         return 'English';
@@ -470,6 +472,7 @@ class SettingsPage extends ConsumerWidget {
             _buildLanguageOption(context, ref, 'English', 'en'),
             _buildLanguageOption(context, ref, 'Русский', 'ru'),
             _buildLanguageOption(context, ref, 'Қазақша', 'kk'),
+            _buildLanguageOption(context, ref, '中文', 'zh'),
           ],
         ),
       ),

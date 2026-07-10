@@ -7,28 +7,52 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:flutter/foundation.dart';
+
 import 'auth_service.dart';
 
 /// API configuration
 class ApiConfig {
-  static String _baseUrl = 'http://127.0.0.1:8000'; // Default to localhost
+  static String _baseUrl =
+      'https://archset-backend-production.up.railway.app'; // Production URL
 
-  /// Initialize API configuration
-  /// Must be called before runApp
   static Future<void> init() async {
+    const String productionUrl = 'https://archset-backend-production.up.railway.app';
+    String fallbackUrl = 'http://127.0.0.1:8000';
+
     if (Platform.isAndroid) {
-      _baseUrl = 'http://10.240.102.24:8000';
+      // Use Mac's current local IP for physical device testing
+      fallbackUrl = 'http://192.168.0.106:8000'; 
     } else if (Platform.isIOS) {
       final deviceInfo = DeviceInfoPlugin();
       final iosInfo = await deviceInfo.iosInfo;
 
       if (iosInfo.isPhysicalDevice) {
-        // Physical iOS device - use mDNS hostname
-        _baseUrl = 'http://MacBook-Air-Gulnazira.local:8000';
+        // Physical iOS device - use Mac's current local IP
+        fallbackUrl = 'http://192.168.0.106:8000';
       } else {
         // iOS Simulator - use localhost
-        _baseUrl = 'http://127.0.0.1:8000';
+        fallbackUrl = 'http://127.0.0.1:8000';
       }
+    }
+
+    try {
+      // Check if production is reachable
+      final response = await http
+          .get(Uri.parse('$productionUrl/health'))
+          .timeout(const Duration(seconds: 3));
+      
+      if (response.statusCode == 200) {
+        _baseUrl = productionUrl;
+        debugPrint('🌍 Connected to Production API: $_baseUrl');
+      } else {
+        _baseUrl = fallbackUrl;
+        debugPrint('⚠️ Production API returned ${response.statusCode}, falling back to local: $_baseUrl');
+      }
+    } catch (e) {
+      // Fallback if network fails, times out, etc.
+      _baseUrl = fallbackUrl;
+      debugPrint('🔌 Production API unreachable, falling back to local: $_baseUrl');
     }
   }
 

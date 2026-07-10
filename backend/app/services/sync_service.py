@@ -79,6 +79,11 @@ class SyncService:
                                 existing_note.audio_path = None # Clear path after delete
                             except OSError:
                                 pass
+                        if background_tasks:
+                            background_tasks.add_task(
+                                rag_service.delete_note_from_index,
+                                note_id=existing_note.id
+                            )
                     else:
                         # If updated and not deleted, check if content changed/exists for indexing
                         if client_note.content or client_note.title:

@@ -1,5 +1,8 @@
 """
-RAG Service using LlamaIndex and PostgreSQL (pgvector).
+RAG Service using LlamaIndex with a local file-based vector store
+(SimpleVectorStore), persisted under ./storage. Multi-tenancy is enforced
+via a `user_id` metadata filter applied on every query, not via separate
+per-user storage.
 """
 
 import logging
@@ -10,7 +13,6 @@ from llama_index.core import (
     Document,
     Settings as LlamaSettings,
 )
-from llama_index.vector_stores.postgres import PGVectorStore
 from llama_index.llms.gemini import Gemini
 from llama_index.embeddings.gemini import GeminiEmbedding
 from ..config import get_settings
@@ -47,7 +49,6 @@ else:
 class RAGService:
     def __init__(self):
         self.storage_path = "./storage" # Local directory for vector store
-        self.embed_dim = 3072
 
     def _get_index(self) -> VectorStoreIndex:
         """Load index from storage or create a new one."""
@@ -92,14 +93,18 @@ class RAGService:
 
     async def sync_diary_to_vector_db(self, note_id: str, text: str, user_id: str, title: str = ""):
         """
-        Ingest a diary entry into the vector store.
+        Ingest a diary entry into the vector store, replacing any previously
+        indexed version of the same note (keyed by note_id) so repeated edits
+        don't accumulate as duplicates.
         """
         try:
             # Load existing index
             index = self._get_index()
-            
-            # Create a document
+
+            # A deterministic id_ (= note_id) is what lets update_ref_doc below
+            # find and remove the previous version of this note before reinserting.
             doc = Document(
+                id_=note_id,
                 text=text,
                 metadata={
                     "note_id": note_id,
@@ -109,23 +114,33 @@ class RAGService:
                 excluded_llm_metadata_keys=["note_id", "user_id"],
                 excluded_embed_metadata_keys=["note_id", "user_id"]
             )
-            
-            # Insert document
-            # Note: SimpleVectorStore just appends. Duplicates might happen if we don't handle them.
-            # Ideally we check if doc exists effectively. 
-            # For this simple version, we just insert. 
-            # (Refinement: Delete old doc with same note_id if possible, but SimpleVectorStore is basic)
-            
-            index.insert(doc)
-            
+
+            # Deletes any existing nodes for this note_id (no-op if not found,
+            # e.g. on first insert), then inserts the new version.
+            index.update_ref_doc(doc)
+
             # Persist changes to disk
             index.storage_context.persist(persist_dir=self.storage_path)
-            
+
             logger.info(f"Successfully synced note {note_id} to vector DB.")
-            
+
         except Exception as e:
             logger.error(f"Error syncing diary to vector DB: {e}")
             raise
+
+    async def delete_note_from_index(self, note_id: str):
+        """
+        Remove a note's indexed content so the assistant stops referencing it
+        after the note is deleted (hard delete, soft delete, or sync-driven
+        delete) in the app.
+        """
+        try:
+            index = self._get_index()
+            index.delete_ref_doc(note_id, delete_from_docstore=True)
+            index.storage_context.persist(persist_dir=self.storage_path)
+            logger.info(f"Removed note {note_id} from vector DB.")
+        except Exception as e:
+            logger.error(f"Error removing note {note_id} from vector DB: {e}")
 
     async def chat_with_diary(self, user_query: str, chat_history: List[dict], user_id: str) -> str:
         """

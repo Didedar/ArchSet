@@ -169,6 +169,7 @@ async def update_note(
 @router.delete("/{note_id}", status_code=204)
 async def delete_note(
     note_id: str,
+    background_tasks: BackgroundTasks,
     hard_delete: bool = False,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
@@ -207,5 +208,12 @@ async def delete_note(
     else:
         note.is_deleted = True
         note.updated_at = datetime.utcnow()
-    
+
     await db.commit()
+
+    # Remove from the AI chat's vector index too, so deleted/trashed notes
+    # stop being referenced in RAG answers.
+    background_tasks.add_task(
+        rag_service.delete_note_from_index,
+        note_id=note_id
+    )

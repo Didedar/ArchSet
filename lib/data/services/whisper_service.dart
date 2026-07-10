@@ -9,10 +9,10 @@ class WhisperService {
   bool _isModelLoaded = false;
   String? _modelPath;
 
-  // Use the multilingual base model (NOT base.en!)
+  // Use the quantized medium model (fallback from large-v3 due to memory crashes)
   static const String _modelUrl =
-      'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin';
-  static const String _modelFileName = 'ggml-base.bin';
+      'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium-q5_0.bin';
+  static const String _modelFileName = 'ggml-medium-q5_0.bin';
 
   Future<bool> isModelDownloaded() async {
     final path = await _getModelPath();
@@ -33,7 +33,7 @@ class WhisperService {
       final request = http.Request('GET', Uri.parse(_modelUrl));
       final response = await client.send(request);
 
-      final contentLength = response.contentLength ?? 142000000;
+      final contentLength = response.contentLength ?? 530000000;
       final path = await _getModelPath();
       final file = File(path);
 
@@ -73,8 +73,10 @@ class WhisperService {
       final path = await _getModelPath();
       if (await File(path).exists()) {
         _modelPath = path;
-        // Important: use WhisperModel.base (it is multilingual)
-        _whisper = const Whisper(model: WhisperModel.base);
+        // Initialize with a default model enum.
+        // We use modelPath so the enum is less important, but keeping it consistent.
+        // The actual model file is now medium-q5_0.
+        _whisper = const Whisper(model: WhisperModel.medium);
         _isModelLoaded = true;
       }
     } catch (e) {

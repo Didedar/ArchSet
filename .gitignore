@@ -46,4 +46,9 @@ app.*.map.json
 
 # Python
 backend/.venv/
+backend/venv/
 __pycache__/
+
+# Secrets - never commit real credentials
+backend/.env
+.env
