@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../presentation/providers/audio_provider.dart';
+import '../../core/di/app_scope.dart';
 import '../../data/database/app_database.dart';
+import '../../data/services/api_service.dart';
+import '../../data/services/backend_gemini_service.dart';
 import 'package:drift/drift.dart' as drift;
 
 class ArchImageEmbedBuilder extends EmbedBuilder {
@@ -18,16 +19,16 @@ class ArchImageEmbedBuilder extends EmbedBuilder {
   }
 }
 
-class ArchImageEmbed extends ConsumerStatefulWidget {
+class ArchImageEmbed extends StatefulWidget {
   final String imagePath;
 
   const ArchImageEmbed({super.key, required this.imagePath});
 
   @override
-  ConsumerState<ArchImageEmbed> createState() => _ArchImageEmbedState();
+  State<ArchImageEmbed> createState() => _ArchImageEmbedState();
 }
 
-class _ArchImageEmbedState extends ConsumerState<ArchImageEmbed> {
+class _ArchImageEmbedState extends State<ArchImageEmbed> {
   bool _isLoading = false;
 
   Future<void> _analyzeImage() async {
@@ -36,7 +37,7 @@ class _ArchImageEmbedState extends ConsumerState<ArchImageEmbed> {
     });
 
     try {
-      final db = AppDatabase();
+      final db = context.di.core.database;
       // Check for existing metadata
       final existing =
           await (db.select(db.imageMetadata)
@@ -54,7 +55,9 @@ class _ArchImageEmbedState extends ConsumerState<ArchImageEmbed> {
         }
       } else {
         // Not found locally, call backend
-        final geminiService = ref.read(backendGeminiServiceProvider);
+        final geminiService = BackendGeminiService(
+          apiService: ApiService(authService: context.di.auth.repository),
+        );
 
         // Pass location if available locally (even if analysis is missing)
         final jsonString = await geminiService.analyzeImage(
@@ -116,6 +119,7 @@ class _ArchImageEmbedState extends ConsumerState<ArchImageEmbed> {
   }
 
   void _showAnalysisDialog(Map<String, dynamic> data, String? metadataId) {
+    final db = context.di.core.database;
     showDialog(
       context: context,
       builder: (context) => _AnalysisDialog(
@@ -123,7 +127,6 @@ class _ArchImageEmbedState extends ConsumerState<ArchImageEmbed> {
         metadataId: metadataId,
         onDelete: () async {
           if (metadataId != null) {
-            final db = AppDatabase();
             await (db.update(
               db.imageMetadata,
             )..where((t) => t.id.equals(metadataId))).write(

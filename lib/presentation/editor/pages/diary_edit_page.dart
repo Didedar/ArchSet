@@ -1,30 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:convert';
-import 'dart:io'; // Added for File
-import 'core/localization/app_strings.dart';
-import 'data/database/app_database.dart';
-import 'presentation/providers/notes_provider.dart';
-import 'presentation/providers/audio_provider.dart';
-import 'presentation/widgets/audio_player_widget.dart';
-import 'presentation/pages/transcription_page.dart';
-import 'presentation/pages/drawing_page.dart';
-import 'package:flutter_quill/quill_delta.dart'; // Import Delta for parser
+import 'dart:io';
+import '../../../core/di/app_scope.dart';
+import '../../../core/localization/app_strings.dart';
+import '../../../data/database/app_database.dart';
+import '../../audio/bloc/audio_bloc.dart';
+import '../../locale/bloc/locale_bloc.dart';
+import '../../transcription/bloc/transcription_bloc.dart';
+import '../../widgets/audio_player_widget.dart';
+import '../../pages/transcription_page.dart';
+import '../../pages/drawing_page.dart';
+import 'package:flutter_quill/quill_delta.dart';
 
-import 'presentation/ai_chat/ai_chat_page.dart';
+import '../../ai_chat/ai_chat_page.dart';
 import 'package:image_picker/image_picker.dart';
-import 'presentation/widgets/arch_image_embed.dart';
-import 'data/services/api_service.dart';
-import 'presentation/providers/auth_provider.dart';
+import '../../widgets/arch_image_embed.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:drift/drift.dart' as drift;
-import 'data/services/backend_gemini_service.dart';
+import '../bloc/editor_bloc.dart';
 
 class DiaryEditPage extends ConsumerStatefulWidget {
   final String? noteId;
@@ -65,11 +66,13 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
 
     // Reset audio state first, then load this diary's audio if present
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final audioBloc = context.read<AudioBloc>();
       // Clear any previous diary's audio state
-      ref.read(audioProvider.notifier).reset();
+      audioBloc.add(const AudioReset());
       // Load audio for this diary if it has recordings
       if (widget.initialAudioPath != null) {
-        ref.read(audioProvider.notifier).init(widget.initialAudioPath);
+        audioBloc.add(AudioInitRequested(widget.initialAudioPath));
       }
     });
   }
@@ -119,27 +122,33 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
     );
     final plainText = _quillController.document.toPlainText().trim();
 
-    if (title.isEmpty && plainText.isEmpty) return; // Don't save empty notes
-
     final noteId = widget.noteId ?? const Uuid().v4();
-    final note = Note(
-      id: noteId,
-      title: title,
-      content: contentJson,
-      date: DateTime.now(),
-      folderId: _folderId,
-      audioPath: ref.read(audioProvider).audioPath,
-      updatedAt: DateTime.now(),
-      isDeleted: false,
+    final editorBloc = context.read<EditorBloc>();
+    editorBloc.add(
+      EditorSaveRequested(
+        noteId: noteId,
+        title: title,
+        contentJson: contentJson,
+        plainText: plainText,
+        folderId: _folderId,
+        audioPath: context.read<AudioBloc>().state.audioPath,
+      ),
     );
-
-    final repository = ref.read(notesRepositoryProvider);
-    await repository.insertNote(note); // insertNote uses insertOrReplace
+    await editorBloc.stream.firstWhere((s) => s is EditorSaveSuccess);
   }
 
   void _removeOverlay() {
     _overlayEntry?.remove();
     _overlayEntry = null;
+  }
+
+  void _toggleRecording() {
+    context.read<AudioBloc>().add(
+      AudioRecordingToggleRequested(
+        engine: context.read<TranscriptionBloc>().state.engine,
+        languageCode: context.read<LocaleBloc>().state.locale.languageCode,
+      ),
+    );
   }
 
   void _showLinkDialog() {
@@ -248,117 +257,103 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
       ),
     );
 
-    try {
-      final geminiService = ref.read(backendGeminiServiceProvider);
-      final rewrittenText = await geminiService.rewriteForArchaeology(
-        plainText,
-      );
+    final editorBloc = context.read<EditorBloc>();
+    editorBloc.add(EditorAiRewriteRequested(plainText));
+    final result = await editorBloc.stream.firstWhere(
+      (s) => s is EditorAiRewriteSuccess || s is EditorAiRewriteFailure,
+    );
 
-      // Close loading dialog
-      if (mounted) Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop();
 
-      setState(() {
-        _isRewriting = false;
-      });
+    setState(() {
+      _isRewriting = false;
+    });
 
-      if (rewrittenText == null || rewrittenText.isEmpty) {
+    switch (result) {
+      case EditorAiRewriteSuccess(:final text):
         if (mounted) {
+          _showAiRewriteResultDialog(text, theme);
+        }
+      case EditorAiRewriteFailure(:final exceptionMessage):
+        if (mounted) {
+          final message = exceptionMessage != null
+              ? 'Error: $exceptionMessage'
+              : AppStrings.tr(ref, AppStrings.rewriteFail);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(AppStrings.tr(ref, AppStrings.rewriteFail)),
+              content: Text(message),
               backgroundColor: theme.brightness == Brightness.dark
                   ? const Color(0xFF2C2C2E)
                   : Colors.grey[800],
             ),
           );
         }
-        return;
-      }
+      default:
+        break;
+    }
+  }
 
-      // Show result dialog with option to apply or cancel
-      if (mounted) {
-        showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            backgroundColor: theme.dialogBackgroundColor,
-            title: Text(
-              AppStrings.tr(ref, AppStrings.aiRewriteResult),
+  void _showAiRewriteResultDialog(String rewrittenText, ThemeData theme) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: theme.dialogBackgroundColor,
+        title: Text(
+          AppStrings.tr(ref, AppStrings.aiRewriteResult),
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSurface,
+          ),
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 300,
+          child: SingleChildScrollView(
+            child: Text(
+              rewrittenText,
               style: TextStyle(
                 fontFamily: 'Inter',
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.onSurface,
+                fontSize: 14,
+                color: theme.colorScheme.onSurface.withOpacity(0.7),
+                height: 1.5,
               ),
             ),
-            content: SizedBox(
-              width: double.maxFinite,
-              height: 300,
-              child: SingleChildScrollView(
-                child: Text(
-                  rewrittenText,
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 14,
-                    color: theme.colorScheme.onSurface.withOpacity(0.7),
-                    height: 1.5,
-                  ),
-                ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              AppStrings.tr(ref, AppStrings.cancel),
+              style: TextStyle(
+                color: theme.colorScheme.onSurface.withOpacity(0.5),
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(
-                  AppStrings.tr(ref, AppStrings.cancel),
-                  style: TextStyle(
-                    color: theme.colorScheme.onSurface.withOpacity(0.5),
-                  ),
-                ),
-              ),
-              TextButton(
-                onPressed: () {
-                  // Replace document content with rewritten text (parsed)
-                  final delta = _parseMarkdownToDelta(rewrittenText);
-                  _quillController.document = Document.fromDelta(delta);
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        AppStrings.tr(ref, AppStrings.rewriteSuccess),
-                      ),
-                      backgroundColor: theme.brightness == Brightness.dark
-                          ? const Color(0xFF2C2C2E)
-                          : Colors.grey[800],
-                    ),
-                  );
-                },
-                child: Text(
-                  AppStrings.tr(ref, AppStrings.apply),
-                  style: const TextStyle(color: Color(0xFFFF9000)),
-                ),
-              ),
-            ],
           ),
-        );
-      }
-    } catch (e) {
-      // Close loading dialog
-      if (mounted) Navigator.of(context).pop();
-
-      setState(() {
-        _isRewriting = false;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: theme.brightness == Brightness.dark
-                ? const Color(0xFF2C2C2E)
-                : Colors.grey[800],
+          TextButton(
+            onPressed: () {
+              // Replace document content with rewritten text (parsed)
+              final delta = _parseMarkdownToDelta(rewrittenText);
+              _quillController.document = Document.fromDelta(delta);
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(AppStrings.tr(ref, AppStrings.rewriteSuccess)),
+                  backgroundColor: theme.brightness == Brightness.dark
+                      ? const Color(0xFF2C2C2E)
+                      : Colors.grey[800],
+                ),
+              );
+            },
+            child: Text(
+              AppStrings.tr(ref, AppStrings.apply),
+              style: const TextStyle(color: Color(0xFFFF9000)),
+            ),
           ),
-        );
-      }
-    }
+        ],
+      ),
+    );
   }
 
   /// Simple parser to convert basic Markdown to Quill Delta
@@ -601,9 +596,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
                         _buildMenuItem(
                           Icons.mic_none_outlined,
                           AppStrings.tr(ref, AppStrings.audioRecording),
-                          onTap: () {
-                            ref.read(audioProvider.notifier).toggleRecording();
-                          },
+                          onTap: _toggleRecording,
                         ),
                         const SizedBox(height: 5),
                         // Separator
@@ -709,9 +702,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
 
   Future<void> _deleteNote() async {
     if (widget.noteId == null) return;
-
     final noteId = widget.noteId!;
-    bool deletedOnline = false;
 
     // Show loading indicator
     showDialog(
@@ -720,36 +711,13 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
       builder: (ctx) => const Center(child: CircularProgressIndicator()),
     );
 
-    try {
-      final authService = ref.read(authServiceProvider);
-      final apiService = ApiService(authService: authService);
-
-      // Try hard delete on backend
-      await apiService.delete('/notes/$noteId?hard_delete=true');
-      deletedOnline = true;
-    } catch (e) {
-      // Ignore network errors, proceed to soft delete
-      debugPrint('Online delete failed: $e');
-      deletedOnline = false;
-    }
+    final editorBloc = context.read<EditorBloc>();
+    editorBloc.add(EditorDeleteRequested(noteId));
+    await editorBloc.stream.firstWhere((s) => s is EditorDeleteSuccess);
 
     if (!mounted) return;
     Navigator.of(context).pop(); // Close loading
-
-    if (deletedOnline) {
-      // Hard delete locally if backed confirmed deletion
-      await ref.read(notesRepositoryProvider).hardDeleteNote(noteId);
-    } else {
-      // Soft delete locally (SyncService will pick it up later)
-      // Note: SyncService needs to be updated to handle hard deletes or we rely on soft delete sync
-      // which eventually deletes from backend (but maybe not storage if backend doesn't handle it).
-      // But per plan: we fall back to soft delete.
-      await ref.read(notesRepositoryProvider).deleteNote(noteId);
-    }
-
-    if (mounted) {
-      Navigator.of(context).pop();
-    }
+    Navigator.of(context).pop(); // Close the editor page
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -782,7 +750,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
 
       // Save metadata to DB
       try {
-        final db = AppDatabase();
+        final db = context.di.core.database;
         final id = const Uuid().v4();
         await db
             .into(db.imageMetadata)
@@ -860,38 +828,35 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
       ),
     );
 
-    try {
-      final geminiService = ref.read(backendGeminiServiceProvider);
-      final text = await geminiService.extractTextFromImage(pickedFile.path);
+    final editorBloc = context.read<EditorBloc>();
+    editorBloc.add(EditorImageScanRequested(pickedFile.path));
+    final result = await editorBloc.stream.firstWhere(
+      (s) => s is EditorScanSuccess || s is EditorScanFailure,
+    );
 
-      if (mounted) Navigator.of(context).pop(); // Close loading
+    if (mounted) Navigator.of(context).pop(); // Close loading
 
-      setState(() {
-        _isRewriting = false;
-      });
+    setState(() {
+      _isRewriting = false;
+    });
 
-      if (text != null && text.isNotEmpty) {
+    switch (result) {
+      case EditorScanSuccess(:final text):
         int index = _quillController.selection.baseOffset;
         if (index < 0) {
           index = _quillController.document.length - 1;
         }
-
         _quillController.document.insert(index, text);
         _quillController.document.insert(index + text.length, '\n');
         _quillController.moveCursorToPosition(index + text.length + 1);
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Failed to extract text")),
-          );
+      case EditorScanFailure(:final message):
+        if (message != null && mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(message)));
         }
-      }
-    } catch (e) {
-      if (mounted) Navigator.of(context).pop();
-      setState(() {
-        _isRewriting = false;
-      });
-      debugPrint('Scan error: $e');
+      default:
+        break;
     }
   }
 
@@ -987,7 +952,7 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
   }
 
   void _navigateToTranscriptionPage() {
-    final audioState = ref.read(audioProvider);
+    final audioState = context.read<AudioBloc>().state;
     final theme = Theme.of(context);
 
     // Get transcription text from the Quill document
@@ -1040,10 +1005,12 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    ref.listen<AudioState>(audioProvider, (previous, next) {
-      if (next.lastTranscription != null &&
-          next.lastTranscription != previous?.lastTranscription) {
-        final text = next.lastTranscription!;
+    return BlocListener<AudioBloc, AudioState>(
+      listenWhen: (previous, current) =>
+          current.lastTranscription != null &&
+          current.lastTranscription != previous.lastTranscription,
+      listener: (context, state) {
+        final text = state.lastTranscription!;
         if (text.trim().isNotEmpty) {
           // Insert transcription at the end of the document
           final length = _quillController.document.length;
@@ -1053,305 +1020,324 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
           } else {
             _quillController.document.insert(length - 1, '\n\n$text');
           }
-          ref.read(audioProvider.notifier).clearLastTranscription();
         }
-      }
-    });
-
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 10),
-
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        context.read<AudioBloc>().add(const AudioLastTranscriptionCleared());
+      },
+      child: BlocBuilder<AudioBloc, AudioState>(
+        builder: (context, audioState) {
+          return Scaffold(
+            backgroundColor: theme.scaffoldBackgroundColor,
+            body: SafeArea(
+              child: Column(
                 children: [
-                  Expanded(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: Icon(
-                            Icons.chevron_left,
-                            color: theme.iconTheme.color,
-                            size: 28,
-                          ),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: () async {
-                            await _saveNote();
-                            if (mounted) {
-                              Navigator.of(context).pop();
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: TextField(
-                            controller: _titleController,
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontWeight: FontWeight.w600,
-                              fontSize: 24,
-                              color: theme.colorScheme.onSurface,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: AppStrings.tr(ref, AppStrings.diary),
-                              hintStyle: TextStyle(
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w600,
-                                fontSize: 24,
-                                color: theme.colorScheme.onSurface.withOpacity(
-                                  0.5,
-                                ),
-                              ),
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 10),
 
-                  // Icons Row
-                  Row(
-                    children: [
-                      // Recording Indicator
-                      if (ref.watch(audioProvider).isRecording)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF2C2C2E),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.1),
-                            ),
-                          ),
+                  // Header
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: const BoxDecoration(
-                                  color: Colors.red,
-                                  shape: BoxShape.circle,
+                              IconButton(
+                                icon: Icon(
+                                  Icons.chevron_left,
+                                  color: theme.iconTheme.color,
+                                  size: 28,
                                 ),
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                onPressed: () async {
+                                  await _saveNote();
+                                  if (mounted) {
+                                    Navigator.of(context).pop();
+                                  }
+                                },
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                _formatDuration(
-                                  ref.watch(audioProvider).recordingDuration,
-                                ),
-                                style: const TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
+                              Flexible(
+                                child: TextField(
+                                  controller: _titleController,
+                                  style: TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 24,
+                                    color: theme.colorScheme.onSurface,
+                                  ),
+                                  decoration: InputDecoration(
+                                    hintText: AppStrings.tr(
+                                      ref,
+                                      AppStrings.diary,
+                                    ),
+                                    hintStyle: TextStyle(
+                                      fontFamily: 'Inter',
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 24,
+                                      color: theme.colorScheme.onSurface
+                                          .withOpacity(0.5),
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                        )
-                      else ...[
-                        // Audio Player Widget if audio exists and NOT recording
-                        if (ref.watch(audioProvider).hasRecording)
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: IconButton(
-                              icon: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.surface,
-                                  shape: BoxShape.circle,
+                        ),
+
+                        // Icons Row
+                        Row(
+                          children: [
+                            // Recording Indicator
+                            if (audioState.isRecording)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
                                 ),
-                                child: Icon(
-                                  Icons.graphic_eq,
-                                  color: theme.colorScheme.onSurface,
-                                  size: 20,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2C2C2E),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.1),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      _formatDuration(
+                                        audioState.recordingDuration,
+                                      ),
+                                      style: const TextStyle(
+                                        fontFamily: 'Inter',
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else ...[
+                              // Audio Player Widget if audio exists and NOT recording
+                              if (audioState.hasRecording)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8.0),
+                                  child: IconButton(
+                                    icon: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.surface,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.graphic_eq,
+                                        color: theme.colorScheme.onSurface,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      context.read<AudioBloc>().add(
+                                        const AudioPlayerExpansionToggled(),
+                                      );
+                                    },
+                                  ),
+                                ),
+
+                              CompositedTransformTarget(
+                                link: _layerLink,
+                                child: IconButton(
+                                  icon: SvgPicture.string(
+                                    '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> <path d="M19 13C19.5523 13 20 12.5523 20 12C20 11.4477 19.5523 11 19 11C18.4477 11 18 11.4477 18 12C18 12.5523 18.4477 13 19 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> <path d="M5 13C5.55228 13 6 12.5523 6 12C6 11.4477 5.55228 11 5 11C4.44772 11 4 11.4477 4 12C4 12.5523 4.44772 13 5 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> </svg>''',
+                                  ),
+                                  onPressed: _showCustomMenu,
                                 ),
                               ),
-                              onPressed: () {
-                                ref
-                                    .read(audioProvider.notifier)
-                                    .togglePlayerExpansion();
-                              },
-                            ),
-                          ),
-
-                        CompositedTransformTarget(
-                          link: _layerLink,
-                          child: IconButton(
-                            icon: SvgPicture.string(
-                              '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> <path d="M19 13C19.5523 13 20 12.5523 20 12C20 11.4477 19.5523 11 19 11C18.4477 11 18 11.4477 18 12C18 12.5523 18.4477 13 19 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> <path d="M5 13C5.55228 13 6 12.5523 6 12C6 11.4477 5.55228 11 5 11C4.44772 11 4 11.4477 4 12C4 12.5523 4.44772 13 5 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> </svg>''',
-                            ),
-                            onPressed: _showCustomMenu,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // Audio Player (Visible when expanded)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 24),
-              child: AudioPlayerWidget(),
-            ),
-
-            Divider(
-              color: theme.colorScheme.onSurface.withOpacity(0.1),
-              height: 1,
-            ),
-
-            // Editor
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 16,
-                ),
-                child: QuillEditor(
-                  controller: _quillController,
-                  focusNode: _editorFocusNode,
-                  scrollController: _editorScrollController,
-                  config: QuillEditorConfig(
-                    scrollable: true,
-                    autoFocus: false,
-                    expands: false,
-                    padding: EdgeInsets.zero,
-                    embedBuilders: [ArchImageEmbedBuilder()],
-                  ),
-                ),
-              ),
-            ),
-
-            // Bottom Toolbar
-            Container(
-              padding: const EdgeInsets.only(
-                left: 16,
-                right: 16,
-                top: 12,
-                bottom: 8, // Little padding before safe area/bottom
-              ),
-              decoration: BoxDecoration(
-                color: theme.brightness == Brightness.dark
-                    ? const Color(0xFF1C1C1E)
-                    : Colors.white,
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(24),
-                ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Formatting Buttons Row
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildFormatButton(
-                          label: 'H',
-                          onTap: () => _toggleAttribute(Attribute.header),
-                          isActive: _isAttributeActive(Attribute.header),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          icon: Icons.undo,
-                          onTap: () => _quillController.undo(),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          icon: Icons.redo,
-                          onTap: () => _quillController.redo(),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          label: 'B',
-                          isBold: true,
-                          onTap: () => _toggleAttribute(Attribute.bold),
-                          isActive: _isAttributeActive(Attribute.bold),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          label: 'U',
-                          isUnderline: true,
-                          onTap: () => _toggleAttribute(Attribute.underline),
-                          isActive: _isAttributeActive(Attribute.underline),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          icon: Icons.format_strikethrough,
-                          onTap: () =>
-                              _toggleAttribute(Attribute.strikeThrough),
-                          isActive: _isAttributeActive(Attribute.strikeThrough),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          icon: Icons.check_box_outlined,
-                          onTap: () => _toggleAttribute(Attribute.unchecked),
-                          isActive:
-                              _isAttributeActive(Attribute.unchecked) ||
-                              _isAttributeActive(Attribute.checked),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          icon: Icons.format_list_bulleted,
-                          onTap: () => _toggleAttribute(Attribute.ul),
-                          isActive: _isAttributeActive(Attribute.ul),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          icon: Icons.format_list_numbered,
-                          onTap: () => _toggleAttribute(Attribute.ol),
-                          isActive: _isAttributeActive(Attribute.ol),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          icon: Icons.code,
-                          onTap: () => _toggleAttribute(Attribute.codeBlock),
-                          isActive: _isAttributeActive(Attribute.codeBlock),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          icon: Icons.format_quote,
-                          onTap: () => _toggleAttribute(Attribute.blockQuote),
-                          isActive: _isAttributeActive(Attribute.blockQuote),
-                        ),
-                        const SizedBox(width: 8),
-                        _buildFormatButton(
-                          icon: Icons.link,
-                          onTap: _showLinkDialog,
+                            ],
+                          ],
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
 
-                  // Action Buttons Row (Audio & AI)
-                  Row(
-                    children: [
-                      Expanded(child: _buildAudioButton(isDark)),
-                      const SizedBox(width: 12),
-                      Expanded(child: _buildAiButton(isDark)),
-                    ],
+                  // Audio Player (Visible when expanded)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 24),
+                    child: AudioPlayerWidget(),
                   ),
-                  const SizedBox(height: 8),
+
+                  Divider(
+                    color: theme.colorScheme.onSurface.withOpacity(0.1),
+                    height: 1,
+                  ),
+
+                  // Editor
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 16,
+                      ),
+                      child: QuillEditor(
+                        controller: _quillController,
+                        focusNode: _editorFocusNode,
+                        scrollController: _editorScrollController,
+                        config: QuillEditorConfig(
+                          scrollable: true,
+                          autoFocus: false,
+                          expands: false,
+                          padding: EdgeInsets.zero,
+                          embedBuilders: [ArchImageEmbedBuilder()],
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Bottom Toolbar
+                  Container(
+                    padding: const EdgeInsets.only(
+                      left: 16,
+                      right: 16,
+                      top: 12,
+                      bottom: 8, // Little padding before safe area/bottom
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.brightness == Brightness.dark
+                          ? const Color(0xFF1C1C1E)
+                          : Colors.white,
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(24),
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Formatting Buttons Row
+                        SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildFormatButton(
+                                label: 'H',
+                                onTap: () => _toggleAttribute(Attribute.header),
+                                isActive: _isAttributeActive(Attribute.header),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.undo,
+                                onTap: () => _quillController.undo(),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.redo,
+                                onTap: () => _quillController.redo(),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                label: 'B',
+                                isBold: true,
+                                onTap: () => _toggleAttribute(Attribute.bold),
+                                isActive: _isAttributeActive(Attribute.bold),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                label: 'U',
+                                isUnderline: true,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.underline),
+                                isActive: _isAttributeActive(
+                                  Attribute.underline,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.format_strikethrough,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.strikeThrough),
+                                isActive: _isAttributeActive(
+                                  Attribute.strikeThrough,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.check_box_outlined,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.unchecked),
+                                isActive:
+                                    _isAttributeActive(Attribute.unchecked) ||
+                                    _isAttributeActive(Attribute.checked),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.format_list_bulleted,
+                                onTap: () => _toggleAttribute(Attribute.ul),
+                                isActive: _isAttributeActive(Attribute.ul),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.format_list_numbered,
+                                onTap: () => _toggleAttribute(Attribute.ol),
+                                isActive: _isAttributeActive(Attribute.ol),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.code,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.codeBlock),
+                                isActive: _isAttributeActive(
+                                  Attribute.codeBlock,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.format_quote,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.blockQuote),
+                                isActive: _isAttributeActive(
+                                  Attribute.blockQuote,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.link,
+                                onTap: _showLinkDialog,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Action Buttons Row (Audio & AI)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildAudioButton(audioState, isDark),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(child: _buildAiButton(isDark)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
@@ -1419,14 +1405,11 @@ class _DiaryEditPageState extends ConsumerState<DiaryEditPage> {
     );
   }
 
-  Widget _buildAudioButton(bool isDark) {
-    final audioState = ref.watch(audioProvider);
+  Widget _buildAudioButton(AudioState audioState, bool isDark) {
     final isRecording = audioState.isRecording;
 
     return InkWell(
-      onTap: () {
-        ref.read(audioProvider.notifier).toggleRecording();
-      },
+      onTap: _toggleRecording,
       borderRadius: BorderRadius.circular(30),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),

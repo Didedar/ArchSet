@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/di/app_scope.dart';
 import '../../core/localization/app_strings.dart';
-import '../providers/audio_provider.dart';
+import '../../data/services/api_service.dart';
+import '../../data/services/backend_gemini_service.dart';
 import '../sync/bloc/sync_bloc.dart';
 
 class AIChatPage extends ConsumerStatefulWidget {
@@ -45,7 +47,9 @@ class _AIChatPageState extends ConsumerState<AIChatPage> {
     _scrollToBottom();
 
     try {
-      final service = ref.read(backendGeminiServiceProvider);
+      final service = BackendGeminiService(
+        apiService: ApiService(authService: context.di.auth.repository),
+      );
 
       // Convert messages to history format expected by backend
       final history = _messages

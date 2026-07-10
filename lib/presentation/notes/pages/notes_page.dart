@@ -7,7 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:animations/animations.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../data/database/app_database.dart';
-import '../../../diary_edit_page.dart';
+import '../../editor/pages/diary_edit_page.dart';
 import '../../pages/settings_page.dart';
 import '../../widgets/note_card.dart';
 import '../../widgets/empty_state.dart';

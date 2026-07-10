@@ -31,6 +31,13 @@ void main() {
     expect(dependencies.auth.repository, isNotNull);
     expect(dependencies.sync.service, isNotNull);
     expect(dependencies.notes.repository, isNotNull);
+    expect(dependencies.transcription.whisperService, isNotNull);
+    expect(dependencies.audio.audioService, isNotNull);
+    expect(
+      dependencies.audio.whisperService,
+      same(dependencies.transcription.whisperService),
+    );
+    expect(dependencies.editor.notesRepository, isNotNull);
   });
 
   test('logs initialization start and completion', () async {

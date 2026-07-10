@@ -6,14 +6,22 @@ import 'package:mocktail/mocktail.dart';
 import 'package:archset_r2/core/dependencies.dart';
 import 'package:archset_r2/core/di/app_scope.dart';
 import 'package:archset_r2/core/logging/logger.dart';
+import 'package:archset_r2/data/services/api_service.dart';
 import 'package:archset_r2/data/services/auth_service.dart';
+import 'package:archset_r2/data/services/backend_gemini_service.dart';
 import 'package:archset_r2/data/services/sync_service.dart';
+import 'package:archset_r2/data/services/whisper_service.dart';
 import 'package:archset_r2/domain/repositories/locale_repository.dart';
 import 'package:archset_r2/domain/repositories/theme_repository.dart';
+import 'package:archset_r2/domain/services/audio_service.dart';
 import 'package:archset_r2/data/repository/notes_repository.dart';
+import 'package:archset_r2/presentation/audio/audio_dependencies.dart';
+import 'package:archset_r2/presentation/audio/bloc/audio_bloc.dart';
 import 'package:archset_r2/presentation/auth/auth_dependencies.dart';
 import 'package:archset_r2/presentation/auth/bloc/auth_bloc.dart';
 import 'package:archset_r2/presentation/core_deps/core_dependencies.dart';
+import 'package:archset_r2/presentation/editor/bloc/editor_bloc.dart';
+import 'package:archset_r2/presentation/editor/editor_dependencies.dart';
 import 'package:archset_r2/presentation/locale/bloc/locale_bloc.dart';
 import 'package:archset_r2/presentation/locale/locale_dependencies.dart';
 import 'package:archset_r2/presentation/notes/bloc/folders_bloc.dart';
@@ -23,6 +31,8 @@ import 'package:archset_r2/presentation/sync/bloc/sync_bloc.dart';
 import 'package:archset_r2/presentation/sync/sync_dependencies.dart';
 import 'package:archset_r2/presentation/theme/bloc/theme_bloc.dart';
 import 'package:archset_r2/presentation/theme/theme_dependencies.dart';
+import 'package:archset_r2/presentation/transcription/bloc/transcription_bloc.dart';
+import 'package:archset_r2/presentation/transcription/transcription_dependencies.dart';
 import '../../support/fake_app_database.dart';
 
 class _MockThemeRepository extends Mock implements ThemeRepository {}
@@ -33,11 +43,20 @@ class _MockAuthService extends Mock implements AuthService {}
 
 class _MockSyncService extends Mock implements SyncService {}
 
+class _MockWhisperService extends Mock implements WhisperService {}
+
+class _MockAudioService extends Mock implements AudioService {}
+
+class _MockBackendGeminiService extends Mock implements BackendGeminiService {}
+
+class _MockApiServiceForScope extends Mock implements ApiService {}
+
 void main() {
   late Dependencies dependencies;
   late _MockThemeRepository themeRepository;
   late _MockLocaleRepository localeRepository;
   late _MockSyncService syncService;
+  late _MockWhisperService whisperService;
 
   setUp(() {
     themeRepository = _MockThemeRepository();
@@ -52,8 +71,27 @@ void main() {
         .thenAnswer((_) => const Stream<SyncStatus>.empty());
     when(() => syncService.resultStream)
         .thenAnswer((_) => const Stream<SyncResult>.empty());
+    whisperService = _MockWhisperService();
+    when(() => whisperService.isModelDownloaded())
+        .thenAnswer((_) async => false);
 
     final database = FakeAppDatabase();
+    final audioService = _MockAudioService();
+    when(() => audioService.recordingDurationStream)
+        .thenAnswer((_) => const Stream.empty());
+    when(() => audioService.playbackPositionStream)
+        .thenAnswer((_) => const Stream.empty());
+    when(() => audioService.playbackDurationStream)
+        .thenAnswer((_) => const Stream.empty());
+    when(() => audioService.amplitudeStream)
+        .thenAnswer((_) => const Stream.empty());
+    when(() => audioService.playerStateStream)
+        .thenAnswer((_) => const Stream.empty());
+    when(() => audioService.currentIndexStream)
+        .thenAnswer((_) => const Stream.empty());
+    final geminiService = _MockBackendGeminiService();
+    final apiService = _MockApiServiceForScope();
+
     dependencies = Dependencies(
       core: CoreDependencies(
         database: database,
@@ -65,6 +103,17 @@ void main() {
       auth: AuthDependencies(repository: _MockAuthService()),
       sync: SyncDependencies(service: syncService),
       notes: NotesDependencies(repository: NotesRepository(database)),
+      transcription: TranscriptionDependencies(whisperService: whisperService),
+      audio: AudioDependencies(
+        audioService: audioService,
+        geminiService: geminiService,
+        whisperService: whisperService,
+      ),
+      editor: EditorDependencies(
+        notesRepository: NotesRepository(database),
+        geminiService: geminiService,
+        apiService: apiService,
+      ),
     );
   });
 
@@ -107,11 +156,17 @@ void main() {
     expect(BlocProvider.of<SyncBloc>(capturedContext), isA<SyncBloc>());
     expect(BlocProvider.of<NotesBloc>(capturedContext), isA<NotesBloc>());
     expect(BlocProvider.of<FoldersBloc>(capturedContext), isA<FoldersBloc>());
+    expect(
+      BlocProvider.of<TranscriptionBloc>(capturedContext),
+      isA<TranscriptionBloc>(),
+    );
+    expect(BlocProvider.of<AudioBloc>(capturedContext), isA<AudioBloc>());
+    expect(BlocProvider.of<EditorBloc>(capturedContext), isA<EditorBloc>());
   });
 
   testWidgets(
-      'ThemeBloc, LocaleBloc, and SyncBloc start on creation (not lazily)',
-      (tester) async {
+      'ThemeBloc, LocaleBloc, SyncBloc, and TranscriptionBloc start on '
+      'creation (not lazily)', (tester) async {
     await tester.pumpWidget(AppScope(
       dependencies: dependencies,
       child: const SizedBox(),
@@ -121,5 +176,6 @@ void main() {
     verify(() => themeRepository.loadThemeMode()).called(1);
     verify(() => localeRepository.loadLocale()).called(1);
     verify(() => syncService.startMonitoring()).called(1);
+    verify(() => whisperService.isModelDownloaded()).called(1);
   });
 }

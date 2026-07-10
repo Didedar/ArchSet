@@ -1,9 +1,12 @@
+import '../presentation/audio/audio_dependencies_builder.dart';
 import '../presentation/auth/auth_dependencies_builder.dart';
 import '../presentation/core_deps/core_dependencies_builder.dart';
+import '../presentation/editor/editor_dependencies_builder.dart';
 import '../presentation/locale/locale_dependencies_builder.dart';
 import '../presentation/notes/notes_dependencies_builder.dart';
 import '../presentation/sync/sync_dependencies_builder.dart';
 import '../presentation/theme/theme_dependencies_builder.dart';
+import '../presentation/transcription/transcription_dependencies_builder.dart';
 import 'dependencies.dart';
 import 'logging/logger.dart';
 
@@ -24,6 +27,12 @@ class CompositionRoot {
       final auth = AuthDependenciesBuilder.build(core);
       final sync = SyncDependenciesBuilder.build(core, auth);
       final notes = NotesDependenciesBuilder.build(core);
+      final transcription = TranscriptionDependenciesBuilder.build();
+      final audio = AudioDependenciesBuilder.build(
+        auth,
+        transcription.whisperService,
+      );
+      final editor = EditorDependenciesBuilder.build(core, auth);
 
       stopwatch.stop();
       logger.info(
@@ -36,6 +45,9 @@ class CompositionRoot {
         auth: auth,
         sync: sync,
         notes: notes,
+        transcription: transcription,
+        audio: audio,
+        editor: editor,
       );
     } catch (error, stackTrace) {
       logger.error('Failed to initialize dependencies', error, stackTrace);

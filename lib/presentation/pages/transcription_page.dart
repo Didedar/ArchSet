@@ -117,7 +117,7 @@ class TranscriptionPage extends ConsumerStatefulWidget {
   /// Pre-created segments (if available)
   final List<TranscriptionSegment>? segments;
 
-  /// Real audio segments from audioProvider
+  /// Real audio segments from AudioBloc
   final List<AudioSegment>? audioSegments;
 
   /// Raw text and duration (alternative to segments)

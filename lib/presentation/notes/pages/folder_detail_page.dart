@@ -8,7 +8,7 @@ import 'package:animations/animations.dart';
 import '../../../core/di/app_scope.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../data/database/app_database.dart';
-import '../../../diary_edit_page.dart';
+import '../../editor/pages/diary_edit_page.dart';
 import '../../widgets/note_card.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/folder_picker_sheet.dart';

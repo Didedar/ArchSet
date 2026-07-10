@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/audio_provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../audio/bloc/audio_bloc.dart';
 import '../../data/models/audio_segment.dart';
 
 /// Audio segments popup widget matching design specifications:
@@ -8,16 +8,16 @@ import '../../data/models/audio_segment.dart';
 /// - width: 282px
 /// - box-shadow: 1px 4px 4px 4px rgba(0, 0, 0, 0.25)
 /// - background: #fff
-class AudioSegmentsPopup extends ConsumerStatefulWidget {
+class AudioSegmentsPopup extends StatefulWidget {
   final VoidCallback? onClose;
 
   const AudioSegmentsPopup({super.key, this.onClose});
 
   @override
-  ConsumerState<AudioSegmentsPopup> createState() => _AudioSegmentsPopupState();
+  State<AudioSegmentsPopup> createState() => _AudioSegmentsPopupState();
 }
 
-class _AudioSegmentsPopupState extends ConsumerState<AudioSegmentsPopup> {
+class _AudioSegmentsPopupState extends State<AudioSegmentsPopup> {
   bool _isEditMode = false;
   final Map<int, TextEditingController> _editControllers = {};
 
@@ -40,9 +40,9 @@ class _AudioSegmentsPopupState extends ConsumerState<AudioSegmentsPopup> {
   }
 
   void _saveAllEdits() {
-    final audioNotifier = ref.read(audioProvider.notifier);
+    final audioBloc = context.read<AudioBloc>();
     for (final entry in _editControllers.entries) {
-      audioNotifier.renameSegment(entry.key, entry.value.text);
+      audioBloc.add(AudioSegmentRenamed(entry.key, entry.value.text));
     }
     _editControllers.clear();
   }
@@ -56,8 +56,7 @@ class _AudioSegmentsPopupState extends ConsumerState<AudioSegmentsPopup> {
 
   @override
   Widget build(BuildContext context) {
-    final audioState = ref.watch(audioProvider);
-    final audioNotifier = ref.read(audioProvider.notifier);
+    final audioState = context.watch<AudioBloc>().state;
 
     if (!audioState.isSegmentsPopupVisible || audioState.segments.isEmpty) {
       return const SizedBox.shrink();
@@ -141,9 +140,10 @@ class _AudioSegmentsPopupState extends ConsumerState<AudioSegmentsPopup> {
                       ? _getController(index, segment.name)
                       : null,
                   onTap: () {
-                    audioNotifier.seekToSegment(index);
-                    audioNotifier.hideSegmentsPopup();
-                    audioNotifier.play();
+                    final audioBloc = context.read<AudioBloc>();
+                    audioBloc.add(AudioSegmentSeekRequested(index));
+                    audioBloc.add(const AudioSegmentsPopupHidden());
+                    audioBloc.add(const AudioPlayRequested());
                   },
                 );
               },
@@ -197,11 +197,7 @@ class _SegmentListItem extends StatelessWidget {
                   child: const Icon(Icons.remove, color: Colors.red, size: 14),
                 ),
                 onPressed: () {
-                  // Call delete function
-                  final notifier = ProviderScope.containerOf(
-                    context,
-                  ).read(audioProvider.notifier);
-                  notifier.deleteSegment(index);
+                  context.read<AudioBloc>().add(AudioSegmentDeleted(index));
                 },
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),

@@ -49,14 +49,7 @@ class ImageMetadata extends Table {
 
 @DriftDatabase(tables: [Folders, Notes, ImageMetadata])
 class AppDatabase extends _$AppDatabase {
-  // Singleton instance
-  static final AppDatabase _instance = AppDatabase._internal();
-
-  // Factory constructor to return the same instance
-  factory AppDatabase() => _instance;
-
-  // Private constructor
-  AppDatabase._internal() : super(_openConnection());
+  AppDatabase() : super(_openConnection());
 
   @override
   int get schemaVersion => 6;

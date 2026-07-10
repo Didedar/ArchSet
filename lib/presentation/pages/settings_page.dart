@@ -8,9 +8,9 @@ import '../locale/bloc/locale_bloc.dart';
 import '../providers/locale_provider.dart' as legacy_locale;
 import '../sync/bloc/sync_bloc.dart';
 import '../theme/bloc/theme_bloc.dart';
+import '../transcription/bloc/transcription_bloc.dart';
 import '../../core/localization/app_strings.dart';
 import '../auth/pages/welcome_page.dart';
-import '../providers/transcription_provider.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -127,9 +127,9 @@ class SettingsPage extends ConsumerWidget {
                           : Icons.wb_sunny,
                       text: AppStrings.tr(ref, AppStrings.darkMode),
                       onTap: () {
-                        context
-                            .read<ThemeBloc>()
-                            .add(ThemeModeChanged(!isDarkMode));
+                        context.read<ThemeBloc>().add(
+                          ThemeModeChanged(!isDarkMode),
+                        );
                       },
                       textColor: textColor,
                       trailing: Switch(
@@ -173,10 +173,9 @@ class SettingsPage extends ConsumerWidget {
               const SizedBox(height: 24),
 
               // Section: Transcription
-              Consumer(
-                builder: (context, ref, child) {
-                  final transcriptionState = ref.watch(transcriptionProvider);
-                  final notifier = ref.read(transcriptionProvider.notifier);
+              BlocBuilder<TranscriptionBloc, TranscriptionState>(
+                builder: (context, transcriptionState) {
+                  final transcriptionBloc = context.read<TranscriptionBloc>();
 
                   return Container(
                     decoration: BoxDecoration(
@@ -205,7 +204,9 @@ class SettingsPage extends ConsumerWidget {
                           ),
                           value: TranscriptionEngine.gemini,
                           groupValue: transcriptionState.engine,
-                          onChanged: (val) => notifier.setEngine(val!),
+                          onChanged: (val) => transcriptionBloc.add(
+                            TranscriptionEngineChanged(val!),
+                          ),
                           activeColor: const Color(0xFFD4F932),
                         ),
                         RadioListTile<TranscriptionEngine>(
@@ -215,7 +216,9 @@ class SettingsPage extends ConsumerWidget {
                           ),
                           value: TranscriptionEngine.whisper,
                           groupValue: transcriptionState.engine,
-                          onChanged: (val) => notifier.setEngine(val!),
+                          onChanged: (val) => transcriptionBloc.add(
+                            TranscriptionEngineChanged(val!),
+                          ),
                           activeColor: const Color(0xFFD4F932),
                         ),
 
@@ -242,7 +245,9 @@ class SettingsPage extends ConsumerWidget {
                             Padding(
                               padding: const EdgeInsets.only(bottom: 16),
                               child: ElevatedButton(
-                                onPressed: () => notifier.downloadModel(),
+                                onPressed: () => transcriptionBloc.add(
+                                  const TranscriptionModelDownloadRequested(),
+                                ),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFFD4F932),
                                   foregroundColor: Colors.black,

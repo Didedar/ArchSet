@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/audio_provider.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../audio/bloc/audio_bloc.dart';
 import 'audio_segments_popup.dart';
 
 /// Audio player widget matching the design specifications
 /// - Container: 352x84px, background #2c2c2e, border-radius 20px
 /// - Waveform visualization with playback progress
 /// - Playback controls: speed, rewind, play/pause, forward
-class AudioPlayerWidget extends ConsumerStatefulWidget {
+class AudioPlayerWidget extends StatefulWidget {
   const AudioPlayerWidget({super.key});
 
   @override
-  ConsumerState<AudioPlayerWidget> createState() => _AudioPlayerWidgetState();
+  State<AudioPlayerWidget> createState() => _AudioPlayerWidgetState();
 }
 
-class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
+class _AudioPlayerWidgetState extends State<AudioPlayerWidget> {
   final LayerLink _layerLink = LayerLink();
   OverlayEntry? _overlayEntry;
 
@@ -31,16 +31,16 @@ class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
   }
 
   void _togglePopup() {
-    final audioNotifier = ref.read(audioProvider.notifier);
+    final audioBloc = context.read<AudioBloc>();
 
     if (_overlayEntry != null) {
       _removeOverlay();
-      audioNotifier.hideSegmentsPopup();
+      audioBloc.add(const AudioSegmentsPopupHidden());
       return;
     }
 
     // Update state to show popup
-    audioNotifier.showSegmentsPopup();
+    audioBloc.add(const AudioSegmentsPopupShown());
 
     _overlayEntry = OverlayEntry(
       builder: (context) => Stack(
@@ -49,7 +49,7 @@ class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
             child: GestureDetector(
               onTap: () {
                 _removeOverlay();
-                audioNotifier.hideSegmentsPopup();
+                audioBloc.add(const AudioSegmentsPopupHidden());
               },
               behavior: HitTestBehavior.translucent,
               child: Container(color: Colors.transparent),
@@ -66,7 +66,7 @@ class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
                 child: AudioSegmentsPopup(
                   onClose: () {
                     _removeOverlay();
-                    audioNotifier.hideSegmentsPopup();
+                    audioBloc.add(const AudioSegmentsPopupHidden());
                   },
                 ),
               ),
@@ -87,8 +87,7 @@ class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final audioState = ref.watch(audioProvider);
-    final audioNotifier = ref.read(audioProvider.notifier);
+    final audioState = context.watch<AudioBloc>().state;
 
     // Respect expanded state
     if (!audioState.isPlayerExpanded) {
@@ -162,7 +161,9 @@ class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
                           );
 
                           // Find which segment this maps to and seek
-                          audioNotifier.seekTo(seekPosition);
+                          context.read<AudioBloc>().add(
+                            AudioSeekRequested(seekPosition),
+                          );
                         }
                       },
                       child: _WaveformVisualization(
@@ -192,7 +193,9 @@ class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
                 children: [
                   // Speed button
                   GestureDetector(
-                    onTap: () => audioNotifier.cycleSpeed(),
+                    onTap: () => context.read<AudioBloc>().add(
+                      const AudioSpeedCycleRequested(),
+                    ),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
@@ -219,7 +222,9 @@ class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
                     children: [
                       // Rewind 10s
                       GestureDetector(
-                        onTap: () => audioNotifier.skipBackward(),
+                        onTap: () => context.read<AudioBloc>().add(
+                          const AudioSkipBackwardRequested(),
+                        ),
                         child: const Icon(
                           Icons.replay_10,
                           color: Colors.white,
@@ -229,7 +234,9 @@ class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
                       const SizedBox(width: 16),
                       // Play/Pause
                       GestureDetector(
-                        onTap: () => audioNotifier.togglePlayPause(),
+                        onTap: () => context.read<AudioBloc>().add(
+                          const AudioPlayPauseToggled(),
+                        ),
                         child: Container(
                           width: 32,
                           height: 32,
@@ -249,7 +256,9 @@ class _AudioPlayerWidgetState extends ConsumerState<AudioPlayerWidget> {
                       const SizedBox(width: 16),
                       // Forward 10s
                       GestureDetector(
-                        onTap: () => audioNotifier.skipForward(),
+                        onTap: () => context.read<AudioBloc>().add(
+                          const AudioSkipForwardRequested(),
+                        ),
                         child: const Icon(
                           Icons.forward_10,
                           color: Colors.white,
@@ -486,35 +495,5 @@ class _WaveformPainter extends CustomPainter {
   bool shouldRepaint(covariant _WaveformPainter oldDelegate) {
     return oldDelegate.amplitudes != amplitudes ||
         oldDelegate.progress != progress;
-  }
-}
-
-class MiniAudioPlayer extends ConsumerWidget {
-  const MiniAudioPlayer({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final audioNotifier = ref.read(audioProvider.notifier);
-    final audioState = ref.watch(audioProvider);
-
-    return GestureDetector(
-      onTap: () {
-        // Expand the full player
-        audioNotifier.togglePlayerExpansion();
-      },
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primaryContainer,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(
-          audioState.isPlaying ? Icons.pause : Icons.play_arrow,
-          color: Theme.of(context).colorScheme.onPrimaryContainer,
-          size: 20,
-        ),
-      ),
-    );
   }
 }
