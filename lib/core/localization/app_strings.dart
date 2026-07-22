@@ -97,6 +97,25 @@ class AppStrings {
   static const String modelNotFound = 'model_not_found';
   static const String downloadWhisperDesc = 'download_whisper_desc';
 
+  // Artifacts map
+  static const String artifactsMap = 'artifacts_map';
+  static const String artifact = 'artifact';
+  static const String noArtifactsYet = 'no_artifacts_yet';
+  static const String noArtifactsHint = 'no_artifacts_hint';
+  static const String withoutLocation = 'without_location';
+  static const String withoutLocationTitle = 'without_location_title';
+  static const String mapTokenMissing = 'map_token_missing';
+  static const String mapTokenMissingHint = 'map_token_missing_hint';
+  static const String coordinates = 'coordinates';
+  static const String photographed = 'photographed';
+  static const String openNote = 'open_note';
+  static const String notAnalyzed = 'not_analyzed';
+  static const String comments = 'comments';
+  static const String noComments = 'no_comments';
+  static const String addComment = 'add_comment';
+  static const String deleteComment = 'delete_comment';
+  static const String imageUnavailable = 'image_unavailable';
+
   static final Map<String, Map<String, String>> _localizedValues = {
     'en': {
       settings: 'Settings',
@@ -198,6 +217,26 @@ class AppStrings {
       'model_not_found': 'Model not found',
       'download_whisper_desc':
           'Download Whisper model (140MB) for offline transcription.',
+      // Artifacts map
+      artifactsMap: 'Artifacts Map',
+      artifact: 'Artifact',
+      noArtifactsYet: 'No artifacts on the map yet',
+      noArtifactsHint:
+          'Photograph a find inside a note and it will appear here.',
+      withoutLocation: 'without location',
+      withoutLocationTitle: 'Photos without location',
+      mapTokenMissing: 'Map is not configured',
+      mapTokenMissingHint:
+          'Build the app with --dart-define=MAPBOX_ACCESS_TOKEN=your_token to enable the map.',
+      coordinates: 'Coordinates',
+      photographed: 'Photographed',
+      openNote: 'Open note',
+      notAnalyzed: 'This photo has not been analyzed yet.',
+      comments: 'Comments',
+      noComments: 'No comments yet',
+      addComment: 'Write a comment...',
+      deleteComment: 'Delete comment',
+      imageUnavailable: 'Image unavailable',
     },
     'ru': {
       settings: 'Настройки',
@@ -298,6 +337,26 @@ class AppStrings {
       'model_not_found': 'Модель не найдена',
       'download_whisper_desc':
           'Скачайте модель Whisper (140 МБ) для оффлайн транскрипции.',
+      // Artifacts map
+      artifactsMap: 'Карта артефактов',
+      artifact: 'Артефакт',
+      noArtifactsYet: 'На карте пока нет артефактов',
+      noArtifactsHint:
+          'Сфотографируйте находку в заметке — она появится здесь.',
+      withoutLocation: 'без геолокации',
+      withoutLocationTitle: 'Фото без геолокации',
+      mapTokenMissing: 'Карта не настроена',
+      mapTokenMissingHint:
+          'Соберите приложение с --dart-define=MAPBOX_ACCESS_TOKEN=ваш_токен, чтобы включить карту.',
+      coordinates: 'Координаты',
+      photographed: 'Снято',
+      openNote: 'Открыть заметку',
+      notAnalyzed: 'Это фото ещё не проанализировано.',
+      comments: 'Комментарии',
+      noComments: 'Комментариев пока нет',
+      addComment: 'Написать комментарий...',
+      deleteComment: 'Удалить комментарий',
+      imageUnavailable: 'Изображение недоступно',
     },
     'kk': {
       settings: 'Баптаулар',
@@ -398,6 +457,25 @@ class AppStrings {
       'model_not_found': 'Модель табылмады',
       'download_whisper_desc':
           'Оффлайн транскрипция үшін Whisper моделін (140 МБ) жүктеңіз.',
+      // Artifacts map
+      artifactsMap: 'Артефактілер картасы',
+      artifact: 'Артефакт',
+      noArtifactsYet: 'Картада әзірге артефактілер жоқ',
+      noArtifactsHint: 'Жазбада олжаны суретке түсіріңіз — ол осында шығады.',
+      withoutLocation: 'геолокациясыз',
+      withoutLocationTitle: 'Геолокациясыз суреттер',
+      mapTokenMissing: 'Карта бапталмаған',
+      mapTokenMissingHint:
+          'Картаны қосу үшін қолданбаны --dart-define=MAPBOX_ACCESS_TOKEN=токеніңіз арқылы жинаңыз.',
+      coordinates: 'Координаттар',
+      photographed: 'Түсірілді',
+      openNote: 'Жазбаны ашу',
+      notAnalyzed: 'Бұл сурет әлі талданбаған.',
+      comments: 'Пікірлер',
+      noComments: 'Әзірге пікір жоқ',
+      addComment: 'Пікір жазу...',
+      deleteComment: 'Пікірді жою',
+      imageUnavailable: 'Сурет қолжетімсіз',
     },
     'zh': {
       settings: '设置',
@@ -492,6 +570,25 @@ class AppStrings {
       'transcription_settings': '转录设置',
       'model_not_found': '未找到模型',
       'download_whisper_desc': '下载 Whisper 模型（140MB）以进行离线转录。',
+      // Artifacts map
+      artifactsMap: '文物地图',
+      artifact: '文物',
+      noArtifactsYet: '地图上还没有文物',
+      noArtifactsHint: '在笔记中拍摄发现物，它就会显示在这里。',
+      withoutLocation: '无定位',
+      withoutLocationTitle: '无定位的照片',
+      mapTokenMissing: '地图未配置',
+      mapTokenMissingHint:
+          '请使用 --dart-define=MAPBOX_ACCESS_TOKEN=您的令牌 构建应用以启用地图。',
+      coordinates: '坐标',
+      photographed: '拍摄于',
+      openNote: '打开笔记',
+      notAnalyzed: '此照片尚未分析。',
+      comments: '评论',
+      noComments: '暂无评论',
+      addComment: '写评论...',
+      deleteComment: '删除评论',
+      imageUnavailable: '图片不可用',
     },
   };
 

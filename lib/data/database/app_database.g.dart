@@ -989,6 +989,41 @@ class $ImageMetadataTable extends ImageMetadata
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _noteIdMeta = const VerificationMeta('noteId');
+  @override
+  late final GeneratedColumn<String> noteId = GeneratedColumn<String>(
+    'note_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -997,6 +1032,9 @@ class $ImageMetadataTable extends ImageMetadata
     longitude,
     analysisResult,
     capturedAt,
+    noteId,
+    updatedAt,
+    isDeleted,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1052,6 +1090,24 @@ class $ImageMetadataTable extends ImageMetadata
     } else if (isInserting) {
       context.missing(_capturedAtMeta);
     }
+    if (data.containsKey('note_id')) {
+      context.handle(
+        _noteIdMeta,
+        noteId.isAcceptableOrUnknown(data['note_id']!, _noteIdMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
     return context;
   }
 
@@ -1085,6 +1141,18 @@ class $ImageMetadataTable extends ImageMetadata
         DriftSqlType.dateTime,
         data['${effectivePrefix}captured_at'],
       )!,
+      noteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_id'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
     );
   }
 
@@ -1102,6 +1170,9 @@ class ImageMetadataData extends DataClass
   final double? longitude;
   final String? analysisResult;
   final DateTime capturedAt;
+  final String? noteId;
+  final DateTime? updatedAt;
+  final bool isDeleted;
   const ImageMetadataData({
     required this.id,
     required this.imagePath,
@@ -1109,6 +1180,9 @@ class ImageMetadataData extends DataClass
     this.longitude,
     this.analysisResult,
     required this.capturedAt,
+    this.noteId,
+    this.updatedAt,
+    required this.isDeleted,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1125,6 +1199,13 @@ class ImageMetadataData extends DataClass
       map['analysis_result'] = Variable<String>(analysisResult);
     }
     map['captured_at'] = Variable<DateTime>(capturedAt);
+    if (!nullToAbsent || noteId != null) {
+      map['note_id'] = Variable<String>(noteId);
+    }
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
+    map['is_deleted'] = Variable<bool>(isDeleted);
     return map;
   }
 
@@ -1142,6 +1223,13 @@ class ImageMetadataData extends DataClass
           ? const Value.absent()
           : Value(analysisResult),
       capturedAt: Value(capturedAt),
+      noteId: noteId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(noteId),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
+      isDeleted: Value(isDeleted),
     );
   }
 
@@ -1157,6 +1245,9 @@ class ImageMetadataData extends DataClass
       longitude: serializer.fromJson<double?>(json['longitude']),
       analysisResult: serializer.fromJson<String?>(json['analysisResult']),
       capturedAt: serializer.fromJson<DateTime>(json['capturedAt']),
+      noteId: serializer.fromJson<String?>(json['noteId']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
     );
   }
   @override
@@ -1169,6 +1260,9 @@ class ImageMetadataData extends DataClass
       'longitude': serializer.toJson<double?>(longitude),
       'analysisResult': serializer.toJson<String?>(analysisResult),
       'capturedAt': serializer.toJson<DateTime>(capturedAt),
+      'noteId': serializer.toJson<String?>(noteId),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
     };
   }
 
@@ -1179,6 +1273,9 @@ class ImageMetadataData extends DataClass
     Value<double?> longitude = const Value.absent(),
     Value<String?> analysisResult = const Value.absent(),
     DateTime? capturedAt,
+    Value<String?> noteId = const Value.absent(),
+    Value<DateTime?> updatedAt = const Value.absent(),
+    bool? isDeleted,
   }) => ImageMetadataData(
     id: id ?? this.id,
     imagePath: imagePath ?? this.imagePath,
@@ -1188,6 +1285,9 @@ class ImageMetadataData extends DataClass
         ? analysisResult.value
         : this.analysisResult,
     capturedAt: capturedAt ?? this.capturedAt,
+    noteId: noteId.present ? noteId.value : this.noteId,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    isDeleted: isDeleted ?? this.isDeleted,
   );
   ImageMetadataData copyWithCompanion(ImageMetadataCompanion data) {
     return ImageMetadataData(
@@ -1201,6 +1301,9 @@ class ImageMetadataData extends DataClass
       capturedAt: data.capturedAt.present
           ? data.capturedAt.value
           : this.capturedAt,
+      noteId: data.noteId.present ? data.noteId.value : this.noteId,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
     );
   }
 
@@ -1212,7 +1315,10 @@ class ImageMetadataData extends DataClass
           ..write('latitude: $latitude, ')
           ..write('longitude: $longitude, ')
           ..write('analysisResult: $analysisResult, ')
-          ..write('capturedAt: $capturedAt')
+          ..write('capturedAt: $capturedAt, ')
+          ..write('noteId: $noteId, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('isDeleted: $isDeleted')
           ..write(')'))
         .toString();
   }
@@ -1225,6 +1331,9 @@ class ImageMetadataData extends DataClass
     longitude,
     analysisResult,
     capturedAt,
+    noteId,
+    updatedAt,
+    isDeleted,
   );
   @override
   bool operator ==(Object other) =>
@@ -1235,7 +1344,10 @@ class ImageMetadataData extends DataClass
           other.latitude == this.latitude &&
           other.longitude == this.longitude &&
           other.analysisResult == this.analysisResult &&
-          other.capturedAt == this.capturedAt);
+          other.capturedAt == this.capturedAt &&
+          other.noteId == this.noteId &&
+          other.updatedAt == this.updatedAt &&
+          other.isDeleted == this.isDeleted);
 }
 
 class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
@@ -1245,6 +1357,9 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
   final Value<double?> longitude;
   final Value<String?> analysisResult;
   final Value<DateTime> capturedAt;
+  final Value<String?> noteId;
+  final Value<DateTime?> updatedAt;
+  final Value<bool> isDeleted;
   final Value<int> rowid;
   const ImageMetadataCompanion({
     this.id = const Value.absent(),
@@ -1253,6 +1368,9 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     this.longitude = const Value.absent(),
     this.analysisResult = const Value.absent(),
     this.capturedAt = const Value.absent(),
+    this.noteId = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.isDeleted = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ImageMetadataCompanion.insert({
@@ -1262,6 +1380,9 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     this.longitude = const Value.absent(),
     this.analysisResult = const Value.absent(),
     required DateTime capturedAt,
+    this.noteId = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.isDeleted = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        imagePath = Value(imagePath),
@@ -1273,6 +1394,9 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     Expression<double>? longitude,
     Expression<String>? analysisResult,
     Expression<DateTime>? capturedAt,
+    Expression<String>? noteId,
+    Expression<DateTime>? updatedAt,
+    Expression<bool>? isDeleted,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1282,6 +1406,9 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
       if (longitude != null) 'longitude': longitude,
       if (analysisResult != null) 'analysis_result': analysisResult,
       if (capturedAt != null) 'captured_at': capturedAt,
+      if (noteId != null) 'note_id': noteId,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (isDeleted != null) 'is_deleted': isDeleted,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1293,6 +1420,9 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     Value<double?>? longitude,
     Value<String?>? analysisResult,
     Value<DateTime>? capturedAt,
+    Value<String?>? noteId,
+    Value<DateTime?>? updatedAt,
+    Value<bool>? isDeleted,
     Value<int>? rowid,
   }) {
     return ImageMetadataCompanion(
@@ -1302,6 +1432,9 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
       longitude: longitude ?? this.longitude,
       analysisResult: analysisResult ?? this.analysisResult,
       capturedAt: capturedAt ?? this.capturedAt,
+      noteId: noteId ?? this.noteId,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isDeleted: isDeleted ?? this.isDeleted,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1327,6 +1460,15 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     if (capturedAt.present) {
       map['captured_at'] = Variable<DateTime>(capturedAt.value);
     }
+    if (noteId.present) {
+      map['note_id'] = Variable<String>(noteId.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1342,6 +1484,421 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
           ..write('longitude: $longitude, ')
           ..write('analysisResult: $analysisResult, ')
           ..write('capturedAt: $capturedAt, ')
+          ..write('noteId: $noteId, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ArtifactCommentsTable extends ArtifactComments
+    with TableInfo<$ArtifactCommentsTable, ArtifactComment> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ArtifactCommentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _artifactIdMeta = const VerificationMeta(
+    'artifactId',
+  );
+  @override
+  late final GeneratedColumn<String> artifactId = GeneratedColumn<String>(
+    'artifact_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bodyMeta = const VerificationMeta('body');
+  @override
+  late final GeneratedColumn<String> body = GeneratedColumn<String>(
+    'body',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isDeletedMeta = const VerificationMeta(
+    'isDeleted',
+  );
+  @override
+  late final GeneratedColumn<bool> isDeleted = GeneratedColumn<bool>(
+    'is_deleted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_deleted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    artifactId,
+    body,
+    createdAt,
+    updatedAt,
+    isDeleted,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'artifact_comments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ArtifactComment> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('artifact_id')) {
+      context.handle(
+        _artifactIdMeta,
+        artifactId.isAcceptableOrUnknown(data['artifact_id']!, _artifactIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_artifactIdMeta);
+    }
+    if (data.containsKey('body')) {
+      context.handle(
+        _bodyMeta,
+        body.isAcceptableOrUnknown(data['body']!, _bodyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bodyMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    if (data.containsKey('is_deleted')) {
+      context.handle(
+        _isDeletedMeta,
+        isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ArtifactComment map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ArtifactComment(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      artifactId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}artifact_id'],
+      )!,
+      body: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}body'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      ),
+      isDeleted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_deleted'],
+      )!,
+    );
+  }
+
+  @override
+  $ArtifactCommentsTable createAlias(String alias) {
+    return $ArtifactCommentsTable(attachedDatabase, alias);
+  }
+}
+
+class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
+  final String id;
+  final String artifactId;
+  final String body;
+  final DateTime createdAt;
+  final DateTime? updatedAt;
+  final bool isDeleted;
+  const ArtifactComment({
+    required this.id,
+    required this.artifactId,
+    required this.body,
+    required this.createdAt,
+    this.updatedAt,
+    required this.isDeleted,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['artifact_id'] = Variable<String>(artifactId);
+    map['body'] = Variable<String>(body);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || updatedAt != null) {
+      map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
+    map['is_deleted'] = Variable<bool>(isDeleted);
+    return map;
+  }
+
+  ArtifactCommentsCompanion toCompanion(bool nullToAbsent) {
+    return ArtifactCommentsCompanion(
+      id: Value(id),
+      artifactId: Value(artifactId),
+      body: Value(body),
+      createdAt: Value(createdAt),
+      updatedAt: updatedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(updatedAt),
+      isDeleted: Value(isDeleted),
+    );
+  }
+
+  factory ArtifactComment.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ArtifactComment(
+      id: serializer.fromJson<String>(json['id']),
+      artifactId: serializer.fromJson<String>(json['artifactId']),
+      body: serializer.fromJson<String>(json['body']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'artifactId': serializer.toJson<String>(artifactId),
+      'body': serializer.toJson<String>(body),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'isDeleted': serializer.toJson<bool>(isDeleted),
+    };
+  }
+
+  ArtifactComment copyWith({
+    String? id,
+    String? artifactId,
+    String? body,
+    DateTime? createdAt,
+    Value<DateTime?> updatedAt = const Value.absent(),
+    bool? isDeleted,
+  }) => ArtifactComment(
+    id: id ?? this.id,
+    artifactId: artifactId ?? this.artifactId,
+    body: body ?? this.body,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    isDeleted: isDeleted ?? this.isDeleted,
+  );
+  ArtifactComment copyWithCompanion(ArtifactCommentsCompanion data) {
+    return ArtifactComment(
+      id: data.id.present ? data.id.value : this.id,
+      artifactId: data.artifactId.present
+          ? data.artifactId.value
+          : this.artifactId,
+      body: data.body.present ? data.body.value : this.body,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ArtifactComment(')
+          ..write('id: $id, ')
+          ..write('artifactId: $artifactId, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('isDeleted: $isDeleted')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, artifactId, body, createdAt, updatedAt, isDeleted);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ArtifactComment &&
+          other.id == this.id &&
+          other.artifactId == this.artifactId &&
+          other.body == this.body &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.isDeleted == this.isDeleted);
+}
+
+class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
+  final Value<String> id;
+  final Value<String> artifactId;
+  final Value<String> body;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> updatedAt;
+  final Value<bool> isDeleted;
+  final Value<int> rowid;
+  const ArtifactCommentsCompanion({
+    this.id = const Value.absent(),
+    this.artifactId = const Value.absent(),
+    this.body = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ArtifactCommentsCompanion.insert({
+    required String id,
+    required String artifactId,
+    required String body,
+    required DateTime createdAt,
+    this.updatedAt = const Value.absent(),
+    this.isDeleted = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       artifactId = Value(artifactId),
+       body = Value(body),
+       createdAt = Value(createdAt);
+  static Insertable<ArtifactComment> custom({
+    Expression<String>? id,
+    Expression<String>? artifactId,
+    Expression<String>? body,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<bool>? isDeleted,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (artifactId != null) 'artifact_id': artifactId,
+      if (body != null) 'body': body,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (isDeleted != null) 'is_deleted': isDeleted,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ArtifactCommentsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? artifactId,
+    Value<String>? body,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? updatedAt,
+    Value<bool>? isDeleted,
+    Value<int>? rowid,
+  }) {
+    return ArtifactCommentsCompanion(
+      id: id ?? this.id,
+      artifactId: artifactId ?? this.artifactId,
+      body: body ?? this.body,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      isDeleted: isDeleted ?? this.isDeleted,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (artifactId.present) {
+      map['artifact_id'] = Variable<String>(artifactId.value);
+    }
+    if (body.present) {
+      map['body'] = Variable<String>(body.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (isDeleted.present) {
+      map['is_deleted'] = Variable<bool>(isDeleted.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ArtifactCommentsCompanion(')
+          ..write('id: $id, ')
+          ..write('artifactId: $artifactId, ')
+          ..write('body: $body, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('isDeleted: $isDeleted, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1354,6 +1911,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $FoldersTable folders = $FoldersTable(this);
   late final $NotesTable notes = $NotesTable(this);
   late final $ImageMetadataTable imageMetadata = $ImageMetadataTable(this);
+  late final $ArtifactCommentsTable artifactComments = $ArtifactCommentsTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1362,6 +1922,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     folders,
     notes,
     imageMetadata,
+    artifactComments,
   ];
 }
 
@@ -1836,6 +2397,9 @@ typedef $$ImageMetadataTableCreateCompanionBuilder =
       Value<double?> longitude,
       Value<String?> analysisResult,
       required DateTime capturedAt,
+      Value<String?> noteId,
+      Value<DateTime?> updatedAt,
+      Value<bool> isDeleted,
       Value<int> rowid,
     });
 typedef $$ImageMetadataTableUpdateCompanionBuilder =
@@ -1846,6 +2410,9 @@ typedef $$ImageMetadataTableUpdateCompanionBuilder =
       Value<double?> longitude,
       Value<String?> analysisResult,
       Value<DateTime> capturedAt,
+      Value<String?> noteId,
+      Value<DateTime?> updatedAt,
+      Value<bool> isDeleted,
       Value<int> rowid,
     });
 
@@ -1885,6 +2452,21 @@ class $$ImageMetadataTableFilterComposer
 
   ColumnFilters<DateTime> get capturedAt => $composableBuilder(
     column: $table.capturedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -1927,6 +2509,21 @@ class $$ImageMetadataTableOrderingComposer
     column: $table.capturedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ImageMetadataTableAnnotationComposer
@@ -1959,6 +2556,15 @@ class $$ImageMetadataTableAnnotationComposer
     column: $table.capturedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get noteId =>
+      $composableBuilder(column: $table.noteId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
 }
 
 class $$ImageMetadataTableTableManager
@@ -2002,6 +2608,9 @@ class $$ImageMetadataTableTableManager
                 Value<double?> longitude = const Value.absent(),
                 Value<String?> analysisResult = const Value.absent(),
                 Value<DateTime> capturedAt = const Value.absent(),
+                Value<String?> noteId = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ImageMetadataCompanion(
                 id: id,
@@ -2010,6 +2619,9 @@ class $$ImageMetadataTableTableManager
                 longitude: longitude,
                 analysisResult: analysisResult,
                 capturedAt: capturedAt,
+                noteId: noteId,
+                updatedAt: updatedAt,
+                isDeleted: isDeleted,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2020,6 +2632,9 @@ class $$ImageMetadataTableTableManager
                 Value<double?> longitude = const Value.absent(),
                 Value<String?> analysisResult = const Value.absent(),
                 required DateTime capturedAt,
+                Value<String?> noteId = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ImageMetadataCompanion.insert(
                 id: id,
@@ -2028,6 +2643,9 @@ class $$ImageMetadataTableTableManager
                 longitude: longitude,
                 analysisResult: analysisResult,
                 capturedAt: capturedAt,
+                noteId: noteId,
+                updatedAt: updatedAt,
+                isDeleted: isDeleted,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2055,6 +2673,233 @@ typedef $$ImageMetadataTableProcessedTableManager =
       ImageMetadataData,
       PrefetchHooks Function()
     >;
+typedef $$ArtifactCommentsTableCreateCompanionBuilder =
+    ArtifactCommentsCompanion Function({
+      required String id,
+      required String artifactId,
+      required String body,
+      required DateTime createdAt,
+      Value<DateTime?> updatedAt,
+      Value<bool> isDeleted,
+      Value<int> rowid,
+    });
+typedef $$ArtifactCommentsTableUpdateCompanionBuilder =
+    ArtifactCommentsCompanion Function({
+      Value<String> id,
+      Value<String> artifactId,
+      Value<String> body,
+      Value<DateTime> createdAt,
+      Value<DateTime?> updatedAt,
+      Value<bool> isDeleted,
+      Value<int> rowid,
+    });
+
+class $$ArtifactCommentsTableFilterComposer
+    extends Composer<_$AppDatabase, $ArtifactCommentsTable> {
+  $$ArtifactCommentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get artifactId => $composableBuilder(
+    column: $table.artifactId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ArtifactCommentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ArtifactCommentsTable> {
+  $$ArtifactCommentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get artifactId => $composableBuilder(
+    column: $table.artifactId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get body => $composableBuilder(
+    column: $table.body,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isDeleted => $composableBuilder(
+    column: $table.isDeleted,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ArtifactCommentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ArtifactCommentsTable> {
+  $$ArtifactCommentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get artifactId => $composableBuilder(
+    column: $table.artifactId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get body =>
+      $composableBuilder(column: $table.body, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get isDeleted =>
+      $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+}
+
+class $$ArtifactCommentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ArtifactCommentsTable,
+          ArtifactComment,
+          $$ArtifactCommentsTableFilterComposer,
+          $$ArtifactCommentsTableOrderingComposer,
+          $$ArtifactCommentsTableAnnotationComposer,
+          $$ArtifactCommentsTableCreateCompanionBuilder,
+          $$ArtifactCommentsTableUpdateCompanionBuilder,
+          (
+            ArtifactComment,
+            BaseReferences<
+              _$AppDatabase,
+              $ArtifactCommentsTable,
+              ArtifactComment
+            >,
+          ),
+          ArtifactComment,
+          PrefetchHooks Function()
+        > {
+  $$ArtifactCommentsTableTableManager(
+    _$AppDatabase db,
+    $ArtifactCommentsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ArtifactCommentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ArtifactCommentsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ArtifactCommentsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> artifactId = const Value.absent(),
+                Value<String> body = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ArtifactCommentsCompanion(
+                id: id,
+                artifactId: artifactId,
+                body: body,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isDeleted: isDeleted,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String artifactId,
+                required String body,
+                required DateTime createdAt,
+                Value<DateTime?> updatedAt = const Value.absent(),
+                Value<bool> isDeleted = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ArtifactCommentsCompanion.insert(
+                id: id,
+                artifactId: artifactId,
+                body: body,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                isDeleted: isDeleted,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ArtifactCommentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ArtifactCommentsTable,
+      ArtifactComment,
+      $$ArtifactCommentsTableFilterComposer,
+      $$ArtifactCommentsTableOrderingComposer,
+      $$ArtifactCommentsTableAnnotationComposer,
+      $$ArtifactCommentsTableCreateCompanionBuilder,
+      $$ArtifactCommentsTableUpdateCompanionBuilder,
+      (
+        ArtifactComment,
+        BaseReferences<_$AppDatabase, $ArtifactCommentsTable, ArtifactComment>,
+      ),
+      ArtifactComment,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -2065,4 +2910,6 @@ class $AppDatabaseManager {
       $$NotesTableTableManager(_db, _db.notes);
   $$ImageMetadataTableTableManager get imageMetadata =>
       $$ImageMetadataTableTableManager(_db, _db.imageMetadata);
+  $$ArtifactCommentsTableTableManager get artifactComments =>
+      $$ArtifactCommentsTableTableManager(_db, _db.artifactComments);
 }

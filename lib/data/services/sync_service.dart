@@ -151,23 +151,31 @@ class SyncService {
       // Get unsynced local notes and folders
       final localNotes = await _getUnsyncedNotes();
       final localFolders = await _getUnsyncedFolders();
+      final localArtifacts = await _getUnsyncedArtifacts();
+      final localComments = await _getUnsyncedArtifactComments();
 
       debugPrint(
-        '[SyncService] Syncing ${localNotes.length} notes, ${localFolders.length} folders. Last sync: $_lastSyncAt',
+        '[SyncService] Syncing ${localNotes.length} notes, ${localFolders.length} folders, '
+        '${localArtifacts.length} artifacts, ${localComments.length} comments. Last sync: $_lastSyncAt',
       );
 
       // Send to server
       final response = await _apiService.post('/sync', {
         'notes': localNotes,
         'folders': localFolders,
+        'artifacts': localArtifacts,
+        'artifact_comments': localComments,
         'last_sync_at': _lastSyncAt?.toIso8601String(),
       });
 
       // Apply server changes
       final serverNotes = (response['notes'] as List?) ?? [];
       final serverFolders = (response['folders'] as List?) ?? [];
+      final serverArtifacts = (response['artifacts'] as List?) ?? [];
+      final serverComments = (response['artifact_comments'] as List?) ?? [];
 
       await _applyServerChanges(serverNotes, serverFolders);
+      await _applyServerArtifactChanges(serverArtifacts, serverComments);
 
       // Update last sync timestamp
       final newSyncTime = DateTime.parse(response['sync_timestamp'] as String);
@@ -269,6 +277,146 @@ class SyncService {
         )
         .toList();
   }
+
+  /// Get artifacts (geotagged photos) modified since the last sync.
+  Future<List<Map<String, dynamic>>> _getUnsyncedArtifacts() async {
+    Expression<bool> predicate = const Constant(true);
+    if (_lastSyncAt != null) {
+      final bufferTime = _lastSyncAt!.subtract(const Duration(seconds: 5));
+      predicate =
+          _database.imageMetadata.updatedAt.isBiggerThanValue(bufferTime) |
+          _database.imageMetadata.updatedAt.isNull();
+    }
+
+    final artifacts = await (_database.select(
+      _database.imageMetadata,
+    )..where((tbl) => predicate)).get();
+
+    return artifacts
+        .map(
+          (artifact) => {
+            'id': artifact.id,
+            'note_id': artifact.noteId,
+            'image_path': artifact.imagePath,
+            'latitude': artifact.latitude,
+            'longitude': artifact.longitude,
+            'analysis_result': artifact.analysisResult,
+            'captured_at': artifact.capturedAt.toIso8601String(),
+            'updated_at': (artifact.updatedAt ?? artifact.capturedAt)
+                .toIso8601String(),
+            'is_deleted': artifact.isDeleted,
+          },
+        )
+        .toList();
+  }
+
+  /// Get artifact comments modified since the last sync.
+  Future<List<Map<String, dynamic>>> _getUnsyncedArtifactComments() async {
+    Expression<bool> predicate = const Constant(true);
+    if (_lastSyncAt != null) {
+      final bufferTime = _lastSyncAt!.subtract(const Duration(seconds: 5));
+      predicate =
+          _database.artifactComments.updatedAt.isBiggerThanValue(bufferTime) |
+          _database.artifactComments.updatedAt.isNull();
+    }
+
+    final comments = await (_database.select(
+      _database.artifactComments,
+    )..where((tbl) => predicate)).get();
+
+    return comments
+        .map(
+          (comment) => {
+            'id': comment.id,
+            'artifact_id': comment.artifactId,
+            'body': comment.body,
+            'created_at': comment.createdAt.toIso8601String(),
+            'updated_at': (comment.updatedAt ?? comment.createdAt)
+                .toIso8601String(),
+            'is_deleted': comment.isDeleted,
+          },
+        )
+        .toList();
+  }
+
+  /// Apply artifact and comment changes received from the server.
+  ///
+  /// Artifacts are written before comments so a comment always has its
+  /// artifact present locally.
+  Future<void> _applyServerArtifactChanges(
+    List<dynamic> serverArtifacts,
+    List<dynamic> serverComments,
+  ) async {
+    for (final data in serverArtifacts) {
+      final id = data['id'] as String;
+      final isDeleted = data['is_deleted'] as bool? ?? false;
+      final updatedAt = DateTime.parse(data['updated_at'] as String);
+
+      if (isDeleted) {
+        await (_database.update(
+          _database.imageMetadata,
+        )..where((t) => t.id.equals(id))).write(
+          ImageMetadataCompanion(
+            isDeleted: const Value(true),
+            updatedAt: Value(updatedAt),
+          ),
+        );
+      } else {
+        await _database
+            .into(_database.imageMetadata)
+            .insertOnConflictUpdate(
+              ImageMetadataCompanion.insert(
+                id: id,
+                // The photo file itself never syncs, so on a second device
+                // this path points at a file that isn't there; the UI falls
+                // back to a placeholder.
+                imagePath: data['image_path'] as String? ?? '',
+                latitude: Value(_toDouble(data['latitude'])),
+                longitude: Value(_toDouble(data['longitude'])),
+                analysisResult: Value(data['analysis_result'] as String?),
+                capturedAt: DateTime.parse(data['captured_at'] as String),
+                noteId: Value(data['note_id'] as String?),
+                updatedAt: Value(updatedAt),
+                isDeleted: const Value(false),
+              ),
+            );
+      }
+    }
+
+    for (final data in serverComments) {
+      final id = data['id'] as String;
+      final isDeleted = data['is_deleted'] as bool? ?? false;
+      final updatedAt = DateTime.parse(data['updated_at'] as String);
+
+      if (isDeleted) {
+        await (_database.update(
+          _database.artifactComments,
+        )..where((t) => t.id.equals(id))).write(
+          ArtifactCommentsCompanion(
+            isDeleted: const Value(true),
+            updatedAt: Value(updatedAt),
+          ),
+        );
+      } else {
+        await _database
+            .into(_database.artifactComments)
+            .insertOnConflictUpdate(
+              ArtifactCommentsCompanion.insert(
+                id: id,
+                artifactId: data['artifact_id'] as String,
+                body: data['body'] as String? ?? '',
+                createdAt: DateTime.parse(data['created_at'] as String),
+                updatedAt: Value(updatedAt),
+                isDeleted: const Value(false),
+              ),
+            );
+      }
+    }
+  }
+
+  /// JSON numbers arrive as int when the server stores a whole-number
+  /// coordinate, so a blind `as double?` cast would throw.
+  static double? _toDouble(Object? value) => (value as num?)?.toDouble();
 
   /// Apply changes received from server
   Future<void> _applyServerChanges(

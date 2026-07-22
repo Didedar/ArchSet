@@ -11,8 +11,15 @@ from sqlalchemy import select, or_
 from ..models.note import Note
 from ..models.folder import Folder
 from ..models.user import User
+from ..models.artifact import Artifact, ArtifactComment
 from ..schemas.note import NoteSyncItem, NoteResponse
 from ..schemas.folder import FolderSyncItem, FolderResponse
+from ..schemas.artifact import (
+    ArtifactSyncItem,
+    ArtifactResponse,
+    ArtifactCommentSyncItem,
+    ArtifactCommentResponse,
+)
 
 
 from fastapi import BackgroundTasks
@@ -197,7 +204,198 @@ class SyncService:
         
         result = await self.db.execute(query)
         server_folders = result.scalars().all()
-        
+
         await self.db.commit()
-        
+
         return [FolderResponse.model_validate(folder) for folder in server_folders]
+
+    async def _resolve_note_id(self, user: User, note_id: Optional[str]) -> Optional[str]:
+        """Return note_id only if that note actually exists for this user.
+
+        An artifact can reference a note the server has not seen yet (the
+        client may have created both offline). Artifacts are synced after
+        notes in the same request, which usually resolves this, but a
+        dangling reference must not turn into a foreign-key violation that
+        fails the whole sync -- so it degrades to an unattached artifact.
+        """
+        if note_id is None:
+            return None
+
+        result = await self.db.execute(
+            select(Note.id).where(
+                Note.id == note_id,
+                Note.user_id == user.id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def sync_artifacts(
+        self,
+        user: User,
+        client_artifacts: List[ArtifactSyncItem],
+        last_sync_at: Optional[datetime]
+    ) -> List[ArtifactResponse]:
+        """
+        Synchronize artifacts (geotagged photos) between client and server.
+
+        Uses "last write wins" conflict resolution. Photo binaries stay on
+        the device; only metadata is stored here.
+
+        Args:
+            user: Current user
+            client_artifacts: Artifacts from the client
+            last_sync_at: Last sync timestamp from client
+
+        Returns:
+            List of artifacts that changed on server since last sync
+        """
+        sync_time = datetime.utcnow()
+
+        # Process client artifacts
+        for client_artifact in client_artifacts:
+            result = await self.db.execute(
+                select(Artifact).where(
+                    Artifact.id == client_artifact.id,
+                    Artifact.user_id == user.id
+                )
+            )
+            existing_artifact = result.scalar_one_or_none()
+
+            if existing_artifact:
+                # Update if client version is newer
+                if client_artifact.updated_at > existing_artifact.updated_at:
+                    existing_artifact.note_id = await self._resolve_note_id(
+                        user, client_artifact.note_id
+                    )
+                    existing_artifact.image_path = client_artifact.image_path
+                    existing_artifact.latitude = client_artifact.latitude
+                    existing_artifact.longitude = client_artifact.longitude
+                    existing_artifact.analysis_result = client_artifact.analysis_result
+                    existing_artifact.captured_at = client_artifact.captured_at
+                    existing_artifact.is_deleted = client_artifact.is_deleted
+                    existing_artifact.updated_at = client_artifact.updated_at
+                    existing_artifact.synced_at = sync_time
+            else:
+                # Create new artifact
+                if not client_artifact.is_deleted:
+                    new_artifact = Artifact(
+                        id=client_artifact.id,
+                        user_id=user.id,
+                        note_id=await self._resolve_note_id(
+                            user, client_artifact.note_id
+                        ),
+                        image_path=client_artifact.image_path,
+                        latitude=client_artifact.latitude,
+                        longitude=client_artifact.longitude,
+                        analysis_result=client_artifact.analysis_result,
+                        captured_at=client_artifact.captured_at,
+                        is_deleted=client_artifact.is_deleted,
+                        updated_at=client_artifact.updated_at,
+                        synced_at=sync_time
+                    )
+                    self.db.add(new_artifact)
+
+        await self.db.flush()
+
+        # Get server artifacts that changed since last sync
+        query = select(Artifact).where(Artifact.user_id == user.id)
+
+        if last_sync_at:
+            query = query.where(
+                or_(
+                    Artifact.updated_at > last_sync_at,
+                    Artifact.synced_at > last_sync_at
+                )
+            )
+
+        result = await self.db.execute(query)
+        server_artifacts = result.scalars().all()
+
+        await self.db.commit()
+
+        return [ArtifactResponse.model_validate(a) for a in server_artifacts]
+
+    async def sync_artifact_comments(
+        self,
+        user: User,
+        client_comments: List[ArtifactCommentSyncItem],
+        last_sync_at: Optional[datetime]
+    ) -> List[ArtifactCommentResponse]:
+        """
+        Synchronize artifact comments between client and server.
+
+        Uses "last write wins" conflict resolution. Must run *after*
+        sync_artifacts, since a comment can only be stored once its parent
+        artifact exists. A comment whose artifact is still unknown to the
+        server is skipped rather than failing the whole sync.
+
+        Args:
+            user: Current user
+            client_comments: Artifact comments from the client
+            last_sync_at: Last sync timestamp from client
+
+        Returns:
+            List of artifact comments that changed on server since last sync
+        """
+        sync_time = datetime.utcnow()
+
+        # Process client comments
+        for client_comment in client_comments:
+            result = await self.db.execute(
+                select(ArtifactComment).where(
+                    ArtifactComment.id == client_comment.id,
+                    ArtifactComment.user_id == user.id
+                )
+            )
+            existing_comment = result.scalar_one_or_none()
+
+            if existing_comment:
+                if client_comment.updated_at > existing_comment.updated_at:
+                    existing_comment.body = client_comment.body
+                    existing_comment.is_deleted = client_comment.is_deleted
+                    existing_comment.updated_at = client_comment.updated_at
+                    existing_comment.synced_at = sync_time
+            else:
+                if not client_comment.is_deleted:
+                    # Skip comments whose parent artifact this user doesn't
+                    # have on the server -- inserting would violate the FK.
+                    artifact_result = await self.db.execute(
+                        select(Artifact.id).where(
+                            Artifact.id == client_comment.artifact_id,
+                            Artifact.user_id == user.id
+                        )
+                    )
+                    if artifact_result.scalar_one_or_none() is None:
+                        continue
+
+                    new_comment = ArtifactComment(
+                        id=client_comment.id,
+                        artifact_id=client_comment.artifact_id,
+                        user_id=user.id,
+                        body=client_comment.body,
+                        created_at=client_comment.created_at,
+                        is_deleted=client_comment.is_deleted,
+                        updated_at=client_comment.updated_at,
+                        synced_at=sync_time
+                    )
+                    self.db.add(new_comment)
+
+        await self.db.flush()
+
+        # Get server comments that changed since last sync
+        query = select(ArtifactComment).where(ArtifactComment.user_id == user.id)
+
+        if last_sync_at:
+            query = query.where(
+                or_(
+                    ArtifactComment.updated_at > last_sync_at,
+                    ArtifactComment.synced_at > last_sync_at
+                )
+            )
+
+        result = await self.db.execute(query)
+        server_comments = result.scalars().all()
+
+        await self.db.commit()
+
+        return [ArtifactCommentResponse.model_validate(c) for c in server_comments]

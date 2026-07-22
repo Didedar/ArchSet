@@ -70,6 +70,7 @@ class Note(Base):
     # Relationships
     user = relationship("User", back_populates="notes")
     folder = relationship("Folder", back_populates="notes")
+    artifacts = relationship("Artifact", back_populates="note")
     
     def __repr__(self) -> str:
         return f"<Note(id={self.id}, title={self.title[:30] if self.title else 'Untitled'})>"

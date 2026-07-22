@@ -56,9 +56,15 @@ class NoteSyncItem(BaseModel):
 
 
 class SyncRequest(BaseModel):
-    """Sync request with local changes."""
+    """Sync request with local changes.
+
+    Every collection defaults to an empty list so older clients that only
+    know about `notes`/`folders` keep working unchanged.
+    """
     notes: List[NoteSyncItem] = []
     folders: List["FolderSyncItem"] = []
+    artifacts: List["ArtifactSyncItem"] = []
+    artifact_comments: List["ArtifactCommentSyncItem"] = []
     last_sync_at: Optional[datetime] = None
 
 
@@ -66,10 +72,18 @@ class SyncResponse(BaseModel):
     """Sync response with server changes."""
     notes: List[NoteResponse] = []
     folders: List["FolderResponse"] = []
+    artifacts: List["ArtifactResponse"] = []
+    artifact_comments: List["ArtifactCommentResponse"] = []
     sync_timestamp: datetime
 
 
 # Avoid circular import
 from .folder import FolderSyncItem, FolderResponse
+from .artifact import (
+    ArtifactSyncItem,
+    ArtifactResponse,
+    ArtifactCommentSyncItem,
+    ArtifactCommentResponse,
+)
 SyncRequest.model_rebuild()
 SyncResponse.model_rebuild()

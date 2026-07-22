@@ -13,9 +13,11 @@ from unittest.mock import MagicMock
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.artifact import Artifact, ArtifactComment
 from app.models.folder import Folder
 from app.models.note import Note
 from app.models.user import User
+from app.schemas.artifact import ArtifactCommentSyncItem, ArtifactSyncItem
 from app.schemas.folder import FolderSyncItem
 from app.schemas.note import NoteSyncItem
 from app.services.rag_service import rag_service
@@ -44,6 +46,35 @@ def _folder_sync_item(**overrides) -> FolderSyncItem:
     )
     defaults.update(overrides)
     return FolderSyncItem(**defaults)
+
+
+def _artifact_sync_item(**overrides) -> ArtifactSyncItem:
+    defaults = dict(
+        id="artifact-1",
+        note_id=None,
+        image_path="/local/photos/sherd.jpg",
+        latitude=41.3111,
+        longitude=69.2797,
+        analysis_result=None,
+        captured_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        is_deleted=False,
+    )
+    defaults.update(overrides)
+    return ArtifactSyncItem(**defaults)
+
+
+def _artifact_comment_sync_item(**overrides) -> ArtifactCommentSyncItem:
+    defaults = dict(
+        id="comment-1",
+        artifact_id="artifact-1",
+        body="Wheel-thrown, likely 11th century.",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
+        is_deleted=False,
+    )
+    defaults.update(overrides)
+    return ArtifactCommentSyncItem(**defaults)
 
 
 @pytest.mark.asyncio
@@ -175,3 +206,162 @@ async def test_sync_folders_updates_only_when_client_is_newer(
 
     await db_session.refresh(existing)
     assert existing.name == "Old name"
+
+
+@pytest.mark.asyncio
+async def test_sync_artifacts_processes_multiple_items_in_one_call(
+    db_session: AsyncSession, test_user: User
+):
+    service = SyncService(db_session)
+
+    result = await service.sync_artifacts(
+        user=test_user,
+        client_artifacts=[
+            _artifact_sync_item(id="a"),
+            _artifact_sync_item(id="b"),
+            _artifact_sync_item(id="c"),
+        ],
+        last_sync_at=None,
+    )
+
+    assert {a.id for a in result} == {"a", "b", "c"}
+
+
+@pytest.mark.asyncio
+async def test_sync_artifacts_stamps_synced_at_on_new_rows(
+    db_session: AsyncSession, test_user: User
+):
+    """synced_at is what lets a later incremental pull notice server-side
+    writes whose updated_at is older than the client's last_sync_at.
+    """
+    service = SyncService(db_session)
+
+    result = await service.sync_artifacts(
+        user=test_user,
+        client_artifacts=[_artifact_sync_item(id="stamped")],
+        last_sync_at=None,
+    )
+
+    assert result[0].synced_at is not None
+
+
+@pytest.mark.asyncio
+async def test_sync_artifacts_does_not_index_anything_in_the_vector_db(
+    db_session: AsyncSession, test_user: User
+):
+    """Artifacts are photo metadata, not diary prose -- unlike sync_notes,
+    sync_artifacts takes no background_tasks and must schedule no RAG work.
+    """
+    service = SyncService(db_session)
+    background_tasks = MagicMock()
+
+    await service.sync_artifacts(
+        user=test_user,
+        client_artifacts=[_artifact_sync_item(id="a")],
+        last_sync_at=None,
+    )
+
+    background_tasks.add_task.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_sync_artifact_comments_processes_multiple_items_in_one_call(
+    db_session: AsyncSession, test_user: User
+):
+    now = datetime.utcnow()
+    db_session.add(
+        Artifact(
+            id="artifact-1",
+            user_id=test_user.id,
+            image_path="/server/photo.jpg",
+            captured_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+    service = SyncService(db_session)
+    result = await service.sync_artifact_comments(
+        user=test_user,
+        client_comments=[
+            _artifact_comment_sync_item(id="c1"),
+            _artifact_comment_sync_item(id="c2"),
+        ],
+        last_sync_at=None,
+    )
+
+    assert {c.id for c in result} == {"c1", "c2"}
+
+
+@pytest.mark.asyncio
+async def test_sync_artifact_comments_keeps_an_existing_comments_artifact_id(
+    db_session: AsyncSession, test_user: User
+):
+    """Deliberate: updates touch body/is_deleted only.
+
+    Re-parenting a comment isn't a real client operation, and honouring an
+    incoming artifact_id would mean re-validating the foreign key on every
+    update. The comment stays where it was created.
+    """
+    now = datetime.utcnow()
+    db_session.add_all(
+        [
+            Artifact(
+                id="artifact-1",
+                user_id=test_user.id,
+                image_path="/a.jpg",
+                captured_at=now,
+                updated_at=now,
+            ),
+            Artifact(
+                id="artifact-2",
+                user_id=test_user.id,
+                image_path="/b.jpg",
+                captured_at=now,
+                updated_at=now,
+            ),
+            ArtifactComment(
+                id="comment-1",
+                artifact_id="artifact-1",
+                user_id=test_user.id,
+                body="Original",
+                created_at=now,
+                updated_at=now,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    service = SyncService(db_session)
+    await service.sync_artifact_comments(
+        user=test_user,
+        client_comments=[
+            _artifact_comment_sync_item(
+                id="comment-1",
+                artifact_id="artifact-2",
+                body="Moved?",
+                updated_at=now + timedelta(hours=1),
+            )
+        ],
+        last_sync_at=None,
+    )
+
+    comment = await db_session.get(ArtifactComment, "comment-1")
+    await db_session.refresh(comment)
+    assert comment.body == "Moved?"
+    assert comment.artifact_id == "artifact-1"
+
+
+@pytest.mark.asyncio
+async def test_sync_artifact_comments_skips_orphans_without_raising(
+    db_session: AsyncSession, test_user: User
+):
+    service = SyncService(db_session)
+
+    result = await service.sync_artifact_comments(
+        user=test_user,
+        client_comments=[_artifact_comment_sync_item(id="orphan", artifact_id="missing")],
+        last_sync_at=None,
+    )
+
+    assert result == []

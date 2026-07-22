@@ -72,7 +72,10 @@ class _ArchImageEmbedState extends State<ArchImageEmbed> {
             await (db.update(
               db.imageMetadata,
             )..where((t) => t.id.equals(existing.id))).write(
-              ImageMetadataCompanion(analysisResult: drift.Value(jsonString)),
+              ImageMetadataCompanion(
+                analysisResult: drift.Value(jsonString),
+                updatedAt: drift.Value(DateTime.now()),
+              ),
             );
           } else {
             // Should not happen if _pickImage saves it, but just in case
@@ -130,7 +133,10 @@ class _ArchImageEmbedState extends State<ArchImageEmbed> {
             await (db.update(
               db.imageMetadata,
             )..where((t) => t.id.equals(metadataId))).write(
-              const ImageMetadataCompanion(analysisResult: drift.Value(null)),
+              ImageMetadataCompanion(
+                analysisResult: const drift.Value(null),
+                updatedAt: drift.Value(DateTime.now()),
+              ),
             );
           }
           if (mounted) Navigator.pop(context);
