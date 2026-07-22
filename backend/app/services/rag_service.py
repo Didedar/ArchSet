@@ -185,7 +185,7 @@ class RAGService:
                 role = MessageRole.USER if msg.get("role") == "user" else MessageRole.ASSISTANT
                 llama_history.append(ChatMessage(role=role, content=msg.get("content", "")))
             
-            response = chat_engine.chat(user_query, chat_history=llama_history)
+            response = await chat_engine.achat(user_query, chat_history=llama_history)
             
             return str(response)
             

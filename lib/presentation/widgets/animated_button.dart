@@ -118,77 +118,91 @@ class _AnimatedButtonState extends State<AnimatedButton>
         onTapUp: _handleTapUp,
         onTapCancel: _handleTapCancel,
         onTap: widget.isDisabled || widget.isLoading ? null : widget.onTap,
-        child: AnimatedBuilder(
-          animation: _controller,
-          builder: (context, child) {
-            // Combine hover and press animations
-            final double combinedScale = hoverScale * _scaleAnimation.value;
-            final double combinedLift = hoverLift + _liftAnimation.value;
-
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
+        // Hover and press are driven by two independent mechanisms, so they
+        // get two independent widgets. Previously the implicit
+        // AnimatedContainer sat *inside* the AnimatedBuilder, so its transform
+        // target changed on every frame of the press controller — it restarted
+        // continuously and never settled, with two tickers fighting over one
+        // effect. The outer AnimatedContainer now eases hover only; the inner
+        // AnimatedBuilder applies the press transform and keeps the whole
+        // static subtree in `child`, so it is no longer rebuilt every frame.
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          transform: Matrix4.identity()
+            ..translateByDouble(0.0, hoverLift, 0.0, 1.0)
+            ..scaleByDouble(hoverScale, hoverScale, hoverScale, 1.0),
+          transformAlignment: Alignment.center,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) => Transform(
               transform: Matrix4.identity()
-                ..translate(0.0, combinedLift)
-                ..scale(combinedScale),
-              transformAlignment: Alignment.center,
-              child: AnimatedOpacity(
-                opacity: widget.isDisabled ? 0.5 : 1.0,
-                duration: const Duration(milliseconds: 200),
-                child: Container(
-                  width: widget.width,
-                  height: widget.height,
-                  decoration: BoxDecoration(
-                    color: widget.backgroundColor,
-                    borderRadius:
-                        widget.borderRadius ?? BorderRadius.circular(16),
-                    boxShadow: widget.shadow != null
-                        ? [widget.shadow!]
-                        : [
-                            BoxShadow(
-                              color: Colors.black.withValues(
-                                alpha: shadowOpacity,
-                              ),
-                              blurRadius: shadowBlur,
-                              offset: Offset(0, 4 + (hoverLift.abs() / 2)),
+                ..translateByDouble(0.0, _liftAnimation.value, 0.0, 1.0)
+                ..scaleByDouble(
+                  _scaleAnimation.value,
+                  _scaleAnimation.value,
+                  _scaleAnimation.value,
+                  1.0,
+                ),
+              alignment: Alignment.center,
+              child: child,
+            ),
+            child: AnimatedOpacity(
+              opacity: widget.isDisabled ? 0.5 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              child: Container(
+                width: widget.width,
+                height: widget.height,
+                decoration: BoxDecoration(
+                  color: widget.backgroundColor,
+                  borderRadius:
+                      widget.borderRadius ?? BorderRadius.circular(16),
+                  boxShadow: widget.shadow != null
+                      ? [widget.shadow!]
+                      : [
+                          BoxShadow(
+                            color: Colors.black.withValues(
+                              alpha: shadowOpacity,
                             ),
-                          ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius:
-                        widget.borderRadius ?? BorderRadius.circular(16),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        borderRadius:
-                            widget.borderRadius ?? BorderRadius.circular(16),
-                        onTap: widget.isDisabled || widget.isLoading
-                            ? null
-                            : widget.onTap,
-                        child: AnimatedSwitcher(
-                          duration: const Duration(milliseconds: 200),
-                          child: widget.isLoading
-                              ? const Center(
-                                  child: SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
+                            blurRadius: shadowBlur,
+                            offset: Offset(0, 4 + (hoverLift.abs() / 2)),
+                          ),
+                        ],
+                ),
+                child: ClipRRect(
+                  borderRadius:
+                      widget.borderRadius ?? BorderRadius.circular(16),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      borderRadius:
+                          widget.borderRadius ?? BorderRadius.circular(16),
+                      onTap: widget.isDisabled || widget.isLoading
+                          ? null
+                          : widget.onTap,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        child: widget.isLoading
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
                                     ),
                                   ),
-                                )
-                              : widget.child,
-                        ),
+                                ),
+                              )
+                            : widget.child,
                       ),
                     ),
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          ),
         ),
       ),
     );
@@ -280,8 +294,13 @@ class _FloatingIconButtonState extends State<FloatingIconButton>
               duration: const Duration(milliseconds: 150),
               curve: Curves.easeOutCubic,
               transform: Matrix4.identity()
-                ..translate(0.0, hoverLift)
-                ..scale(combinedScale),
+                ..translateByDouble(0.0, hoverLift, 0.0, 1.0)
+                ..scaleByDouble(
+                  combinedScale,
+                  combinedScale,
+                  combinedScale,
+                  1.0,
+                ),
               transformAlignment: Alignment.center,
               width: widget.size,
               height: widget.size,

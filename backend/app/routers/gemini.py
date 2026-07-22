@@ -147,6 +147,7 @@ async def rewrite_text(
             success=False,
             error=str(e)
         )
+    except Exception as e:
         return RewriteResponse(
             original_text=request.text,
             success=False,

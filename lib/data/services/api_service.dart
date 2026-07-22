@@ -3,6 +3,7 @@
 /// Handles HTTP requests, authentication headers, and error handling.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -16,13 +17,22 @@ class ApiConfig {
   static String _baseUrl =
       'https://archset-backend-production.up.railway.app'; // Production URL
 
+  /// Resolves the base URL to talk to.
+  ///
+  /// Release builds always target production, so this returns immediately and
+  /// never touches the network — the local-server fallback below is purely a
+  /// development affordance. Probing it in release added a DNS+TCP+TLS round
+  /// trip (up to the 3s timeout on a bad network) before the first frame.
   static Future<void> init() async {
-    const String productionUrl = 'https://archset-backend-production.up.railway.app';
+    if (kReleaseMode) return;
+
+    const String productionUrl =
+        'https://archset-backend-production.up.railway.app';
     String fallbackUrl = 'http://127.0.0.1:8000';
 
     if (Platform.isAndroid) {
       // Use Mac's current local IP for physical device testing
-      fallbackUrl = 'http://192.168.0.106:8000'; 
+      fallbackUrl = 'http://192.168.0.106:8000';
     } else if (Platform.isIOS) {
       final deviceInfo = DeviceInfoPlugin();
       final iosInfo = await deviceInfo.iosInfo;
@@ -41,18 +51,22 @@ class ApiConfig {
       final response = await http
           .get(Uri.parse('$productionUrl/health'))
           .timeout(const Duration(seconds: 3));
-      
+
       if (response.statusCode == 200) {
         _baseUrl = productionUrl;
         debugPrint('🌍 Connected to Production API: $_baseUrl');
       } else {
         _baseUrl = fallbackUrl;
-        debugPrint('⚠️ Production API returned ${response.statusCode}, falling back to local: $_baseUrl');
+        debugPrint(
+          '⚠️ Production API returned ${response.statusCode}, falling back to local: $_baseUrl',
+        );
       }
     } catch (e) {
       // Fallback if network fails, times out, etc.
       _baseUrl = fallbackUrl;
-      debugPrint('🔌 Production API unreachable, falling back to local: $_baseUrl');
+      debugPrint(
+        '🔌 Production API unreachable, falling back to local: $_baseUrl',
+      );
     }
   }
 
@@ -80,6 +94,13 @@ class ApiException implements Exception {
 
 /// HTTP client for backend API communication
 class ApiService {
+  /// Ceiling on any single request. Without this a hung socket blocks the
+  /// caller forever — on the splash screen that means the app never starts.
+  static const Duration _requestTimeout = Duration(seconds: 15);
+
+  /// Uploads stream a whole file, so they get a longer ceiling.
+  static const Duration _uploadTimeout = Duration(seconds: 60);
+
   final http.Client _client;
   final AuthService _authService;
 
@@ -126,10 +147,9 @@ class ApiService {
   Future<dynamic> get(String endpoint, {bool requireAuth = true}) async {
     try {
       final headers = await _getHeaders(requireAuth: requireAuth);
-      final response = await _client.get(
-        Uri.parse('${ApiConfig.apiUrl}$endpoint'),
-        headers: headers,
-      );
+      final response = await _client
+          .get(Uri.parse('${ApiConfig.apiUrl}$endpoint'), headers: headers)
+          .timeout(_requestTimeout);
       return _handleResponse(response);
     } on ApiException catch (e) {
       if (e.isUnauthorized && requireAuth) {
@@ -138,16 +158,17 @@ class ApiService {
         if (refreshed) {
           // Retry request with new token
           final headers = await _getHeaders(requireAuth: requireAuth);
-          final response = await _client.get(
-            Uri.parse('${ApiConfig.apiUrl}$endpoint'),
-            headers: headers,
-          );
+          final response = await _client
+              .get(Uri.parse('${ApiConfig.apiUrl}$endpoint'), headers: headers)
+              .timeout(_requestTimeout);
           return _handleResponse(response);
         }
       }
       rethrow;
     } on SocketException {
       throw ApiException(0, 'No internet connection');
+    } on TimeoutException {
+      throw ApiException(0, 'Request timed out');
     }
   }
 
@@ -159,28 +180,34 @@ class ApiService {
   }) async {
     try {
       final headers = await _getHeaders(requireAuth: requireAuth);
-      final response = await _client.post(
-        Uri.parse('${ApiConfig.apiUrl}$endpoint'),
-        headers: headers,
-        body: jsonEncode(body),
-      );
+      final response = await _client
+          .post(
+            Uri.parse('${ApiConfig.apiUrl}$endpoint'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(_requestTimeout);
       return _handleResponse(response);
     } on ApiException catch (e) {
       if (e.isUnauthorized && requireAuth) {
         final refreshed = await _authService.refreshAccessToken();
         if (refreshed) {
           final headers = await _getHeaders(requireAuth: requireAuth);
-          final response = await _client.post(
-            Uri.parse('${ApiConfig.apiUrl}$endpoint'),
-            headers: headers,
-            body: jsonEncode(body),
-          );
+          final response = await _client
+              .post(
+                Uri.parse('${ApiConfig.apiUrl}$endpoint'),
+                headers: headers,
+                body: jsonEncode(body),
+              )
+              .timeout(_requestTimeout);
           return _handleResponse(response);
         }
       }
       rethrow;
     } on SocketException {
       throw ApiException(0, 'No internet connection');
+    } on TimeoutException {
+      throw ApiException(0, 'Request timed out');
     }
   }
 
@@ -192,28 +219,34 @@ class ApiService {
   }) async {
     try {
       final headers = await _getHeaders(requireAuth: requireAuth);
-      final response = await _client.put(
-        Uri.parse('${ApiConfig.apiUrl}$endpoint'),
-        headers: headers,
-        body: jsonEncode(body),
-      );
+      final response = await _client
+          .put(
+            Uri.parse('${ApiConfig.apiUrl}$endpoint'),
+            headers: headers,
+            body: jsonEncode(body),
+          )
+          .timeout(_requestTimeout);
       return _handleResponse(response);
     } on ApiException catch (e) {
       if (e.isUnauthorized && requireAuth) {
         final refreshed = await _authService.refreshAccessToken();
         if (refreshed) {
           final headers = await _getHeaders(requireAuth: requireAuth);
-          final response = await _client.put(
-            Uri.parse('${ApiConfig.apiUrl}$endpoint'),
-            headers: headers,
-            body: jsonEncode(body),
-          );
+          final response = await _client
+              .put(
+                Uri.parse('${ApiConfig.apiUrl}$endpoint'),
+                headers: headers,
+                body: jsonEncode(body),
+              )
+              .timeout(_requestTimeout);
           return _handleResponse(response);
         }
       }
       rethrow;
     } on SocketException {
       throw ApiException(0, 'No internet connection');
+    } on TimeoutException {
+      throw ApiException(0, 'Request timed out');
     }
   }
 
@@ -221,20 +254,21 @@ class ApiService {
   Future<void> delete(String endpoint, {bool requireAuth = true}) async {
     try {
       final headers = await _getHeaders(requireAuth: requireAuth);
-      final response = await _client.delete(
-        Uri.parse('${ApiConfig.apiUrl}$endpoint'),
-        headers: headers,
-      );
+      final response = await _client
+          .delete(Uri.parse('${ApiConfig.apiUrl}$endpoint'), headers: headers)
+          .timeout(_requestTimeout);
       _handleResponse(response);
     } on ApiException catch (e) {
       if (e.isUnauthorized && requireAuth) {
         final refreshed = await _authService.refreshAccessToken();
         if (refreshed) {
           final headers = await _getHeaders(requireAuth: requireAuth);
-          final response = await _client.delete(
-            Uri.parse('${ApiConfig.apiUrl}$endpoint'),
-            headers: headers,
-          );
+          final response = await _client
+              .delete(
+                Uri.parse('${ApiConfig.apiUrl}$endpoint'),
+                headers: headers,
+              )
+              .timeout(_requestTimeout);
           _handleResponse(response);
           return;
         }
@@ -242,6 +276,8 @@ class ApiService {
       rethrow;
     } on SocketException {
       throw ApiException(0, 'No internet connection');
+    } on TimeoutException {
+      throw ApiException(0, 'Request timed out');
     }
   }
 
@@ -276,7 +312,9 @@ class ApiService {
 
     try {
       final request = await createRequest();
-      final streamedResponse = await _client.send(request);
+      final streamedResponse = await _client
+          .send(request)
+          .timeout(_uploadTimeout);
       final response = await http.Response.fromStream(streamedResponse);
       return _handleResponse(response);
     } on ApiException catch (e) {
@@ -284,7 +322,9 @@ class ApiService {
         final refreshed = await _authService.refreshAccessToken();
         if (refreshed) {
           final request = await createRequest();
-          final streamedResponse = await _client.send(request);
+          final streamedResponse = await _client
+              .send(request)
+              .timeout(_uploadTimeout);
           final response = await http.Response.fromStream(streamedResponse);
           return _handleResponse(response);
         }
@@ -292,6 +332,8 @@ class ApiService {
       rethrow;
     } on SocketException {
       throw ApiException(0, 'No internet connection');
+    } on TimeoutException {
+      throw ApiException(0, 'Request timed out');
     }
   }
 

@@ -12,7 +12,6 @@ from ..database import get_db
 import os
 from ..models.note import Note
 from ..models.user import User
-from ..models.folder import Folder
 from ..schemas.note import NoteCreate, NoteUpdate, NoteResponse
 from ..utils.security import get_current_user
 from ..services.rag_service import rag_service
@@ -74,8 +73,7 @@ async def create_note(
     
     db.add(note)
     await db.commit()
-    await db.refresh(note)
-    
+
     # Sync to vector DB
     if note.content:
         background_tasks.add_task(
@@ -151,14 +149,13 @@ async def update_note(
     note.synced_at = datetime.utcnow()
     
     await db.commit()
-    await db.refresh(note)
-    
+
     # Sync to vector DB if content or title changed
     if (note_data.content is not None) or (note_data.title is not None):
         background_tasks.add_task(
             rag_service.sync_diary_to_vector_db,
             note_id=note.id,
-            text=note.content if note_data.content is not None else note.content,
+            text=note.content,
             user_id=current_user.id,
             title=note.title
         )

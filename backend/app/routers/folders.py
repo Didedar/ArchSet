@@ -5,7 +5,7 @@ Folders API endpoints.
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from datetime import datetime
 
 from ..database import get_db
@@ -62,8 +62,7 @@ async def create_folder(
     
     db.add(folder)
     await db.commit()
-    await db.refresh(folder)
-    
+
     return FolderResponse.model_validate(folder)
 
 
@@ -119,8 +118,7 @@ async def update_folder(
         folder.color = folder_data.color
     
     await db.commit()
-    await db.refresh(folder)
-    
+
     return FolderResponse.model_validate(folder)
 
 
@@ -152,17 +150,17 @@ async def delete_folder(
             detail="Folder not found"
         )
     
-    # Move notes to "All Notes" (uncategorized)
-    notes_result = await db.execute(
-        select(Note).where(
+    # Move notes to "All Notes" (uncategorized) with a single bulk UPDATE
+    # instead of loading every note (including its full content) into memory.
+    await db.execute(
+        update(Note)
+        .where(
             Note.folder_id == folder_id,
             Note.user_id == current_user.id
         )
+        .values(folder_id=None)
     )
-    notes = notes_result.scalars().all()
-    for note in notes:
-        note.folder_id = None
-    
+
     if hard_delete:
         await db.delete(folder)
     else:

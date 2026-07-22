@@ -2,6 +2,7 @@
 Gemini AI service for audio transcription and text rewriting.
 """
 
+import asyncio
 import os
 from pathlib import Path
 from typing import Optional
@@ -10,6 +11,10 @@ import google.generativeai as genai
 from ..config import get_settings
 
 settings = get_settings()
+
+# Request timeouts (seconds) for the blocking Gemini SDK calls.
+GEMINI_TIMEOUT_SECONDS = 30
+GEMINI_AUDIO_TIMEOUT_SECONDS = 60
 
 
 class GeminiService:
@@ -56,14 +61,18 @@ class GeminiService:
                 mime_type = mime_types.get(extension, "audio/mpeg")
                 
                 # Create content for Gemini
-                response = self.model.generate_content([
-                    "Transcribe the following audio file verbatim. Do not add any conversational filler.",
-                    {
-                        "mime_type": mime_type,
-                        "data": audio_bytes
-                    }
-                ])
-                
+                response = await asyncio.to_thread(
+                    self.model.generate_content,
+                    [
+                        "Transcribe the following audio file verbatim. Do not add any conversational filler.",
+                        {
+                            "mime_type": mime_type,
+                            "data": audio_bytes
+                        }
+                    ],
+                    request_options={"timeout": GEMINI_AUDIO_TIMEOUT_SECONDS}
+                )
+
                 return response.text
                 
             except Exception as e:
@@ -73,7 +82,7 @@ class GeminiService:
 
         # Fallback to Whisper (offline)
         from .whisper_service import WhisperService
-        return WhisperService.transcribe(audio_path)
+        return await asyncio.to_thread(WhisperService.transcribe, audio_path)
     
     async def transcribe_audio_bytes(
         self,
@@ -93,14 +102,18 @@ class GeminiService:
         # Try Gemini first (online)
         if self.model:
             try:
-                response = self.model.generate_content([
-                    "Transcribe the following audio file verbatim. Do not add any conversational filler.",
-                    {
-                        "mime_type": mime_type,
-                        "data": audio_bytes
-                    }
-                ])
-                
+                response = await asyncio.to_thread(
+                    self.model.generate_content,
+                    [
+                        "Transcribe the following audio file verbatim. Do not add any conversational filler.",
+                        {
+                            "mime_type": mime_type,
+                            "data": audio_bytes
+                        }
+                    ],
+                    request_options={"timeout": GEMINI_AUDIO_TIMEOUT_SECONDS}
+                )
+
                 return response.text
                 
             except Exception as e:
@@ -123,7 +136,7 @@ class GeminiService:
             temp_path = temp_file.name
         
         try:
-            return WhisperService.transcribe(temp_path)
+            return await asyncio.to_thread(WhisperService.transcribe, temp_path)
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
@@ -166,7 +179,11 @@ Original text:
 
 Please provide the rewritten documentation:"""
             
-            response = self.model.generate_content(prompt.format(text=text))
+            response = await asyncio.to_thread(
+                self.model.generate_content,
+                prompt.format(text=text),
+                request_options={"timeout": GEMINI_TIMEOUT_SECONDS}
+            )
             return response.text
             
         except Exception as e:
@@ -258,14 +275,18 @@ Please provide the rewritten documentation:"""
             }}
             """
             
-            response = self.model.generate_content([
-                prompt,
-                {
-                    "mime_type": mime_type,
-                    "data": image_bytes
-                }
-            ])
-            
+            response = await asyncio.to_thread(
+                self.model.generate_content,
+                [
+                    prompt,
+                    {
+                        "mime_type": mime_type,
+                        "data": image_bytes
+                    }
+                ],
+                request_options={"timeout": GEMINI_TIMEOUT_SECONDS}
+            )
+
             # Extract JSON from response if it's wrapped in code blocks
             text = response.text
             if "```json" in text:
@@ -300,14 +321,18 @@ Please provide the rewritten documentation:"""
         try:
             prompt = "Extract all text visible in this image. Provide ONLY the extracted text, maintaining the original layout as much as possible."
             
-            response = self.model.generate_content([
-                prompt,
-                {
-                    "mime_type": mime_type,
-                    "data": image_bytes
-                }
-            ])
-            
+            response = await asyncio.to_thread(
+                self.model.generate_content,
+                [
+                    prompt,
+                    {
+                        "mime_type": mime_type,
+                        "data": image_bytes
+                    }
+                ],
+                request_options={"timeout": GEMINI_TIMEOUT_SECONDS}
+            )
+
             return response.text
             
         except Exception as e:

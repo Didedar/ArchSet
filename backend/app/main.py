@@ -9,8 +9,8 @@ import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
-from .config import get_settings
 from .config import get_settings
 from .database import init_db
 from .services.rag_service import rag_service
@@ -73,6 +73,11 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Compress the Text-heavy note/sync JSON payloads.
+# Added before CORS so that CORS stays the outermost middleware
+# (in Starlette the last middleware added is the outermost one).
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Configure CORS
 app.add_middleware(

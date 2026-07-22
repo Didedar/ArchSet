@@ -20,11 +20,7 @@ class _SplashPageState extends State<SplashPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _checkAuth());
   }
 
-  Future<void> _checkAuth() async {
-    // Small delay to show the splash screen (kept from the pre-migration
-    // behavior, purely cosmetic).
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
+  void _checkAuth() {
     context.read<AuthBloc>().add(const AuthCheckRequested());
   }
 

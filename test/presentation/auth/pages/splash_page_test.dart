@@ -38,8 +38,8 @@ void main() {
 
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
 
-    // The auth check is deliberately delayed 500ms to let the splash show.
-    await tester.pump(const Duration(milliseconds: 600));
+    // The auth check fires on the first post-frame callback.
+    await tester.pump();
 
     verify(() => authBloc.add(const AuthCheckRequested())).called(1);
   });

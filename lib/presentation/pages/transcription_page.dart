@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -204,6 +205,17 @@ class _TranscriptionPageState extends State<TranscriptionPage>
     }
   }
 
+  /// Live subscriptions to the current player. Cancelled and rebuilt on every
+  /// tab switch so they never outlive the player they belong to.
+  final List<StreamSubscription<dynamic>> _playerSubscriptions = [];
+
+  Future<void> _cancelPlayerSubscriptions() async {
+    for (final subscription in _playerSubscriptions) {
+      await subscription.cancel();
+    }
+    _playerSubscriptions.clear();
+  }
+
   Future<void> _initializeAudio() async {
     await _loadAudioForTab(0);
   }
@@ -213,7 +225,10 @@ class _TranscriptionPageState extends State<TranscriptionPage>
 
     final segment = _segments[index];
 
-    // Dispose previous player
+    // Drop the previous player's listeners BEFORE disposing it. Without this
+    // every tab switch left three live subscriptions bound to a dead player,
+    // each still calling setState on this page.
+    await _cancelPlayerSubscriptions();
     await _audioPlayer?.dispose();
     _audioPlayer = AudioPlayer();
 
@@ -221,43 +236,49 @@ class _TranscriptionPageState extends State<TranscriptionPage>
       await _audioPlayer!.setFilePath(segment.filePath);
 
       // Listen to player state changes
-      _audioPlayer!.playerStateStream.listen((state) {
-        if (mounted) {
-          setState(() {
-            _isPlaying = state.playing;
-          });
-        }
-      });
-
-      // Listen to position updates
-      _audioPlayer!.positionStream.listen((position) {
-        if (mounted) {
-          setState(() {
-            _currentPosition = position;
-          });
-        }
-      });
-
-      // Listen to duration updates
-      _audioPlayer!.durationStream.listen((duration) {
-        if (mounted && duration != null && _segments.isNotEmpty) {
-          // Update segment duration if needed
-          final currentSegment = _segments[_currentTabIndex];
-          if (currentSegment.duration == Duration.zero) {
+      _playerSubscriptions.add(
+        _audioPlayer!.playerStateStream.listen((state) {
+          if (mounted) {
             setState(() {
-              _segments[_currentTabIndex] = TranscriptionSegment(
-                id: currentSegment.id,
-                text: currentSegment.text,
-                startTime: Duration.zero,
-                endTime: duration,
-                audioName: currentSegment.audioName,
-                filePath: currentSegment.filePath,
-                duration: duration,
-              );
+              _isPlaying = state.playing;
             });
           }
-        }
-      });
+        }),
+      );
+
+      // Listen to position updates
+      _playerSubscriptions.add(
+        _audioPlayer!.positionStream.listen((position) {
+          if (mounted) {
+            setState(() {
+              _currentPosition = position;
+            });
+          }
+        }),
+      );
+
+      // Listen to duration updates
+      _playerSubscriptions.add(
+        _audioPlayer!.durationStream.listen((duration) {
+          if (mounted && duration != null && _segments.isNotEmpty) {
+            // Update segment duration if needed
+            final currentSegment = _segments[_currentTabIndex];
+            if (currentSegment.duration == Duration.zero) {
+              setState(() {
+                _segments[_currentTabIndex] = TranscriptionSegment(
+                  id: currentSegment.id,
+                  text: currentSegment.text,
+                  startTime: Duration.zero,
+                  endTime: duration,
+                  audioName: currentSegment.audioName,
+                  filePath: currentSegment.filePath,
+                  duration: duration,
+                );
+              });
+            }
+          }
+        }),
+      );
     } catch (e) {
       debugPrint('Error loading audio: $e');
     }
@@ -281,6 +302,7 @@ class _TranscriptionPageState extends State<TranscriptionPage>
   void dispose() {
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
+    _cancelPlayerSubscriptions();
     _audioPlayer?.dispose();
     super.dispose();
   }

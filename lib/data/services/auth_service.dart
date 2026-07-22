@@ -3,6 +3,7 @@
 /// Handles JWT token storage and refresh.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -53,9 +54,17 @@ class AuthTokens {
 
 /// Authentication service
 class AuthService implements AuthRepository {
+  /// Ceiling on any auth request, so a hung socket can never stall the splash.
+  static const Duration _requestTimeout = Duration(seconds: 15);
+
   final FlutterSecureStorage _storage;
   final String _baseUrl;
   final AppDatabase _database;
+
+  /// One client for the lifetime of the service. The previous code used the
+  /// top-level `http.post`/`http.get` helpers, each of which opens and closes
+  /// its own client — a fresh TCP + TLS handshake on every single auth call.
+  final http.Client _client;
 
   AuthUser? _currentUser;
 
@@ -63,9 +72,11 @@ class AuthService implements AuthRepository {
     required AppDatabase database,
     FlutterSecureStorage? storage,
     String? baseUrl,
+    http.Client? client,
   }) : _storage = storage ?? const FlutterSecureStorage(),
        _baseUrl = baseUrl ?? ApiConfig.apiUrl,
-       _database = database;
+       _database = database,
+       _client = client ?? http.Client();
 
   /// Get current cached user
   @override
@@ -90,11 +101,13 @@ class AuthService implements AuthRepository {
   /// Register a new user
   @override
   Future<AuthUser> register(String email, String password) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/auth/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
-    );
+    final response = await _client
+        .post(
+          Uri.parse('$_baseUrl/auth/register'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email, 'password': password}),
+        )
+        .timeout(_requestTimeout);
 
     if (response.statusCode == 201) {
       final user = AuthUser.fromJson(jsonDecode(response.body));
@@ -109,11 +122,13 @@ class AuthService implements AuthRepository {
   @override
   Future<AuthUser> login(String email, String password) async {
     // Get tokens
-    final tokenResponse = await http.post(
-      Uri.parse('$_baseUrl/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
-    );
+    final tokenResponse = await _client
+        .post(
+          Uri.parse('$_baseUrl/auth/login'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({'email': email, 'password': password}),
+        )
+        .timeout(_requestTimeout);
 
     if (tokenResponse.statusCode != 200) {
       final error = jsonDecode(tokenResponse.body);
@@ -133,13 +148,15 @@ class AuthService implements AuthRepository {
     );
 
     // Get user info
-    final userResponse = await http.get(
-      Uri.parse('$_baseUrl/auth/me'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${tokens.accessToken}',
-      },
-    );
+    final userResponse = await _client
+        .get(
+          Uri.parse('$_baseUrl/auth/me'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ${tokens.accessToken}',
+          },
+        )
+        .timeout(_requestTimeout);
 
     if (userResponse.statusCode == 200) {
       final user = AuthUser.fromJson(jsonDecode(userResponse.body));
@@ -161,11 +178,13 @@ class AuthService implements AuthRepository {
       final refreshToken = await getRefreshToken();
       if (refreshToken == null) return false;
 
-      final response = await http.post(
-        Uri.parse('$_baseUrl/auth/refresh'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refresh_token': refreshToken}),
-      );
+      final response = await _client
+          .post(
+            Uri.parse('$_baseUrl/auth/refresh'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'refresh_token': refreshToken}),
+          )
+          .timeout(_requestTimeout);
 
       if (response.statusCode == 200) {
         final tokens = AuthTokens.fromJson(jsonDecode(response.body));
@@ -198,70 +217,71 @@ class AuthService implements AuthRepository {
     await _database.clearAllData();
   }
 
-  /// Load user from storage (for app startup)
+  /// Load user from storage (for app startup).
+  ///
+  /// This sits on the splash critical path, so it must not wait on the network.
+  /// The three keychain reads run concurrently, and the server-side
+  /// revalidation is fire-and-forget: the cached identity is returned
+  /// immediately and refreshed in the background. Offline access is unaffected,
+  /// and a stale token still surfaces as a 401 on the next real API call.
   @override
   Future<AuthUser?> loadStoredUser() async {
-    final userId = await _storage.read(key: AuthStorageKeys.userId);
-    final userEmail = await _storage.read(key: AuthStorageKeys.userEmail);
-    final token = await getAccessToken();
+    final results = await Future.wait([
+      _storage.read(key: AuthStorageKeys.userId),
+      _storage.read(key: AuthStorageKeys.userEmail),
+      getAccessToken(),
+    ]);
+    final userId = results[0];
+    final userEmail = results[1];
+    final token = results[2];
 
-    if (userId != null && userEmail != null && token != null) {
-      // Validate token logic
-      // Ideally we should call an endpoint to verify the token is still valid.
-      // For now allowing offline access if we have a token.
-      // If online, we could try to refresh it if it's expired or if an API call fails with 401 later.
+    if (userId == null || userEmail == null || token == null) return null;
 
-      _currentUser = AuthUser(
-        id: userId,
-        email: userEmail,
-        createdAt: DateTime.now(),
-      );
+    _currentUser = AuthUser(
+      id: userId,
+      email: userEmail,
+      createdAt: DateTime.now(),
+    );
 
-      // Attempt to refresh in background or validate session
-      try {
-        // This is a "silent" check/refresh.
-        // If it fails, that's fine, we might be offline.
-        // If we are online and token is bad, api calls will 401 and we handle that there.
-        // But let's try to verify if we can.
-        final isValid =
-            await isLoggedIn(); // Checks if token exists, weak check.
-        if (isValid) {
-          // Try to fetch Fresh user data
-          final userResponse = await http.get(
+    unawaited(_revalidateSession(token));
+
+    return _currentUser;
+  }
+
+  /// Best-effort background refresh of the cached user. Never throws — a
+  /// failure here just means we keep using the cached identity.
+  Future<void> _revalidateSession(String token) async {
+    try {
+      final userResponse = await _client
+          .get(
             Uri.parse('$_baseUrl/auth/me'),
             headers: {
               'Content-Type': 'application/json',
               'Authorization': 'Bearer $token',
             },
-          );
+          )
+          .timeout(_requestTimeout);
 
-          if (userResponse.statusCode == 200) {
-            final user = AuthUser.fromJson(jsonDecode(userResponse.body));
-            _currentUser = user; // Update with fresh data
-            await _storage.write(key: AuthStorageKeys.userId, value: user.id);
-            await _storage.write(
-              key: AuthStorageKeys.userEmail,
-              value: user.email,
-            );
-          } else if (userResponse.statusCode == 401) {
-            // Token expired? Try refresh
-            final refreshed = await refreshAccessToken();
-            if (!refreshed) {
-              // Failed to refresh, logout needed technically,
-              // but maybe we let them stay in offline mode until they try an action?
-              // The user mentioned "getting logged out" randomly.
-              // If we aggressive logout here, that might be it.
-              // Let's NOT clear data here unless we are sure.
-            }
-          }
-        }
-      } catch (e) {
-        // Network error likely, ignore
+      if (userResponse.statusCode == 200) {
+        final user = AuthUser.fromJson(jsonDecode(userResponse.body));
+        _currentUser = user;
+        await Future.wait([
+          _storage.write(key: AuthStorageKeys.userId, value: user.id),
+          _storage.write(key: AuthStorageKeys.userEmail, value: user.email),
+        ]);
+      } else if (userResponse.statusCode == 401) {
+        // Token may just be expired. Refresh if we can; deliberately do NOT
+        // clear stored credentials on failure, so a transient server or
+        // network fault can't silently log the user out.
+        await refreshAccessToken();
       }
-
-      return _currentUser;
+    } catch (e) {
+      debugPrint('Session revalidation skipped: $e');
     }
+  }
 
-    return null;
+  /// Releases the shared HTTP client.
+  void dispose() {
+    _client.close();
   }
 }

@@ -8,11 +8,23 @@ from .config import get_settings
 
 settings = get_settings()
 
+# Connection pool tuning. pool_size/max_overflow only exist on QueuePool, which
+# is what the asyncpg driver uses; SQLite falls back to NullPool/StaticPool and
+# rejects those two arguments outright, so only pass them for a real pool.
+_engine_kwargs = {
+    "pool_pre_ping": True,
+    "pool_recycle": 1800,
+}
+if not settings.database_url.startswith("sqlite"):
+    _engine_kwargs["pool_size"] = 20
+    _engine_kwargs["max_overflow"] = 10
+
 # Create async engine
 engine = create_async_engine(
     settings.database_url,
     echo=settings.debug,
     future=True,
+    **_engine_kwargs,
 )
 
 # Session factory

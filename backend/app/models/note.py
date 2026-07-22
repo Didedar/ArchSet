@@ -4,16 +4,24 @@ Note database model for diary entries.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Boolean, ForeignKey, Text
+from sqlalchemy import String, DateTime, Boolean, ForeignKey, Text, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
 
 
 class Note(Base):
     """Note model for diary entries."""
-    
+
     __tablename__ = "notes"
-    
+
+    # NOTE: create_all() does not add indexes to an already-existing table.
+    # For an existing database, apply backend/scripts/add_indexes.sql instead.
+    __table_args__ = (
+        Index("ix_notes_user_id_date", "user_id", "date"),
+        Index("ix_notes_user_id_is_deleted_date", "user_id", "is_deleted", "date"),
+        Index("ix_notes_user_id_updated_at", "user_id", "updated_at"),
+    )
+
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,

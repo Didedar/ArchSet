@@ -134,7 +134,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 
 @pytest_asyncio.fixture
 async def test_user(db_session: AsyncSession) -> User:
-    user = User(email="test@example.com", password_hash=get_password_hash("password123"))
+    user = User(email="test@example.com", password_hash=await get_password_hash("password123"))
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
@@ -144,7 +144,7 @@ async def test_user(db_session: AsyncSession) -> User:
 @pytest_asyncio.fixture
 async def other_user(db_session: AsyncSession) -> User:
     """A second user, for tests that assert data isolation between accounts."""
-    user = User(email="other@example.com", password_hash=get_password_hash("password456"))
+    user = User(email="other@example.com", password_hash=await get_password_hash("password456"))
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)

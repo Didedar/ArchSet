@@ -40,7 +40,7 @@ class AuthService:
         # Create new user
         user = User(
             email=user_data.email,
-            password_hash=get_password_hash(user_data.password)
+            password_hash=await get_password_hash(user_data.password)
         )
         
         self.db.add(user)
@@ -57,7 +57,7 @@ class AuthService:
         )
         user = result.scalar_one_or_none()
         
-        if not user or not verify_password(login_data.password, user.password_hash):
+        if not user or not await verify_password(login_data.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password"

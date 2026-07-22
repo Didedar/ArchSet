@@ -48,17 +48,24 @@ class SyncService:
         sync_time = datetime.utcnow()
         notes_to_index = []
         
-        # Process client notes
-        for client_note in client_notes:
-            # Check if note exists
+        # Prefetch every note the client sent in a single query instead of
+        # issuing one SELECT per item.
+        client_note_ids = [client_note.id for client_note in client_notes]
+        existing_notes = {}
+        if client_note_ids:
             result = await self.db.execute(
                 select(Note).where(
-                    Note.id == client_note.id,
+                    Note.id.in_(client_note_ids),
                     Note.user_id == user.id
                 )
             )
-            existing_note = result.scalar_one_or_none()
-            
+            existing_notes = {note.id: note for note in result.scalars().all()}
+
+        # Process client notes
+        for client_note in client_notes:
+            # Check if note exists
+            existing_note = existing_notes.get(client_note.id)
+
             if existing_note:
                 # Update if client version is newer
                 if client_note.updated_at > existing_note.updated_at:
@@ -104,6 +111,9 @@ class SyncService:
                         synced_at=sync_time
                     )
                     self.db.add(new_note)
+                    # Keep the lookup in sync so a duplicated id later in the
+                    # same batch resolves to the note just created.
+                    existing_notes[new_note.id] = new_note
                     if new_note.content or new_note.title:
                         notes_to_index.append(new_note)
         
@@ -159,16 +169,23 @@ class SyncService:
         """
         sync_time = datetime.utcnow()
         
-        # Process client folders
-        for client_folder in client_folders:
+        # Prefetch every folder the client sent in a single query instead of
+        # issuing one SELECT per item.
+        client_folder_ids = [client_folder.id for client_folder in client_folders]
+        existing_folders = {}
+        if client_folder_ids:
             result = await self.db.execute(
                 select(Folder).where(
-                    Folder.id == client_folder.id,
+                    Folder.id.in_(client_folder_ids),
                     Folder.user_id == user.id
                 )
             )
-            existing_folder = result.scalar_one_or_none()
-            
+            existing_folders = {folder.id: folder for folder in result.scalars().all()}
+
+        # Process client folders
+        for client_folder in client_folders:
+            existing_folder = existing_folders.get(client_folder.id)
+
             if existing_folder:
                 if client_folder.updated_at > existing_folder.updated_at:
                     existing_folder.name = client_folder.name
@@ -186,7 +203,10 @@ class SyncService:
                         updated_at=client_folder.updated_at
                     )
                     self.db.add(new_folder)
-        
+                    # Keep the lookup in sync so a duplicated id later in the
+                    # same batch resolves to the folder just created.
+                    existing_folders[new_folder.id] = new_folder
+
         await self.db.flush()
         
         # Get server folders that changed

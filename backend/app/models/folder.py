@@ -4,16 +4,23 @@ Folder database model for organizing notes.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Boolean, ForeignKey
+from sqlalchemy import String, DateTime, Boolean, ForeignKey, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
 
 
 class Folder(Base):
     """Folder model for organizing notes."""
-    
+
     __tablename__ = "folders"
-    
+
+    # NOTE: create_all() does not add indexes to an already-existing table.
+    # For an existing database, apply backend/scripts/add_indexes.sql instead.
+    __table_args__ = (
+        Index("ix_folders_user_id_updated_at", "user_id", "updated_at"),
+        Index("ix_folders_user_id_created_at", "user_id", "created_at"),
+    )
+
     id: Mapped[str] = mapped_column(
         String(36),
         primary_key=True,

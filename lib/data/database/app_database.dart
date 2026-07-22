@@ -49,15 +49,50 @@ class ImageMetadata extends Table {
 
 @DriftDatabase(tables: [Folders, Notes, ImageMetadata])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  /// [executor] is only supplied by tests (e.g. an in-memory database);
+  /// production always uses the lazily-connecting platform executor.
+  AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
+
+  /// Indexes covering every filter/sort the repository actually issues.
+  ///
+  /// Without these, each list query is a full table scan plus an in-memory
+  /// sort; cost grows linearly with the number of notes. Each statement
+  /// mirrors one query in `NotesRepository`, with the equality columns first
+  /// and the ordering column last so SQLite can satisfy both from the index.
+  static const List<String> _indexStatements = [
+    // watchAllNotes: WHERE is_deleted = 0 ORDER BY date DESC
+    'CREATE INDEX IF NOT EXISTS idx_notes_deleted_date '
+        'ON notes (is_deleted, date DESC)',
+    // watchNotesInFolder, both the folder and the "uncategorised" branch.
+    'CREATE INDEX IF NOT EXISTS idx_notes_folder_deleted_date '
+        'ON notes (folder_id, is_deleted, date DESC)',
+    // watchFolderNoteCounts: WHERE is_deleted = 0 GROUP BY folder_id.
+    // Ordering the columns filter-first lets SQLite group straight off the
+    // index instead of building a temporary B-tree.
+    'CREATE INDEX IF NOT EXISTS idx_notes_deleted_folder '
+        'ON notes (is_deleted, folder_id)',
+    // watchAllFolders: WHERE is_deleted = 0 ORDER BY created_at ASC
+    'CREATE INDEX IF NOT EXISTS idx_folders_deleted_created '
+        'ON folders (is_deleted, created_at)',
+    // ImageMetadata is looked up by normalised path on every embedded image.
+    'CREATE INDEX IF NOT EXISTS idx_image_metadata_path '
+        'ON image_metadata (image_path)',
+  ];
+
+  Future<void> _createIndexes() async {
+    for (final statement in _indexStatements) {
+      await customStatement(statement);
+    }
+  }
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (Migrator m) async {
       await m.createAll();
+      await _createIndexes();
     },
     onUpgrade: (Migrator m, int from, int to) async {
       if (from < 2) {
@@ -84,6 +119,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 6) {
         // Add ImageMetadata table
         await m.createTable(imageMetadata);
+      }
+      if (from < 7) {
+        // Backfill the query indexes onto existing installs.
+        await _createIndexes();
       }
     },
   );

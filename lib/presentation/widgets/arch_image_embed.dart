@@ -139,6 +139,19 @@ class _ArchImageEmbedState extends State<ArchImageEmbed> {
     );
   }
 
+  /// Target decode width for the inline thumbnail, in physical pixels.
+  int _inlineCacheWidth(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return (media.size.width * media.devicePixelRatio).round();
+  }
+
+  /// Target decode width for the full-screen viewer. Allows 2x the screen
+  /// width so a pinch-zoom still resolves detail.
+  int _fullScreenCacheWidth(BuildContext context) {
+    final media = MediaQuery.of(context);
+    return (media.size.width * media.devicePixelRatio * 2).round();
+  }
+
   @override
   Widget build(BuildContext context) {
     // 50 padding from left and right as per design (approx)
@@ -153,6 +166,14 @@ class _ArchImageEmbedState extends State<ArchImageEmbed> {
             child: Image.file(
               File(widget.imagePath),
               fit: BoxFit.cover,
+              // Decode at display size, not at capture size. A 12MP photo
+              // costs ~48MB as decoded RGBA; a few of them in one entry blow
+              // the image cache and force repeated decode/evict churn. The
+              // cache key includes cacheWidth, so this is also what lets the
+              // inline and full-screen views hold separate, right-sized
+              // copies instead of two full-resolution ones.
+              cacheWidth: _inlineCacheWidth(context),
+              gaplessPlayback: true,
               errorBuilder: (context, error, stackTrace) {
                 return Container(
                   height: 200,
@@ -211,6 +232,10 @@ class _ArchImageEmbedState extends State<ArchImageEmbed> {
                                 child: Image.file(
                                   File(widget.imagePath),
                                   fit: BoxFit.contain,
+                                  // Capped at screen width so zooming stays
+                                  // sharp without decoding the full original.
+                                  cacheWidth: _fullScreenCacheWidth(context),
+                                  gaplessPlayback: true,
                                 ),
                               ),
                             ),

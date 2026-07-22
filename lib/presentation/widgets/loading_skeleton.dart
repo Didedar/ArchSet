@@ -10,6 +10,11 @@ class LoadingSkeleton extends StatefulWidget {
 
 class _LoadingSkeletonState extends State<LoadingSkeleton>
     with SingleTickerProviderStateMixin {
+  static const Color _surfaceFrom = Color(0xFF2C2C2E);
+  static const Color _surfaceTo = Color(0xFF3C3C3E);
+  static const Color _blockFrom = Color(0xFF3C3C3E);
+  static const Color _blockTo = Color(0xFF4C4C4E);
+
   late AnimationController _controller;
   late Animation<double> _animation;
 
@@ -43,16 +48,20 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
         return AnimatedBuilder(
           animation: _animation,
           builder: (context, child) {
+            // Every placeholder block lerps between the same two greys, so
+            // resolve each colour once per frame rather than once per block.
+            // This skeleton is on screen exactly while the app is starting up,
+            // so its per-frame cost is felt at the worst possible moment.
+            final t = _animation.value;
+            final surface = Color.lerp(_surfaceFrom, _surfaceTo, t);
+            final block = Color.lerp(_blockFrom, _blockTo, t);
+
             return Container(
               width: double.infinity,
               height: 55,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               decoration: BoxDecoration(
-                color: Color.lerp(
-                  const Color(0xFF2C2C2E),
-                  const Color(0xFF3C3C3E),
-                  _animation.value,
-                ),
+                color: surface,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
@@ -61,11 +70,7 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
                     width: 15,
                     height: 15,
                     decoration: BoxDecoration(
-                      color: Color.lerp(
-                        const Color(0xFF3C3C3E),
-                        const Color(0xFF4C4C4E),
-                        _animation.value,
-                      ),
+                      color: block,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -79,11 +84,7 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
                           width: 120,
                           height: 12,
                           decoration: BoxDecoration(
-                            color: Color.lerp(
-                              const Color(0xFF3C3C3E),
-                              const Color(0xFF4C4C4E),
-                              _animation.value,
-                            ),
+                            color: block,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
@@ -92,11 +93,7 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
                           width: 80,
                           height: 10,
                           decoration: BoxDecoration(
-                            color: Color.lerp(
-                              const Color(0xFF3C3C3E),
-                              const Color(0xFF4C4C4E),
-                              _animation.value,
-                            ),
+                            color: block,
                             borderRadius: BorderRadius.circular(4),
                           ),
                         ),
@@ -107,11 +104,7 @@ class _LoadingSkeletonState extends State<LoadingSkeleton>
                     width: 44,
                     height: 15,
                     decoration: BoxDecoration(
-                      color: Color.lerp(
-                        const Color(0xFF3C3C3E),
-                        const Color(0xFF4C4C4E),
-                        _animation.value,
-                      ),
+                      color: block,
                       borderRadius: BorderRadius.circular(6),
                     ),
                   ),

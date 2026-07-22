@@ -2,6 +2,7 @@
 Security utilities for password hashing and JWT token handling.
 """
 
+import asyncio
 from datetime import datetime, timedelta
 from typing import Optional
 import bcrypt
@@ -21,20 +22,29 @@ settings = get_settings()
 security = HTTPBearer()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+async def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    return bcrypt.checkpw(
-        plain_password.encode('utf-8'),
+    # Truncate to 72 bytes (bcrypt limit) -- must match get_password_hash,
+    # otherwise passwords longer than 72 bytes can be registered but never
+    # verified (bcrypt raises ValueError past that length).
+    password_bytes = plain_password.encode('utf-8')[:72]
+    return await asyncio.to_thread(
+        bcrypt.checkpw,
+        password_bytes,
         hashed_password.encode('utf-8')
     )
 
 
-def get_password_hash(password: str) -> str:
+async def get_password_hash(password: str) -> str:
     """Hash a password."""
     # Truncate to 72 bytes (bcrypt limit)
     password_bytes = password.encode('utf-8')[:72]
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password_bytes, salt).decode('utf-8')
+
+    def _hash() -> str:
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password_bytes, salt).decode('utf-8')
+
+    return await asyncio.to_thread(_hash)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
