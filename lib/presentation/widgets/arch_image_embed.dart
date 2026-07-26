@@ -406,34 +406,34 @@ class _AnalysisDialog extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Geo-data information',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    fontFamily: 'Inter',
+                const Expanded(
+                  child: Text(
+                    'Geo-data information',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      fontFamily: 'Inter',
+                    ),
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (onDelete != null)
-                      IconButton(
-                        onPressed: onDelete,
-                        icon: const Icon(
-                          Icons.delete_outline,
-                          color: Colors.redAccent,
-                        ),
-                        tooltip: 'Delete Analysis',
-                      ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close, color: Colors.white),
+                if (onDelete != null)
+                  IconButton(
+                    onPressed: onDelete,
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(
+                      Icons.delete_outline,
+                      color: Colors.redAccent,
                     ),
-                  ],
+                    tooltip: 'Delete Analysis',
+                  ),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  visualDensity: VisualDensity.compact,
+                  icon: const Icon(Icons.close, color: Colors.white),
                 ),
               ],
             ),
