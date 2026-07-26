@@ -5,7 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-/// Verifies the v6 -> v7 upgrade against a database built with the real v6
+/// Verifies the v6 -> v8 upgrade against a database built with the real v6
 /// schema, because a broken migration corrupts existing users' data rather
 /// than failing loudly in review.
 void main() {
@@ -48,7 +48,7 @@ void main() {
     return db;
   }
 
-  test('upgrades a v6 database to v7 and keeps existing photos', () async {
+  test('upgrades a v6 database to v8 and keeps existing photos', () async {
     final raw = buildV6Database();
     // A photo captured before the upgrade: has coordinates, no note link.
     raw.execute(
@@ -63,7 +63,7 @@ void main() {
     // Any query forces the migration to run.
     final rows = await database.select(database.imageMetadata).get();
 
-    expect(database.schemaVersion, 7);
+    expect(database.schemaVersion, 8);
     expect(rows.single.id, 'legacy');
     expect(rows.single.latitude, 12.5);
     // New columns take their defaults rather than dropping the row.
@@ -108,7 +108,7 @@ void main() {
     expect(comments.single.body, 'found near the hearth');
   });
 
-  test('a fresh database is created directly at v7', () async {
+  test('a fresh database is created directly at v8', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 
