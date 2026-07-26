@@ -1,3 +1,4 @@
+import '../presentation/artifacts/artifacts_dependencies.dart';
 import '../presentation/audio/audio_dependencies.dart';
 import '../presentation/auth/auth_dependencies.dart';
 import '../presentation/core_deps/core_dependencies.dart';
@@ -21,6 +22,7 @@ class Dependencies {
     required this.transcription,
     required this.audio,
     required this.editor,
+    required this.artifacts,
   });
 
   final CoreDependencies core;
@@ -32,4 +34,5 @@ class Dependencies {
   final TranscriptionDependencies transcription;
   final AudioDependencies audio;
   final EditorDependencies editor;
+  final ArtifactsDependencies artifacts;
 }

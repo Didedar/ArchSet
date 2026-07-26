@@ -9,6 +9,8 @@ import 'package:archset_r2/data/services/api_service.dart';
 import 'package:archset_r2/data/services/sync_service.dart';
 import 'package:archset_r2/data/repository/notes_repository.dart';
 import 'package:archset_r2/domain/services/audio_service.dart';
+import 'package:archset_r2/data/repository/artifacts_repository.dart';
+import 'package:archset_r2/presentation/artifacts/artifacts_dependencies.dart';
 import 'package:archset_r2/presentation/audio/audio_dependencies.dart';
 import 'package:archset_r2/presentation/auth/auth_dependencies.dart';
 import 'package:archset_r2/presentation/core_deps/core_dependencies.dart';
@@ -66,6 +68,10 @@ void main() {
       apiService: apiService,
     );
 
+    final artifacts = ArtifactsDependencies(
+      repository: ArtifactsRepository(database),
+    );
+
     final dependencies = Dependencies(
       core: core,
       theme: theme,
@@ -76,6 +82,7 @@ void main() {
       transcription: transcription,
       audio: audio,
       editor: editor,
+      artifacts: artifacts,
     );
 
     expect(dependencies.core, same(core));
@@ -87,5 +94,6 @@ void main() {
     expect(dependencies.transcription, same(transcription));
     expect(dependencies.audio, same(audio));
     expect(dependencies.editor, same(editor));
+    expect(dependencies.artifacts, same(artifacts));
   });
 }

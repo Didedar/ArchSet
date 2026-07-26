@@ -42,6 +42,10 @@ class User(Base):
     # Relationships
     folders = relationship("Folder", back_populates="user", cascade="all, delete-orphan")
     notes = relationship("Note", back_populates="user", cascade="all, delete-orphan")
+    artifacts = relationship("Artifact", back_populates="user", cascade="all, delete-orphan")
+    artifact_comments = relationship(
+        "ArtifactComment", back_populates="user", cascade="all, delete-orphan"
+    )
     
     def __repr__(self) -> str:
         return f"<User(id={self.id}, email={self.email})>"

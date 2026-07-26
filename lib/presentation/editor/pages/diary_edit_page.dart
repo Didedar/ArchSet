@@ -63,6 +63,12 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
   /// rebuilds only the toolbar rather than the whole editor page.
   final ValueNotifier<Style> _selectionStyle = ValueNotifier(const Style());
 
+  /// Stable id for the note being edited, resolved once.
+  ///
+  /// A photo inserted before the first save still needs a note id to point at,
+  /// and minting one per save would let repeat saves of a new note diverge.
+  late final String _noteId = widget.noteId ?? const Uuid().v4();
+
   @override
   void initState() {
     super.initState();
@@ -135,11 +141,10 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
     );
     final plainText = _quillController.document.toPlainText().trim();
 
-    final noteId = widget.noteId ?? const Uuid().v4();
     final editorBloc = context.read<EditorBloc>();
     editorBloc.add(
       EditorSaveRequested(
-        noteId: noteId,
+        noteId: _noteId,
         title: title,
         contentJson: contentJson,
         plainText: plainText,
@@ -774,6 +779,9 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
                 latitude: drift.Value(latitude),
                 longitude: drift.Value(longitude),
                 capturedAt: drift.Value(DateTime.now()),
+                // Links the pin back to its note, and marks the row for sync.
+                noteId: drift.Value(_noteId),
+                updatedAt: drift.Value(DateTime.now()),
               ),
             );
       } catch (e) {

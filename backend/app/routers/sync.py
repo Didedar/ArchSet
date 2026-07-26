@@ -26,19 +26,24 @@ async def sync_data(
     Synchronize local data with server.
     
     This endpoint handles bidirectional sync:
-    1. Client sends local changes (notes and folders)
+    1. Client sends local changes (notes, folders, artifacts and comments)
     2. Server applies changes using "last write wins"
     3. Server returns all changes since client's last sync
-    
+
     **Conflict Resolution**: If the same item was modified on both
     client and server, the version with the later `updated_at`
     timestamp wins.
-    
+
     **Deleted Items**: Items with `is_deleted: true` will be soft-deleted
     on the server. Clients should hide these but keep them for sync.
+
+    **Ordering**: Collections are synced parents-first (notes -> artifacts ->
+    artifact comments) so that references between them resolve within a
+    single request. Every collection is optional, so clients that don't send
+    artifacts behave exactly as before.
     """
     service = SyncService(db)
-    
+
     # Sync notes
     synced_notes = await service.sync_notes(
         user=current_user,
@@ -46,16 +51,32 @@ async def sync_data(
         last_sync_at=sync_request.last_sync_at,
         background_tasks=background_tasks
     )
-    
+
     # Sync folders
     synced_folders = await service.sync_folders(
         user=current_user,
         client_folders=sync_request.folders,
         last_sync_at=sync_request.last_sync_at
     )
-    
+
+    # Sync artifacts -- after notes, so artifact.note_id can resolve
+    synced_artifacts = await service.sync_artifacts(
+        user=current_user,
+        client_artifacts=sync_request.artifacts,
+        last_sync_at=sync_request.last_sync_at
+    )
+
+    # Sync artifact comments -- after artifacts, so comment.artifact_id can resolve
+    synced_artifact_comments = await service.sync_artifact_comments(
+        user=current_user,
+        client_comments=sync_request.artifact_comments,
+        last_sync_at=sync_request.last_sync_at
+    )
+
     return SyncResponse(
         notes=synced_notes,
         folders=synced_folders,
+        artifacts=synced_artifacts,
+        artifact_comments=synced_artifact_comments,
         sync_timestamp=datetime.utcnow()
     )

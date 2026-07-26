@@ -15,6 +15,8 @@ import 'package:archset_r2/domain/repositories/locale_repository.dart';
 import 'package:archset_r2/domain/repositories/theme_repository.dart';
 import 'package:archset_r2/domain/services/audio_service.dart';
 import 'package:archset_r2/data/repository/notes_repository.dart';
+import 'package:archset_r2/data/repository/artifacts_repository.dart';
+import 'package:archset_r2/presentation/artifacts/artifacts_dependencies.dart';
 import 'package:archset_r2/presentation/audio/audio_dependencies.dart';
 import 'package:archset_r2/presentation/audio/bloc/audio_bloc.dart';
 import 'package:archset_r2/presentation/auth/auth_dependencies.dart';
@@ -60,35 +62,46 @@ void main() {
 
   setUp(() {
     themeRepository = _MockThemeRepository();
-    when(() => themeRepository.loadThemeMode())
-        .thenAnswer((_) async => ThemeMode.system);
+    when(
+      () => themeRepository.loadThemeMode(),
+    ).thenAnswer((_) async => ThemeMode.system);
     localeRepository = _MockLocaleRepository();
-    when(() => localeRepository.loadLocale())
-        .thenAnswer((_) async => const Locale('en'));
+    when(
+      () => localeRepository.loadLocale(),
+    ).thenAnswer((_) async => const Locale('en'));
     syncService = _MockSyncService();
     when(() => syncService.startMonitoring()).thenReturn(null);
-    when(() => syncService.statusStream)
-        .thenAnswer((_) => const Stream<SyncStatus>.empty());
-    when(() => syncService.resultStream)
-        .thenAnswer((_) => const Stream<SyncResult>.empty());
+    when(
+      () => syncService.statusStream,
+    ).thenAnswer((_) => const Stream<SyncStatus>.empty());
+    when(
+      () => syncService.resultStream,
+    ).thenAnswer((_) => const Stream<SyncResult>.empty());
     whisperService = _MockWhisperService();
-    when(() => whisperService.isModelDownloaded())
-        .thenAnswer((_) async => false);
+    when(
+      () => whisperService.isModelDownloaded(),
+    ).thenAnswer((_) async => false);
 
     final database = FakeAppDatabase();
     final audioService = _MockAudioService();
-    when(() => audioService.recordingDurationStream)
-        .thenAnswer((_) => const Stream.empty());
-    when(() => audioService.playbackPositionStream)
-        .thenAnswer((_) => const Stream.empty());
-    when(() => audioService.playbackDurationStream)
-        .thenAnswer((_) => const Stream.empty());
-    when(() => audioService.amplitudeStream)
-        .thenAnswer((_) => const Stream.empty());
-    when(() => audioService.playerStateStream)
-        .thenAnswer((_) => const Stream.empty());
-    when(() => audioService.currentIndexStream)
-        .thenAnswer((_) => const Stream.empty());
+    when(
+      () => audioService.recordingDurationStream,
+    ).thenAnswer((_) => const Stream.empty());
+    when(
+      () => audioService.playbackPositionStream,
+    ).thenAnswer((_) => const Stream.empty());
+    when(
+      () => audioService.playbackDurationStream,
+    ).thenAnswer((_) => const Stream.empty());
+    when(
+      () => audioService.amplitudeStream,
+    ).thenAnswer((_) => const Stream.empty());
+    when(
+      () => audioService.playerStateStream,
+    ).thenAnswer((_) => const Stream.empty());
+    when(
+      () => audioService.currentIndexStream,
+    ).thenAnswer((_) => const Stream.empty());
     final geminiService = _MockBackendGeminiService();
     final apiService = _MockApiServiceForScope();
 
@@ -114,63 +127,70 @@ void main() {
         geminiService: geminiService,
         apiService: apiService,
       ),
+      artifacts: ArtifactsDependencies(
+        repository: ArtifactsRepository(database),
+      ),
     );
   });
 
-  testWidgets('exposes Dependencies and CoreDependencies to descendants',
-      (tester) async {
+  testWidgets('exposes Dependencies and CoreDependencies to descendants', (
+    tester,
+  ) async {
     late BuildContext capturedContext;
 
-    await tester.pumpWidget(AppScope(
-      dependencies: dependencies,
-      child: Builder(
-        builder: (context) {
-          capturedContext = context;
-          return const SizedBox();
-        },
+    await tester.pumpWidget(
+      AppScope(
+        dependencies: dependencies,
+        child: Builder(
+          builder: (context) {
+            capturedContext = context;
+            return const SizedBox();
+          },
+        ),
       ),
-    ));
+    );
 
     expect(capturedContext.di, same(dependencies));
     expect(capturedContext.coreDependencies, same(dependencies.core));
   });
 
   testWidgets(
-      'exposes ThemeBloc, LocaleBloc, AuthBloc, and SyncBloc to descendants',
-      (tester) async {
-    late BuildContext capturedContext;
+    'exposes ThemeBloc, LocaleBloc, AuthBloc, and SyncBloc to descendants',
+    (tester) async {
+      late BuildContext capturedContext;
 
-    await tester.pumpWidget(AppScope(
-      dependencies: dependencies,
-      child: Builder(
-        builder: (context) {
-          capturedContext = context;
-          return const SizedBox();
-        },
-      ),
-    ));
+      await tester.pumpWidget(
+        AppScope(
+          dependencies: dependencies,
+          child: Builder(
+            builder: (context) {
+              capturedContext = context;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
 
-    expect(BlocProvider.of<ThemeBloc>(capturedContext), isA<ThemeBloc>());
-    expect(BlocProvider.of<LocaleBloc>(capturedContext), isA<LocaleBloc>());
-    expect(BlocProvider.of<AuthBloc>(capturedContext), isA<AuthBloc>());
-    expect(BlocProvider.of<SyncBloc>(capturedContext), isA<SyncBloc>());
-    expect(BlocProvider.of<NotesBloc>(capturedContext), isA<NotesBloc>());
-    expect(BlocProvider.of<FoldersBloc>(capturedContext), isA<FoldersBloc>());
-    expect(
-      BlocProvider.of<TranscriptionBloc>(capturedContext),
-      isA<TranscriptionBloc>(),
-    );
-    expect(BlocProvider.of<AudioBloc>(capturedContext), isA<AudioBloc>());
-    expect(BlocProvider.of<EditorBloc>(capturedContext), isA<EditorBloc>());
-  });
+      expect(BlocProvider.of<ThemeBloc>(capturedContext), isA<ThemeBloc>());
+      expect(BlocProvider.of<LocaleBloc>(capturedContext), isA<LocaleBloc>());
+      expect(BlocProvider.of<AuthBloc>(capturedContext), isA<AuthBloc>());
+      expect(BlocProvider.of<SyncBloc>(capturedContext), isA<SyncBloc>());
+      expect(BlocProvider.of<NotesBloc>(capturedContext), isA<NotesBloc>());
+      expect(BlocProvider.of<FoldersBloc>(capturedContext), isA<FoldersBloc>());
+      expect(
+        BlocProvider.of<TranscriptionBloc>(capturedContext),
+        isA<TranscriptionBloc>(),
+      );
+      expect(BlocProvider.of<AudioBloc>(capturedContext), isA<AudioBloc>());
+      expect(BlocProvider.of<EditorBloc>(capturedContext), isA<EditorBloc>());
+    },
+  );
 
-  testWidgets(
-      'ThemeBloc, LocaleBloc, SyncBloc, and TranscriptionBloc start on '
+  testWidgets('ThemeBloc, LocaleBloc, SyncBloc, and TranscriptionBloc start on '
       'creation (not lazily)', (tester) async {
-    await tester.pumpWidget(AppScope(
-      dependencies: dependencies,
-      child: const SizedBox(),
-    ));
+    await tester.pumpWidget(
+      AppScope(dependencies: dependencies, child: const SizedBox()),
+    );
     await tester.pump();
 
     verify(() => themeRepository.loadThemeMode()).called(1);

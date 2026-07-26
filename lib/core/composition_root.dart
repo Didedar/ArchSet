@@ -1,3 +1,4 @@
+import '../presentation/artifacts/artifacts_dependencies_builder.dart';
 import '../presentation/audio/audio_dependencies_builder.dart';
 import '../presentation/auth/auth_dependencies_builder.dart';
 import '../presentation/core_deps/core_dependencies_builder.dart';
@@ -33,6 +34,7 @@ class CompositionRoot {
         transcription.whisperService,
       );
       final editor = EditorDependenciesBuilder.build(core, auth);
+      final artifacts = ArtifactsDependenciesBuilder.build(core);
 
       stopwatch.stop();
       logger.info(
@@ -48,6 +50,7 @@ class CompositionRoot {
         transcription: transcription,
         audio: audio,
         editor: editor,
+        artifacts: artifacts,
       );
     } catch (error, stackTrace) {
       logger.error('Failed to initialize dependencies', error, stackTrace);

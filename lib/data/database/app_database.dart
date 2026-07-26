@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 part 'app_database.g.dart';
 
@@ -32,7 +33,10 @@ class Notes extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// Image metadata table for storing analysis and location
+/// Image metadata table for storing analysis and location.
+///
+/// A row with non-null [latitude]/[longitude] is what the artifacts map
+/// renders as a pin.
 class ImageMetadata extends Table {
   TextColumn get id => text()();
   TextColumn get imagePath =>
@@ -42,19 +46,41 @@ class ImageMetadata extends Table {
   TextColumn get analysisResult =>
       text().nullable()(); // JSON string from Gemini
   DateTimeColumn get capturedAt => dateTime()();
+  TextColumn get noteId =>
+      text().nullable()(); // Reference to Notes.id the photo was taken in
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
-@DriftDatabase(tables: [Folders, Notes, ImageMetadata])
+/// Free-form comments a user writes against a single artifact.
+class ArtifactComments extends Table {
+  TextColumn get id => text()();
+  TextColumn get artifactId => text()(); // Reference to ImageMetadata.id
+  TextColumn get body => text()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+  BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DriftDatabase(tables: [Folders, Notes, ImageMetadata, ArtifactComments])
 class AppDatabase extends _$AppDatabase {
   /// [executor] is only supplied by tests (e.g. an in-memory database);
   /// production always uses the lazily-connecting platform executor.
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
 
+  /// Runs against a caller-supplied executor so tests can use an in-memory
+  /// database instead of the on-disk singleton.
+  @visibleForTesting
+  AppDatabase.forTesting(super.executor);
+
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   /// Indexes covering every filter/sort the repository actually issues.
   ///
@@ -123,6 +149,15 @@ class AppDatabase extends _$AppDatabase {
       if (from < 7) {
         // Backfill the query indexes onto existing installs.
         await _createIndexes();
+      }
+      if (from < 8) {
+        // Artifacts map: link photos back to their note and give them the
+        // same updatedAt/isDeleted shape Notes and Folders use for sync.
+        // Pre-existing rows keep noteId == null and still render on the map.
+        await m.addColumn(imageMetadata, imageMetadata.noteId);
+        await m.addColumn(imageMetadata, imageMetadata.updatedAt);
+        await m.addColumn(imageMetadata, imageMetadata.isDeleted);
+        await m.createTable(artifactComments);
       }
     },
   );
