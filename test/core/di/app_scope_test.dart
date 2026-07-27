@@ -29,6 +29,7 @@ import 'package:archset_r2/presentation/locale/locale_dependencies.dart';
 import 'package:archset_r2/presentation/notes/bloc/folders_bloc.dart';
 import 'package:archset_r2/presentation/notes/bloc/notes_bloc.dart';
 import 'package:archset_r2/presentation/notes/notes_dependencies.dart';
+import 'package:archset_r2/presentation/session/bloc/session_cubit.dart';
 import 'package:archset_r2/presentation/sync/bloc/sync_bloc.dart';
 import 'package:archset_r2/presentation/sync/sync_dependencies.dart';
 import 'package:archset_r2/presentation/theme/bloc/theme_bloc.dart';
@@ -57,6 +58,7 @@ void main() {
   late Dependencies dependencies;
   late _MockThemeRepository themeRepository;
   late _MockLocaleRepository localeRepository;
+  late _MockAuthService authService;
   late _MockSyncService syncService;
   late _MockWhisperService whisperService;
 
@@ -69,6 +71,16 @@ void main() {
     when(
       () => localeRepository.loadLocale(),
     ).thenAnswer((_) async => const Locale('en'));
+    authService = _MockAuthService();
+    // SessionCubit is created eagerly (lazy: false) and bootstrapped
+    // immediately, so both of these are read/called during AppScope's own
+    // build -- unlike loadStoredUser()'s failure (caught inside
+    // SessionCubit.bootstrap itself), an unstubbed onSessionExpired getter
+    // would throw synchronously while building the provider tree.
+    when(
+      () => authService.onSessionExpired,
+    ).thenAnswer((_) => const Stream<void>.empty());
+    when(() => authService.loadStoredUser()).thenAnswer((_) async => null);
     syncService = _MockSyncService();
     when(() => syncService.startMonitoring()).thenReturn(null);
     when(
@@ -113,7 +125,7 @@ void main() {
       ),
       theme: ThemeDependencies(repository: themeRepository),
       locale: LocaleDependencies(repository: localeRepository),
-      auth: AuthDependencies(repository: _MockAuthService()),
+      auth: AuthDependencies(repository: authService),
       sync: SyncDependencies(service: syncService),
       notes: NotesDependencies(repository: NotesRepository(database)),
       transcription: TranscriptionDependencies(whisperService: whisperService),
@@ -174,6 +186,10 @@ void main() {
       expect(BlocProvider.of<ThemeBloc>(capturedContext), isA<ThemeBloc>());
       expect(BlocProvider.of<LocaleBloc>(capturedContext), isA<LocaleBloc>());
       expect(BlocProvider.of<AuthBloc>(capturedContext), isA<AuthBloc>());
+      expect(
+        BlocProvider.of<SessionCubit>(capturedContext),
+        isA<SessionCubit>(),
+      );
       expect(BlocProvider.of<SyncBloc>(capturedContext), isA<SyncBloc>());
       expect(BlocProvider.of<NotesBloc>(capturedContext), isA<NotesBloc>());
       expect(BlocProvider.of<FoldersBloc>(capturedContext), isA<FoldersBloc>());
@@ -186,16 +202,20 @@ void main() {
     },
   );
 
-  testWidgets('ThemeBloc, LocaleBloc, SyncBloc, and TranscriptionBloc start on '
-      'creation (not lazily)', (tester) async {
-    await tester.pumpWidget(
-      AppScope(dependencies: dependencies, child: const SizedBox()),
-    );
-    await tester.pump();
+  testWidgets(
+    'ThemeBloc, LocaleBloc, SessionCubit, SyncBloc, and TranscriptionBloc '
+    'start on creation (not lazily)',
+    (tester) async {
+      await tester.pumpWidget(
+        AppScope(dependencies: dependencies, child: const SizedBox()),
+      );
+      await tester.pump();
 
-    verify(() => themeRepository.loadThemeMode()).called(1);
-    verify(() => localeRepository.loadLocale()).called(1);
-    verify(() => syncService.startMonitoring()).called(1);
-    verify(() => whisperService.isModelDownloaded()).called(1);
-  });
+      verify(() => themeRepository.loadThemeMode()).called(1);
+      verify(() => localeRepository.loadLocale()).called(1);
+      verify(() => authService.loadStoredUser()).called(1);
+      verify(() => syncService.startMonitoring()).called(1);
+      verify(() => whisperService.isModelDownloaded()).called(1);
+    },
+  );
 }

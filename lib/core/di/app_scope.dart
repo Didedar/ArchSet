@@ -9,6 +9,7 @@ import '../../presentation/editor/bloc/editor_bloc.dart';
 import '../../presentation/locale/bloc/locale_bloc.dart';
 import '../../presentation/notes/bloc/folders_bloc.dart';
 import '../../presentation/notes/bloc/notes_bloc.dart';
+import '../../presentation/session/bloc/session_cubit.dart';
 import '../../presentation/sync/bloc/sync_bloc.dart';
 import '../../presentation/theme/bloc/theme_bloc.dart';
 import '../../presentation/transcription/bloc/transcription_bloc.dart';
@@ -32,8 +33,9 @@ class AppScope extends StatelessWidget {
         providers: [
           BlocProvider<ThemeBloc>(
             lazy: false,
-            create: (_) => ThemeBloc(repository: dependencies.theme.repository)
-              ..add(const ThemeLoadRequested()),
+            create: (_) =>
+                ThemeBloc(repository: dependencies.theme.repository)
+                  ..add(const ThemeLoadRequested()),
           ),
           BlocProvider<LocaleBloc>(
             lazy: false,
@@ -44,10 +46,25 @@ class AppScope extends StatelessWidget {
           BlocProvider<AuthBloc>(
             create: (_) => AuthBloc(repository: dependencies.auth.repository),
           ),
+          // Eager + bootstrapped immediately: this is what SessionGate (the
+          // app's root screen) renders off of, so it must have resolved (or
+          // at least started resolving) the stored session before the first
+          // frame. `dependencies.auth.repository` is the concrete
+          // AuthService (see AuthDependencies), which is both an
+          // AuthRepository and the source of onSessionExpired.
+          BlocProvider<SessionCubit>(
+            lazy: false,
+            create: (_) => SessionCubit(
+              repository: dependencies.auth.repository,
+              sessionExpiredSignal:
+                  dependencies.auth.repository.onSessionExpired,
+            )..bootstrap(),
+          ),
           BlocProvider<SyncBloc>(
             lazy: false,
-            create: (_) => SyncBloc(service: dependencies.sync.service)
-              ..add(const SyncMonitoringStarted()),
+            create: (_) =>
+                SyncBloc(service: dependencies.sync.service)
+                  ..add(const SyncMonitoringStarted()),
           ),
           // Notes/Folders stay lazy (default): unlike Theme/Locale/Sync,
           // nothing needs to happen before a notes-related page actually

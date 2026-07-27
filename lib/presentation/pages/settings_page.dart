@@ -4,11 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../auth/bloc/auth_bloc.dart';
 import '../locale/bloc/locale_bloc.dart';
+import '../session/bloc/session_cubit.dart';
 import '../sync/bloc/sync_bloc.dart';
 import '../theme/bloc/theme_bloc.dart';
 import '../transcription/bloc/transcription_bloc.dart';
 import '../../core/localization/app_strings.dart';
-import '../auth/pages/welcome_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -562,19 +562,10 @@ class SettingsPage extends StatelessWidget {
       }
       if (!context.mounted) return;
 
-      final authBloc = context.read<AuthBloc>();
-      final loggedOut = authBloc.stream.firstWhere(
-        (state) => state is AuthUnauthenticated,
-      );
-      authBloc.add(const AuthLogoutRequested());
-      await loggedOut;
-
-      if (context.mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const WelcomePage()),
-          (route) => false,
-        );
-      }
+      // The global BlocListener<SessionCubit> in RootContext resets
+      // navigation back to the root screen (WelcomePage) once the session
+      // flips to Unauthenticated -- nothing to navigate here.
+      await context.read<SessionCubit>().logout();
     }
   }
 }

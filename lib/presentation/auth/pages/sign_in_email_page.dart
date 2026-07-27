@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../../notes/pages/notes_page.dart';
+import '../../session/bloc/session_cubit.dart';
 import '../bloc/auth_bloc.dart';
-import '../../sync/bloc/sync_bloc.dart';
 
 class SignInEmailPage extends StatefulWidget {
   const SignInEmailPage({super.key});
@@ -55,13 +53,11 @@ class _SignInEmailPageState extends State<SignInEmailPage> {
   void _onAuthStateChanged(BuildContext context, AuthState state) {
     if (state is! AuthAuthenticated) return;
 
-    // Fire-and-forget so it doesn't block navigation.
-    context.read<SyncBloc>().add(const SyncRequested());
-
-    Navigator.pushReplacement(
-      context,
-      CupertinoPageRoute(builder: (context) => const NotesPage()),
-    );
+    // Routing reacts to SessionCubit (see SessionGate / RootContext), not to
+    // AuthBloc directly -- this just reports the successful login. Claiming
+    // any local guest data and syncing is a separate, later step that reacts
+    // to the session becoming authenticated; it does not belong here.
+    context.read<SessionCubit>().loginSuccess(state.user);
   }
 
   @override
