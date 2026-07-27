@@ -262,15 +262,13 @@ class AuthService implements AuthRepository {
     }
   }
 
-  /// Logout and clear stored data
+  /// Local sign-out. Clears ONLY the namespaced session + current owner id.
+  /// The on-device diary (notes/folders/artifacts) is intentionally left
+  /// untouched — logging out must not destroy the user's local data.
   @override
   Future<void> logout() async {
     _currentUser = null;
-    await _storage.delete(key: AuthStorageKeys.accessToken(_originSlug));
-    await _storage.delete(key: AuthStorageKeys.refreshToken(_originSlug));
-    await _storage.delete(key: AuthStorageKeys.userId(_originSlug));
-    await _storage.delete(key: AuthStorageKeys.userEmail(_originSlug));
-    await _database.clearAllData();
+    await _clearNamespacedSession();
   }
 
   /// Load user from storage (for app startup).
