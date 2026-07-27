@@ -149,4 +149,37 @@ void main() {
     expect(folder1.ownerKey, 'user-1');
     expect(folder1.pendingSync, isFalse);
   });
+
+  group('cross-account isolation on a shared device', () {
+    test(
+      'claiming for a second account on the same device only claims the '
+      'fresh guest row and leaves the first account\'s clean data alone',
+      () async {
+        // user-1 already owns a clean (already-synced) note and folder on
+        // this device -- e.g. they logged out without wiping local data.
+        await insertNote('user1-note', ownerKey: 'user-1');
+        await insertFolder('user1-folder', ownerKey: 'user-1');
+        // A brand new guest note was then created before user-2 logged in.
+        await insertNote('guest-note');
+
+        final service = ClaimService(database);
+        final claimed = await service.claimGuestData('user-2');
+
+        // Only the guest row is claimed -- user-1's rows are untouched.
+        expect(claimed, 1);
+
+        final user1Note = await readNote('user1-note');
+        expect(user1Note.ownerKey, 'user-1');
+        expect(user1Note.pendingSync, isFalse);
+
+        final user1Folder = await readFolder('user1-folder');
+        expect(user1Folder.ownerKey, 'user-1');
+        expect(user1Folder.pendingSync, isFalse);
+
+        final guestNote = await readNote('guest-note');
+        expect(guestNote.ownerKey, 'user-2');
+        expect(guestNote.pendingSync, isTrue);
+      },
+    );
+  });
 }
