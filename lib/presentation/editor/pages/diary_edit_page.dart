@@ -69,6 +69,16 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
   /// and minting one per save would let repeat saves of a new note diverge.
   late final String _noteId = widget.noteId ?? const Uuid().v4();
 
+  /// True while a [_saveNote] call is in flight, guarding against a second
+  /// concurrent dispatch (e.g. a rapid double back-press) and disabling the
+  /// chevron mid-save.
+  bool _isSaving = false;
+
+  /// Lets [PopScope] allow the pop it triggers itself once a save (or a
+  /// delete) has finished. Starts false so every exit path -- system back,
+  /// the chevron, swipe-back -- is intercepted at least once.
+  bool _canPop = false;
+
   @override
   void initState() {
     super.initState();
@@ -133,26 +143,50 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
     _selectionStyle.value = _quillController.getSelectionStyle();
   }
 
-  Future<void> _saveNote() async {
-    final title = _titleController.text.trim();
-    // Save Quill document as JSON string
-    final contentJson = jsonEncode(
-      _quillController.document.toDelta().toJson(),
-    );
-    final plainText = _quillController.document.toPlainText().trim();
+  /// Persists the note (including audio-only notes with no title/text) and
+  /// reports whether the save succeeded.
+  ///
+  /// Guards against overlapping calls with [_isSaving] so a rapid
+  /// double-exit can't dispatch two saves, and awaits either terminal
+  /// outcome the bloc can emit -- unlike the old success-only wait, a
+  /// backend failure now resolves this instead of hanging forever.
+  Future<bool> _saveNote() async {
+    if (_isSaving) return false;
+    setState(() => _isSaving = true);
+    try {
+      final title = _titleController.text.trim();
+      // Save Quill document as JSON string
+      final contentJson = jsonEncode(
+        _quillController.document.toDelta().toJson(),
+      );
+      final plainText = _quillController.document.toPlainText().trim();
 
-    final editorBloc = context.read<EditorBloc>();
-    editorBloc.add(
-      EditorSaveRequested(
-        noteId: _noteId,
-        title: title,
-        contentJson: contentJson,
-        plainText: plainText,
-        folderId: _folderId,
-        audioPath: context.read<AudioBloc>().state.audioPath,
-      ),
-    );
-    await editorBloc.stream.firstWhere((s) => s is EditorSaveSuccess);
+      final editorBloc = context.read<EditorBloc>();
+      editorBloc.add(
+        EditorSaveRequested(
+          noteId: _noteId,
+          title: title,
+          contentJson: contentJson,
+          plainText: plainText,
+          folderId: _folderId,
+          audioPath: context.read<AudioBloc>().state.audioPath,
+        ),
+      );
+      final result = await editorBloc.stream.firstWhere(
+        (s) => s is EditorSaveSuccess || s is EditorSaveFailure,
+      );
+      if (result is EditorSaveFailure) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Save failed. Please try again.')),
+          );
+        }
+        return false;
+      }
+      return true;
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   void _removeOverlay() {
@@ -735,6 +769,9 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
 
     if (!mounted) return;
     Navigator.of(context).pop(); // Close loading
+    // The note is already gone; let PopScope's pop through as-is instead
+    // of re-saving (and resurrecting) the just-deleted note.
+    _canPop = true;
     Navigator.of(context).pop(); // Close the editor page
   }
 
@@ -1020,349 +1057,369 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
     final isDark = theme.brightness == Brightness.dark;
     final locale = context.watch<LocaleBloc>().state.locale;
 
-    return BlocListener<AudioBloc, AudioState>(
-      listenWhen: (previous, current) =>
-          current.lastTranscription != null &&
-          current.lastTranscription != previous.lastTranscription,
-      listener: (context, state) {
-        final text = state.lastTranscription!;
-        if (text.trim().isNotEmpty) {
-          // Insert transcription at the end of the document
-          final length = _quillController.document.length;
-          final currentText = _quillController.document.toPlainText().trim();
-          if (currentText.isEmpty) {
-            _quillController.document.insert(0, text);
-          } else {
-            _quillController.document.insert(length - 1, '\n\n$text');
-          }
-        }
-        context.read<AudioBloc>().add(const AudioLastTranscriptionCleared());
+    return PopScope<void>(
+      canPop: _canPop,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop || _isSaving) return;
+        final saved = await _saveNote();
+        if (!saved || !mounted) return;
+        setState(() => _canPop = true);
+        Navigator.of(context).pop();
       },
-      child: Scaffold(
-        backgroundColor: theme.scaffoldBackgroundColor,
-        body: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 10),
+      child: BlocListener<AudioBloc, AudioState>(
+        listenWhen: (previous, current) =>
+            current.lastTranscription != null &&
+            current.lastTranscription != previous.lastTranscription,
+        listener: (context, state) {
+          final text = state.lastTranscription!;
+          if (text.trim().isNotEmpty) {
+            // Insert transcription at the end of the document
+            final length = _quillController.document.length;
+            final currentText = _quillController.document.toPlainText().trim();
+            if (currentText.isEmpty) {
+              _quillController.document.insert(0, text);
+            } else {
+              _quillController.document.insert(length - 1, '\n\n$text');
+            }
+          }
+          context.read<AudioBloc>().add(const AudioLastTranscriptionCleared());
+        },
+        child: Scaffold(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          body: SafeArea(
+            child: Column(
+              children: [
+                const SizedBox(height: 10),
 
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: Icon(
-                              Icons.chevron_left,
-                              color: theme.iconTheme.color,
-                              size: 28,
-                            ),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            onPressed: () async {
-                              await _saveNote();
-                              if (mounted) {
-                                Navigator.of(context).pop();
-                              }
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          Flexible(
-                            child: TextField(
-                              controller: _titleController,
-                              style: TextStyle(
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w600,
-                                fontSize: 24,
-                                color: theme.colorScheme.onSurface,
+                // Header
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: Icon(
+                                Icons.chevron_left,
+                                color: theme.iconTheme.color,
+                                size: 28,
                               ),
-                              decoration: InputDecoration(
-                                hintText: AppStrings.tr(
-                                  locale,
-                                  AppStrings.diary,
-                                ),
-                                hintStyle: TextStyle(
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              // Routes through the same PopScope path as
+                              // system back instead of saving inline, and is
+                              // disabled mid-save so it can't double-dispatch.
+                              onPressed: _isSaving
+                                  ? null
+                                  : () => Navigator.of(context).maybePop(),
+                            ),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: TextField(
+                                controller: _titleController,
+                                style: TextStyle(
                                   fontFamily: 'Inter',
                                   fontWeight: FontWeight.w600,
                                   fontSize: 24,
-                                  color: theme.colorScheme.onSurface
-                                      .withOpacity(0.5),
+                                  color: theme.colorScheme.onSurface,
                                 ),
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.zero,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Icons Row. Scoped to the audio fields it actually reads
-                    // so recording/playback ticks can't rebuild the page.
-                    BlocBuilder<AudioBloc, AudioState>(
-                      buildWhen: (p, c) =>
-                          p.isRecording != c.isRecording ||
-                          p.recordingDuration != c.recordingDuration ||
-                          p.hasRecording != c.hasRecording,
-                      builder: (context, audioState) => Row(
-                        children: [
-                          // Recording Indicator
-                          if (audioState.isRecording)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2C2C2E),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.1),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: const BoxDecoration(
-                                      color: Colors.red,
-                                      shape: BoxShape.circle,
-                                    ),
+                                decoration: InputDecoration(
+                                  hintText: AppStrings.tr(
+                                    locale,
+                                    AppStrings.diary,
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _formatDuration(
-                                      audioState.recordingDuration,
-                                    ),
-                                    style: const TextStyle(
-                                      fontFamily: 'Inter',
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
+                                  hintStyle: TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 24,
+                                    color: theme.colorScheme.onSurface
+                                        .withOpacity(0.5),
                                   ),
-                                ],
-                              ),
-                            )
-                          else ...[
-                            // Audio Player Widget if audio exists and NOT recording
-                            if (audioState.hasRecording)
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: IconButton(
-                                  icon: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: theme.colorScheme.surface,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Icon(
-                                      Icons.graphic_eq,
-                                      color: theme.colorScheme.onSurface,
-                                      size: 20,
-                                    ),
-                                  ),
-                                  onPressed: () {
-                                    context.read<AudioBloc>().add(
-                                      const AudioPlayerExpansionToggled(),
-                                    );
-                                  },
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.zero,
                                 ),
-                              ),
-
-                            CompositedTransformTarget(
-                              link: _layerLink,
-                              child: IconButton(
-                                icon: SvgPicture.string(
-                                  '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> <path d="M19 13C19.5523 13 20 12.5523 20 12C20 11.4477 19.5523 11 19 11C18.4477 11 18 11.4477 18 12C18 12.5523 18.4477 13 19 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> <path d="M5 13C5.55228 13 6 12.5523 6 12C6 11.4477 5.55228 11 5 11C4.44772 11 4 11.4477 4 12C4 12.5523 4.44772 13 5 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> </svg>''',
-                                ),
-                                onPressed: _showCustomMenu,
                               ),
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
 
-              // Audio Player (Visible when expanded)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 24),
-                child: AudioPlayerWidget(),
-              ),
-
-              Divider(
-                color: theme.colorScheme.onSurface.withOpacity(0.1),
-                height: 1,
-              ),
-
-              // Editor
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 16,
-                  ),
-                  child: QuillEditor(
-                    controller: _quillController,
-                    focusNode: _editorFocusNode,
-                    scrollController: _editorScrollController,
-                    config: QuillEditorConfig(
-                      scrollable: true,
-                      autoFocus: false,
-                      expands: false,
-                      padding: EdgeInsets.zero,
-                      embedBuilders: [ArchImageEmbedBuilder()],
-                    ),
-                  ),
-                ),
-              ),
-
-              // Bottom Toolbar
-              Container(
-                padding: const EdgeInsets.only(
-                  left: 16,
-                  right: 16,
-                  top: 12,
-                  bottom: 8, // Little padding before safe area/bottom
-                ),
-                decoration: BoxDecoration(
-                  color: theme.brightness == Brightness.dark
-                      ? const Color(0xFF1C1C1E)
-                      : Colors.white,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(24),
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Formatting Buttons Row. Listens to the cached
-                    // selection style so only this row rebuilds on a
-                    // selection change.
-                    ValueListenableBuilder<Style>(
-                      valueListenable: _selectionStyle,
-                      builder: (context, style, _) => SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      // Icons Row. Scoped to the audio fields it actually reads
+                      // so recording/playback ticks can't rebuild the page.
+                      BlocBuilder<AudioBloc, AudioState>(
+                        buildWhen: (p, c) =>
+                            p.isRecording != c.isRecording ||
+                            p.recordingDuration != c.recordingDuration ||
+                            p.hasRecording != c.hasRecording,
+                        builder: (context, audioState) => Row(
                           children: [
-                            _buildFormatButton(
-                              label: 'H',
-                              onTap: () => _toggleAttribute(Attribute.header),
-                              isActive: _isActiveIn(style, Attribute.header),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              icon: Icons.undo,
-                              onTap: () => _quillController.undo(),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              icon: Icons.redo,
-                              onTap: () => _quillController.redo(),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              label: 'B',
-                              isBold: true,
-                              onTap: () => _toggleAttribute(Attribute.bold),
-                              isActive: _isActiveIn(style, Attribute.bold),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              label: 'U',
-                              isUnderline: true,
-                              onTap: () =>
-                                  _toggleAttribute(Attribute.underline),
-                              isActive: _isActiveIn(style, Attribute.underline),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              icon: Icons.format_strikethrough,
-                              onTap: () =>
-                                  _toggleAttribute(Attribute.strikeThrough),
-                              isActive: _isActiveIn(
-                                style,
-                                Attribute.strikeThrough,
+                            // Recording Indicator
+                            if (audioState.isRecording)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF2C2C2E),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.white.withOpacity(0.1),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.red,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      _formatDuration(
+                                        audioState.recordingDuration,
+                                      ),
+                                      style: const TextStyle(
+                                        fontFamily: 'Inter',
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else ...[
+                              // Audio Player Widget if audio exists and NOT recording
+                              if (audioState.hasRecording)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 8.0),
+                                  child: IconButton(
+                                    icon: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: theme.colorScheme.surface,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Icon(
+                                        Icons.graphic_eq,
+                                        color: theme.colorScheme.onSurface,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    onPressed: () {
+                                      context.read<AudioBloc>().add(
+                                        const AudioPlayerExpansionToggled(),
+                                      );
+                                    },
+                                  ),
+                                ),
+
+                              CompositedTransformTarget(
+                                link: _layerLink,
+                                child: IconButton(
+                                  icon: SvgPicture.string(
+                                    '''<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"> <path d="M12 13C12.5523 13 13 12.5523 13 12C13 11.4477 12.5523 11 12 11C11.4477 11 11 11.4477 11 12C11 12.5523 11.4477 13 12 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> <path d="M19 13C19.5523 13 20 12.5523 20 12C20 11.4477 19.5523 11 19 11C18.4477 11 18 11.4477 18 12C18 12.5523 18.4477 13 19 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> <path d="M5 13C5.55228 13 6 12.5523 6 12C6 11.4477 5.55228 11 5 11C4.44772 11 4 11.4477 4 12C4 12.5523 4.44772 13 5 13Z" stroke="${isDark ? 'white' : 'black'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" /> </svg>''',
+                                  ),
+                                  onPressed: _showCustomMenu,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              icon: Icons.check_box_outlined,
-                              onTap: () =>
-                                  _toggleAttribute(Attribute.unchecked),
-                              isActive:
-                                  _isActiveIn(style, Attribute.unchecked) ||
-                                  _isActiveIn(style, Attribute.checked),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              icon: Icons.format_list_bulleted,
-                              onTap: () => _toggleAttribute(Attribute.ul),
-                              isActive: _isActiveIn(style, Attribute.ul),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              icon: Icons.format_list_numbered,
-                              onTap: () => _toggleAttribute(Attribute.ol),
-                              isActive: _isActiveIn(style, Attribute.ol),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              icon: Icons.code,
-                              onTap: () =>
-                                  _toggleAttribute(Attribute.codeBlock),
-                              isActive: _isActiveIn(style, Attribute.codeBlock),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              icon: Icons.format_quote,
-                              onTap: () =>
-                                  _toggleAttribute(Attribute.blockQuote),
-                              isActive: _isActiveIn(
-                                style,
-                                Attribute.blockQuote,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            _buildFormatButton(
-                              icon: Icons.link,
-                              onTap: _showLinkDialog,
-                            ),
+                            ],
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 16),
+                    ],
+                  ),
+                ),
 
-                    // Action Buttons Row (Audio & AI)
-                    Row(
-                      children: [
-                        Expanded(
-                          // Only the record button's own colour depends on
-                          // audio state, so it subscribes to that one flag.
-                          child: BlocSelector<AudioBloc, AudioState, bool>(
-                            selector: (state) => state.isRecording,
-                            builder: (context, isRecording) =>
-                                _buildAudioButton(isRecording, isDark, locale),
+                // Audio Player (Visible when expanded)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24),
+                  child: AudioPlayerWidget(),
+                ),
+
+                Divider(
+                  color: theme.colorScheme.onSurface.withOpacity(0.1),
+                  height: 1,
+                ),
+
+                // Editor
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 16,
+                    ),
+                    child: QuillEditor(
+                      controller: _quillController,
+                      focusNode: _editorFocusNode,
+                      scrollController: _editorScrollController,
+                      config: QuillEditorConfig(
+                        scrollable: true,
+                        autoFocus: false,
+                        expands: false,
+                        padding: EdgeInsets.zero,
+                        embedBuilders: [ArchImageEmbedBuilder()],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Bottom Toolbar
+                Container(
+                  padding: const EdgeInsets.only(
+                    left: 16,
+                    right: 16,
+                    top: 12,
+                    bottom: 8, // Little padding before safe area/bottom
+                  ),
+                  decoration: BoxDecoration(
+                    color: theme.brightness == Brightness.dark
+                        ? const Color(0xFF1C1C1E)
+                        : Colors.white,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(24),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Formatting Buttons Row. Listens to the cached
+                      // selection style so only this row rebuilds on a
+                      // selection change.
+                      ValueListenableBuilder<Style>(
+                        valueListenable: _selectionStyle,
+                        builder: (context, style, _) => SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              _buildFormatButton(
+                                label: 'H',
+                                onTap: () => _toggleAttribute(Attribute.header),
+                                isActive: _isActiveIn(style, Attribute.header),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.undo,
+                                onTap: () => _quillController.undo(),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.redo,
+                                onTap: () => _quillController.redo(),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                label: 'B',
+                                isBold: true,
+                                onTap: () => _toggleAttribute(Attribute.bold),
+                                isActive: _isActiveIn(style, Attribute.bold),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                label: 'U',
+                                isUnderline: true,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.underline),
+                                isActive: _isActiveIn(
+                                  style,
+                                  Attribute.underline,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.format_strikethrough,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.strikeThrough),
+                                isActive: _isActiveIn(
+                                  style,
+                                  Attribute.strikeThrough,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.check_box_outlined,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.unchecked),
+                                isActive:
+                                    _isActiveIn(style, Attribute.unchecked) ||
+                                    _isActiveIn(style, Attribute.checked),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.format_list_bulleted,
+                                onTap: () => _toggleAttribute(Attribute.ul),
+                                isActive: _isActiveIn(style, Attribute.ul),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.format_list_numbered,
+                                onTap: () => _toggleAttribute(Attribute.ol),
+                                isActive: _isActiveIn(style, Attribute.ol),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.code,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.codeBlock),
+                                isActive: _isActiveIn(
+                                  style,
+                                  Attribute.codeBlock,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.format_quote,
+                                onTap: () =>
+                                    _toggleAttribute(Attribute.blockQuote),
+                                isActive: _isActiveIn(
+                                  style,
+                                  Attribute.blockQuote,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _buildFormatButton(
+                                icon: Icons.link,
+                                onTap: _showLinkDialog,
+                              ),
+                            ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(child: _buildAiButton(isDark, locale)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Action Buttons Row (Audio & AI)
+                      Row(
+                        children: [
+                          Expanded(
+                            // Only the record button's own colour depends on
+                            // audio state, so it subscribes to that one flag.
+                            child: BlocSelector<AudioBloc, AudioState, bool>(
+                              selector: (state) => state.isRecording,
+                              builder: (context, isRecording) =>
+                                  _buildAudioButton(
+                                    isRecording,
+                                    isDark,
+                                    locale,
+                                  ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(child: _buildAiButton(isDark, locale)),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
