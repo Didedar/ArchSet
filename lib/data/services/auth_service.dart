@@ -12,12 +12,39 @@ import 'api_service.dart';
 import '../../domain/repositories/auth_repository.dart';
 import '../database/app_database.dart';
 
-/// Storage keys for tokens
+/// Storage keys for tokens.
+///
+/// The app re-picks its backend (production vs. localhost) on every launch,
+/// but a JWT minted by one backend is meaningless to the other — they sign
+/// with different secrets and have different user databases. So every
+/// per-account key is namespaced by [originSlug], keyed off the backend's
+/// host+port, to stop a token (or cached identity) from one origin being
+/// misread as valid for another.
 class AuthStorageKeys {
-  static const String accessToken = 'access_token';
-  static const String refreshToken = 'refresh_token';
-  static const String userId = 'user_id';
-  static const String userEmail = 'user_email';
+  const AuthStorageKeys._();
+
+  static const String _accessTokenStem = 'access_token';
+  static const String _refreshTokenStem = 'refresh_token';
+  static const String _userIdStem = 'user_id';
+  static const String _userEmailStem = 'user_email';
+
+  /// The one account that owns the app right now (absent => guest). NOT
+  /// origin-scoped: it identifies the signed-in account regardless of which
+  /// backend it happens to be talking to.
+  static const String currentOwnerId = 'current_owner_id';
+
+  /// Stable slug for a backend origin (host+port).
+  static String originSlug(String baseUrl) {
+    final uri = Uri.tryParse(baseUrl);
+    final host = (uri == null || uri.host.isEmpty) ? 'local' : uri.host;
+    final port = uri?.port ?? 0;
+    return '${host}_$port'.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
+  }
+
+  static String accessToken(String slug) => '${_accessTokenStem}_$slug';
+  static String refreshToken(String slug) => '${_refreshTokenStem}_$slug';
+  static String userId(String slug) => '${_userIdStem}_$slug';
+  static String userEmail(String slug) => '${_userEmailStem}_$slug';
 }
 
 /// User model for authentication
@@ -68,6 +95,17 @@ class AuthService implements AuthRepository {
 
   AuthUser? _currentUser;
 
+  /// Slug for the backend this instance talks to, used to namespace every
+  /// per-account storage key so tokens/identities from one backend origin
+  /// are never read back as valid for another.
+  late final String _originSlug = AuthStorageKeys.originSlug(_baseUrl);
+
+  /// Broadcasts when a caller (e.g. an API client that just saw a 401 it
+  /// couldn't recover from) decides the current session is no longer valid.
+  /// Consumed later (B6) by SessionCubit's `sessionExpiredSignal`.
+  final StreamController<void> _sessionExpired =
+      StreamController<void>.broadcast();
+
   AuthService({
     required AppDatabase database,
     FlutterSecureStorage? storage,
@@ -82,6 +120,14 @@ class AuthService implements AuthRepository {
   @override
   AuthUser? get currentUser => _currentUser;
 
+  /// Emits whenever [notifySessionExpired] is called.
+  Stream<void> get onSessionExpired => _sessionExpired.stream;
+
+  /// Signals that the current session is no longer valid.
+  void notifySessionExpired() {
+    if (!_sessionExpired.isClosed) _sessionExpired.add(null);
+  }
+
   /// Check if user is logged in
   Future<bool> isLoggedIn() async {
     final token = await getAccessToken();
@@ -90,12 +136,12 @@ class AuthService implements AuthRepository {
 
   /// Get stored access token
   Future<String?> getAccessToken() async {
-    return await _storage.read(key: AuthStorageKeys.accessToken);
+    return await _storage.read(key: AuthStorageKeys.accessToken(_originSlug));
   }
 
   /// Get stored refresh token
   Future<String?> getRefreshToken() async {
-    return await _storage.read(key: AuthStorageKeys.refreshToken);
+    return await _storage.read(key: AuthStorageKeys.refreshToken(_originSlug));
   }
 
   /// Register a new user
@@ -111,6 +157,7 @@ class AuthService implements AuthRepository {
 
     if (response.statusCode == 201) {
       final user = AuthUser.fromJson(jsonDecode(response.body));
+      await _storage.write(key: AuthStorageKeys.currentOwnerId, value: user.id);
       return user;
     } else {
       final error = jsonDecode(response.body);
@@ -137,13 +184,13 @@ class AuthService implements AuthRepository {
 
     final tokens = AuthTokens.fromJson(jsonDecode(tokenResponse.body));
 
-    // Store tokens
+    // Store tokens, namespaced to this backend's origin.
     await _storage.write(
-      key: AuthStorageKeys.accessToken,
+      key: AuthStorageKeys.accessToken(_originSlug),
       value: tokens.accessToken,
     );
     await _storage.write(
-      key: AuthStorageKeys.refreshToken,
+      key: AuthStorageKeys.refreshToken(_originSlug),
       value: tokens.refreshToken,
     );
 
@@ -162,9 +209,18 @@ class AuthService implements AuthRepository {
       final user = AuthUser.fromJson(jsonDecode(userResponse.body));
       _currentUser = user;
 
-      // Store user info
-      await _storage.write(key: AuthStorageKeys.userId, value: user.id);
-      await _storage.write(key: AuthStorageKeys.userEmail, value: user.email);
+      // Store user info, namespaced to this backend's origin.
+      await _storage.write(
+        key: AuthStorageKeys.userId(_originSlug),
+        value: user.id,
+      );
+      await _storage.write(
+        key: AuthStorageKeys.userEmail(_originSlug),
+        value: user.email,
+      );
+      // The one account that owns the app right now. NOT origin-scoped: a
+      // later task reads this to claim guest data on this device.
+      await _storage.write(key: AuthStorageKeys.currentOwnerId, value: user.id);
 
       return user;
     } else {
@@ -189,11 +245,11 @@ class AuthService implements AuthRepository {
       if (response.statusCode == 200) {
         final tokens = AuthTokens.fromJson(jsonDecode(response.body));
         await _storage.write(
-          key: AuthStorageKeys.accessToken,
+          key: AuthStorageKeys.accessToken(_originSlug),
           value: tokens.accessToken,
         );
         await _storage.write(
-          key: AuthStorageKeys.refreshToken,
+          key: AuthStorageKeys.refreshToken(_originSlug),
           value: tokens.refreshToken,
         );
         return true;
@@ -210,10 +266,10 @@ class AuthService implements AuthRepository {
   @override
   Future<void> logout() async {
     _currentUser = null;
-    await _storage.delete(key: AuthStorageKeys.accessToken);
-    await _storage.delete(key: AuthStorageKeys.refreshToken);
-    await _storage.delete(key: AuthStorageKeys.userId);
-    await _storage.delete(key: AuthStorageKeys.userEmail);
+    await _storage.delete(key: AuthStorageKeys.accessToken(_originSlug));
+    await _storage.delete(key: AuthStorageKeys.refreshToken(_originSlug));
+    await _storage.delete(key: AuthStorageKeys.userId(_originSlug));
+    await _storage.delete(key: AuthStorageKeys.userEmail(_originSlug));
     await _database.clearAllData();
   }
 
@@ -227,8 +283,8 @@ class AuthService implements AuthRepository {
   @override
   Future<AuthUser?> loadStoredUser() async {
     final results = await Future.wait([
-      _storage.read(key: AuthStorageKeys.userId),
-      _storage.read(key: AuthStorageKeys.userEmail),
+      _storage.read(key: AuthStorageKeys.userId(_originSlug)),
+      _storage.read(key: AuthStorageKeys.userEmail(_originSlug)),
       getAccessToken(),
     ]);
     final userId = results[0];
@@ -266,8 +322,14 @@ class AuthService implements AuthRepository {
         final user = AuthUser.fromJson(jsonDecode(userResponse.body));
         _currentUser = user;
         await Future.wait([
-          _storage.write(key: AuthStorageKeys.userId, value: user.id),
-          _storage.write(key: AuthStorageKeys.userEmail, value: user.email),
+          _storage.write(
+            key: AuthStorageKeys.userId(_originSlug),
+            value: user.id,
+          ),
+          _storage.write(
+            key: AuthStorageKeys.userEmail(_originSlug),
+            value: user.email,
+          ),
         ]);
       } else if (userResponse.statusCode == 401) {
         // Token may just be expired. Refresh if we can; deliberately do NOT
@@ -283,5 +345,6 @@ class AuthService implements AuthRepository {
   /// Releases the shared HTTP client.
   void dispose() {
     _client.close();
+    _sessionExpired.close();
   }
 }
