@@ -143,6 +143,16 @@ class ApiService {
     throw ApiException(response.statusCode, message);
   }
 
+  /// The one place a failed post-401 refresh is observed. Firing the shared
+  /// AuthService's session-expired signal here (not in each verb) gives the
+  /// app a single choke point so SessionCubit leaves Notes for Welcome
+  /// instead of each feature silently swallowing a 401.
+  Future<bool> _attemptRefresh() async {
+    final refreshed = await _authService.refreshAccessToken();
+    if (!refreshed) _authService.notifySessionExpired();
+    return refreshed;
+  }
+
   /// Perform GET request with retry on 401
   Future<dynamic> get(String endpoint, {bool requireAuth = true}) async {
     try {
@@ -154,7 +164,7 @@ class ApiService {
     } on ApiException catch (e) {
       if (e.isUnauthorized && requireAuth) {
         // Token expired, try to refresh
-        final refreshed = await _authService.refreshAccessToken();
+        final refreshed = await _attemptRefresh();
         if (refreshed) {
           // Retry request with new token
           final headers = await _getHeaders(requireAuth: requireAuth);
@@ -190,7 +200,7 @@ class ApiService {
       return _handleResponse(response);
     } on ApiException catch (e) {
       if (e.isUnauthorized && requireAuth) {
-        final refreshed = await _authService.refreshAccessToken();
+        final refreshed = await _attemptRefresh();
         if (refreshed) {
           final headers = await _getHeaders(requireAuth: requireAuth);
           final response = await _client
@@ -229,7 +239,7 @@ class ApiService {
       return _handleResponse(response);
     } on ApiException catch (e) {
       if (e.isUnauthorized && requireAuth) {
-        final refreshed = await _authService.refreshAccessToken();
+        final refreshed = await _attemptRefresh();
         if (refreshed) {
           final headers = await _getHeaders(requireAuth: requireAuth);
           final response = await _client
@@ -260,7 +270,7 @@ class ApiService {
       _handleResponse(response);
     } on ApiException catch (e) {
       if (e.isUnauthorized && requireAuth) {
-        final refreshed = await _authService.refreshAccessToken();
+        final refreshed = await _attemptRefresh();
         if (refreshed) {
           final headers = await _getHeaders(requireAuth: requireAuth);
           final response = await _client
@@ -319,7 +329,7 @@ class ApiService {
       return _handleResponse(response);
     } on ApiException catch (e) {
       if (e.isUnauthorized && requireAuth) {
-        final refreshed = await _authService.refreshAccessToken();
+        final refreshed = await _attemptRefresh();
         if (refreshed) {
           final request = await createRequest();
           final streamedResponse = await _client
