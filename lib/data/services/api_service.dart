@@ -347,6 +347,20 @@ class ApiService {
     }
   }
 
+  /// Lightweight reachability probe for the sync layer. Hits the ROOT /health
+  /// (NOT under /api/v1), so it builds off ApiConfig.baseUrl. Returns false on
+  /// any error/timeout instead of throwing.
+  Future<bool> checkHealth() async {
+    try {
+      final response = await _client
+          .get(Uri.parse('${ApiConfig.baseUrl}/health'))
+          .timeout(const Duration(seconds: 5));
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Close the HTTP client
   void dispose() {
     _client.close();

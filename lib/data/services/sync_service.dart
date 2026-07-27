@@ -43,8 +43,14 @@ class SyncService {
   final AppDatabase _database;
   final Connectivity _connectivity;
   final FlutterSecureStorage _storage;
+  final List<Duration> _retryBackoff;
 
   static const String _lastSyncKey = 'last_sync_timestamp';
+
+  /// Un-namespaced signed-in account id (mirrors
+  /// `AuthStorageKeys.currentOwnerId`); absent means guest. Sync is a no-op
+  /// for guests -- there is no account to sync to yet.
+  static const String _ownerIdKey = 'current_owner_id';
 
   StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   final StreamController<SyncStatus> _statusController =
@@ -60,10 +66,14 @@ class SyncService {
     required AppDatabase database,
     Connectivity? connectivity,
     FlutterSecureStorage? storage,
+    List<Duration>? retryBackoff,
   }) : _apiService = apiService,
        _database = database,
        _connectivity = connectivity ?? Connectivity(),
-       _storage = storage ?? const FlutterSecureStorage() {
+       _storage = storage ?? const FlutterSecureStorage(),
+       _retryBackoff =
+           retryBackoff ??
+           const [Duration(seconds: 1), Duration(seconds: 2), Duration(seconds: 4)] {
     _loadLastSyncTime();
   }
 
@@ -117,10 +127,40 @@ class SyncService {
     _connectivitySubscription = null;
   }
 
-  /// Check if device is online
+  /// Check if device is online (connectivity only -- does not probe the
+  /// server). Kept as a lightweight public helper; [sync] itself gates on
+  /// [_isReachable], which additionally confirms the server responds.
   Future<bool> isOnline() async {
     final results = await _connectivity.checkConnectivity();
     return !results.contains(ConnectivityResult.none);
+  }
+
+  /// True only when there's a network interface up AND the backend answers
+  /// its health check. A phone can report "connected to wifi" while the
+  /// backend itself is unreachable (captive portal, VPN, server down), so
+  /// connectivity alone would send [sync] straight into the retry loop.
+  Future<bool> _isReachable() async {
+    final results = await _connectivity.checkConnectivity();
+    if (results.contains(ConnectivityResult.none)) return false;
+    return _apiService.checkHealth();
+  }
+
+  /// POSTs the sync payload, retrying with backoff on failure. Rethrows once
+  /// [_retryBackoff] is exhausted so the caller's catch-all in [sync] can
+  /// turn it into a [SyncStatus.error] result.
+  Future<Map<String, dynamic>> _pushWithRetry(
+    Map<String, dynamic> payload,
+  ) async {
+    var attempt = 0;
+    while (true) {
+      try {
+        final response = await _apiService.post('/sync', payload);
+        return response as Map<String, dynamic>;
+      } catch (_) {
+        if (attempt >= _retryBackoff.length) rethrow;
+        await Future.delayed(_retryBackoff[attempt++]);
+      }
+    }
   }
 
   /// Perform full sync with server
@@ -132,7 +172,14 @@ class SyncService {
       );
     }
 
-    if (!await isOnline()) {
+    // Guests have no account to sync to yet -- a local-only guest note is
+    // claimed on register/login, not synced beforehand.
+    final ownerId = await _storage.read(key: _ownerIdKey);
+    if (ownerId == null) {
+      return SyncResult(status: SyncStatus.idle, errorMessage: 'Not signed in');
+    }
+
+    if (!await _isReachable()) {
       _updateStatus(SyncStatus.offline);
       return SyncResult(
         status: SyncStatus.offline,
@@ -148,7 +195,7 @@ class SyncService {
         await _loadLastSyncTime();
       }
 
-      // Get unsynced local notes and folders
+      // Get unsynced (pendingSync == true) local notes and folders
       final localNotes = await _getUnsyncedNotes();
       final localFolders = await _getUnsyncedFolders();
       final localArtifacts = await _getUnsyncedArtifacts();
@@ -159,14 +206,24 @@ class SyncService {
         '${localArtifacts.length} artifacts, ${localComments.length} comments. Last sync: $_lastSyncAt',
       );
 
-      // Send to server
-      final response = await _apiService.post('/sync', {
-        'notes': localNotes,
-        'folders': localFolders,
+      // Send to server (with retry/backoff)
+      final response = await _pushWithRetry({
+        'notes': localNotes.map(_noteToSyncMap).toList(),
+        'folders': localFolders.map(_folderToSyncMap).toList(),
         'artifacts': localArtifacts,
         'artifact_comments': localComments,
         'last_sync_at': _lastSyncAt?.toIso8601String(),
       });
+
+      // Only clear the dirty flag for exactly the rows just pushed, matched
+      // on id AND updatedAt -- a row edited again mid-round-trip has a new
+      // updatedAt by the time this runs, so it won't match and stays dirty.
+      // This runs BEFORE applying server changes below: if the server
+      // response happens to echo back the same rows we just pushed, applying
+      // it first could stamp a new updatedAt and make the match below miss,
+      // leaving a successfully-synced row stuck dirty.
+      await _clearPendingNotes(localNotes);
+      await _clearPendingFolders(localFolders);
 
       // Apply server changes
       final serverNotes = (response['notes'] as List?) ?? [];
@@ -207,75 +264,71 @@ class SyncService {
     }
   }
 
-  /// Get notes that haven't been synced or modified since last sync
-  Future<List<Map<String, dynamic>>> _getUnsyncedNotes() async {
-    // Get all notes from database
-    // Optimization: Filter by updatedAt > _lastSyncAt if possible
-    // But for now, we send all modified notes.
-    // Ideally we should track a 'syncedAt' column locally too, or just use updatedAt comparison.
-    // If we assume strict clock sync (unreliable), comparing updatedAt > lastSyncAt is risky.
-    // Better strategy: Send anything where updatedAt > lastSyncAt OR lastSyncAt is null.
-
-    Expression<bool> predicate = const Constant(true);
-    if (_lastSyncAt != null) {
-      // Add a small buffer to avoid missing updates due to clock skew
-      final bufferTime = _lastSyncAt!.subtract(const Duration(seconds: 5));
-      predicate =
-          _database.notes.updatedAt.isBiggerThanValue(bufferTime) |
-          _database.notes.updatedAt.isNull();
-      // If updatedAt is null (legacy/new), include it.
-      // Actually new notes should have updatedAt.
-    }
-
-    final notes = await (_database.select(
+  /// Get local notes with a pending (unsynced) local change.
+  Future<List<Note>> _getUnsyncedNotes() async {
+    return (_database.select(
       _database.notes,
-    )..where((tbl) => predicate)).get();
-
-    // Convert to sync format
-    return notes
-        .map(
-          (note) => {
-            'id': note.id,
-            'title': note.title,
-            'content': note.content,
-            'folder_id': note.folderId,
-            'audio_path': note.audioPath,
-            'date': note.date.toIso8601String(),
-            'updated_at': (note.updatedAt ?? note.date)
-                .toIso8601String(), // Use updatedAt, fallback to date
-            'is_deleted': note.isDeleted,
-          },
-        )
-        .toList();
+    )..where((tbl) => tbl.pendingSync.equals(true))).get();
   }
 
-  /// Get folders that haven't been synced or modified since last sync
-  Future<List<Map<String, dynamic>>> _getUnsyncedFolders() async {
-    Expression<bool> predicate = const Constant(true);
-    if (_lastSyncAt != null) {
-      final bufferTime = _lastSyncAt!.subtract(const Duration(seconds: 5));
-      predicate =
-          _database.folders.updatedAt.isBiggerThanValue(bufferTime) |
-          _database.folders.updatedAt.isNull();
-    }
-
-    final folders = await (_database.select(
+  /// Get local folders with a pending (unsynced) local change.
+  Future<List<Folder>> _getUnsyncedFolders() async {
+    return (_database.select(
       _database.folders,
-    )..where((tbl) => predicate)).get();
+    )..where((tbl) => tbl.pendingSync.equals(true))).get();
+  }
 
-    // Convert to sync format
-    return folders
-        .map(
-          (folder) => {
-            'id': folder.id,
-            'name': folder.name,
-            'color': folder.color,
-            'updated_at': (folder.updatedAt ?? folder.createdAt)
-                .toIso8601String(),
-            'is_deleted': folder.isDeleted,
-          },
-        )
-        .toList();
+  /// Push payload shape for a single note. Keys match what the backend's
+  /// `/sync` endpoint already expects.
+  Map<String, dynamic> _noteToSyncMap(Note note) => {
+    'id': note.id,
+    'title': note.title,
+    'content': note.content,
+    'folder_id': note.folderId,
+    'audio_path': note.audioPath,
+    'date': note.date.toIso8601String(),
+    'updated_at': (note.updatedAt ?? note.date)
+        .toIso8601String(), // Use updatedAt, fallback to date
+    'is_deleted': note.isDeleted,
+  };
+
+  /// Push payload shape for a single folder.
+  Map<String, dynamic> _folderToSyncMap(Folder folder) => {
+    'id': folder.id,
+    'name': folder.name,
+    'color': folder.color,
+    'updated_at': (folder.updatedAt ?? folder.createdAt).toIso8601String(),
+    'is_deleted': folder.isDeleted,
+  };
+
+  /// Clears `pendingSync` for exactly the note rows just pushed, matching on
+  /// id AND updatedAt so a note re-edited while the push was in flight (its
+  /// updatedAt already moved on) keeps its dirty flag set.
+  Future<void> _clearPendingNotes(List<Note> pushed) async {
+    for (final n in pushed) {
+      await (_database.update(_database.notes)..where(
+            (t) =>
+                t.id.equals(n.id) &
+                (n.updatedAt == null
+                    ? t.updatedAt.isNull()
+                    : t.updatedAt.equals(n.updatedAt!)),
+          ))
+          .write(const NotesCompanion(pendingSync: Value(false)));
+    }
+  }
+
+  /// Folder counterpart of [_clearPendingNotes].
+  Future<void> _clearPendingFolders(List<Folder> pushed) async {
+    for (final f in pushed) {
+      await (_database.update(_database.folders)..where(
+            (t) =>
+                t.id.equals(f.id) &
+                (f.updatedAt == null
+                    ? t.updatedAt.isNull()
+                    : t.updatedAt.equals(f.updatedAt!)),
+          ))
+          .write(const FoldersCompanion(pendingSync: Value(false)));
+    }
   }
 
   /// Get artifacts (geotagged photos) modified since the last sync.
