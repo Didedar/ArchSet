@@ -12,6 +12,8 @@ class Folders extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  BoolColumn get pendingSync => boolean().withDefault(const Constant(false))();
+  TextColumn get ownerKey => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -28,6 +30,8 @@ class Notes extends Table {
       text().nullable()(); // Reference to Folders.id, null = "All Notes"
   DateTimeColumn get updatedAt => dateTime().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+  BoolColumn get pendingSync => boolean().withDefault(const Constant(false))();
+  TextColumn get ownerKey => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -80,7 +84,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   /// Indexes covering every filter/sort the repository actually issues.
   ///
@@ -158,6 +162,16 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(imageMetadata, imageMetadata.updatedAt);
         await m.addColumn(imageMetadata, imageMetadata.isDeleted);
         await m.createTable(artifactComments);
+      }
+      if (from < 9) {
+        // Offline-first sync: pendingSync marks locally-dirty rows and
+        // ownerKey records the claiming account (null = guest/unclaimed).
+        // addColumn backfills existing rows to false/null; no logic reads
+        // these columns yet.
+        await m.addColumn(notes, notes.pendingSync);
+        await m.addColumn(notes, notes.ownerKey);
+        await m.addColumn(folders, folders.pendingSync);
+        await m.addColumn(folders, folders.ownerKey);
       }
     },
   );

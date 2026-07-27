@@ -26,6 +26,7 @@ void main() {
         content: '',
         date: DateTime(2026, 1, 1),
         isDeleted: false,
+        pendingSync: false,
       ),
     );
   });

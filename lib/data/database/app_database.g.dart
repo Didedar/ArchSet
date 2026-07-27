@@ -73,6 +73,32 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _pendingSyncMeta = const VerificationMeta(
+    'pendingSync',
+  );
+  @override
+  late final GeneratedColumn<bool> pendingSync = GeneratedColumn<bool>(
+    'pending_sync',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pending_sync" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _ownerKeyMeta = const VerificationMeta(
+    'ownerKey',
+  );
+  @override
+  late final GeneratedColumn<String> ownerKey = GeneratedColumn<String>(
+    'owner_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -81,6 +107,8 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     createdAt,
     updatedAt,
     isDeleted,
+    pendingSync,
+    ownerKey,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -133,6 +161,21 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
       );
     }
+    if (data.containsKey('pending_sync')) {
+      context.handle(
+        _pendingSyncMeta,
+        pendingSync.isAcceptableOrUnknown(
+          data['pending_sync']!,
+          _pendingSyncMeta,
+        ),
+      );
+    }
+    if (data.containsKey('owner_key')) {
+      context.handle(
+        _ownerKeyMeta,
+        ownerKey.isAcceptableOrUnknown(data['owner_key']!, _ownerKeyMeta),
+      );
+    }
     return context;
   }
 
@@ -166,6 +209,14 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
       )!,
+      pendingSync: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pending_sync'],
+      )!,
+      ownerKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_key'],
+      ),
     );
   }
 
@@ -182,6 +233,8 @@ class Folder extends DataClass implements Insertable<Folder> {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final bool isDeleted;
+  final bool pendingSync;
+  final String? ownerKey;
   const Folder({
     required this.id,
     required this.name,
@@ -189,6 +242,8 @@ class Folder extends DataClass implements Insertable<Folder> {
     required this.createdAt,
     this.updatedAt,
     required this.isDeleted,
+    required this.pendingSync,
+    this.ownerKey,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -201,6 +256,10 @@ class Folder extends DataClass implements Insertable<Folder> {
       map['updated_at'] = Variable<DateTime>(updatedAt);
     }
     map['is_deleted'] = Variable<bool>(isDeleted);
+    map['pending_sync'] = Variable<bool>(pendingSync);
+    if (!nullToAbsent || ownerKey != null) {
+      map['owner_key'] = Variable<String>(ownerKey);
+    }
     return map;
   }
 
@@ -214,6 +273,10 @@ class Folder extends DataClass implements Insertable<Folder> {
           ? const Value.absent()
           : Value(updatedAt),
       isDeleted: Value(isDeleted),
+      pendingSync: Value(pendingSync),
+      ownerKey: ownerKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ownerKey),
     );
   }
 
@@ -229,6 +292,8 @@ class Folder extends DataClass implements Insertable<Folder> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      pendingSync: serializer.fromJson<bool>(json['pendingSync']),
+      ownerKey: serializer.fromJson<String?>(json['ownerKey']),
     );
   }
   @override
@@ -241,6 +306,8 @@ class Folder extends DataClass implements Insertable<Folder> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'pendingSync': serializer.toJson<bool>(pendingSync),
+      'ownerKey': serializer.toJson<String?>(ownerKey),
     };
   }
 
@@ -251,6 +318,8 @@ class Folder extends DataClass implements Insertable<Folder> {
     DateTime? createdAt,
     Value<DateTime?> updatedAt = const Value.absent(),
     bool? isDeleted,
+    bool? pendingSync,
+    Value<String?> ownerKey = const Value.absent(),
   }) => Folder(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -258,6 +327,8 @@ class Folder extends DataClass implements Insertable<Folder> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     isDeleted: isDeleted ?? this.isDeleted,
+    pendingSync: pendingSync ?? this.pendingSync,
+    ownerKey: ownerKey.present ? ownerKey.value : this.ownerKey,
   );
   Folder copyWithCompanion(FoldersCompanion data) {
     return Folder(
@@ -267,6 +338,10 @@ class Folder extends DataClass implements Insertable<Folder> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      pendingSync: data.pendingSync.present
+          ? data.pendingSync.value
+          : this.pendingSync,
+      ownerKey: data.ownerKey.present ? data.ownerKey.value : this.ownerKey,
     );
   }
 
@@ -278,14 +353,24 @@ class Folder extends DataClass implements Insertable<Folder> {
           ..write('color: $color, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('isDeleted: $isDeleted')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('pendingSync: $pendingSync, ')
+          ..write('ownerKey: $ownerKey')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, color, createdAt, updatedAt, isDeleted);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    color,
+    createdAt,
+    updatedAt,
+    isDeleted,
+    pendingSync,
+    ownerKey,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -295,7 +380,9 @@ class Folder extends DataClass implements Insertable<Folder> {
           other.color == this.color &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.isDeleted == this.isDeleted);
+          other.isDeleted == this.isDeleted &&
+          other.pendingSync == this.pendingSync &&
+          other.ownerKey == this.ownerKey);
 }
 
 class FoldersCompanion extends UpdateCompanion<Folder> {
@@ -305,6 +392,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
   final Value<bool> isDeleted;
+  final Value<bool> pendingSync;
+  final Value<String?> ownerKey;
   final Value<int> rowid;
   const FoldersCompanion({
     this.id = const Value.absent(),
@@ -313,6 +402,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.pendingSync = const Value.absent(),
+    this.ownerKey = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FoldersCompanion.insert({
@@ -322,6 +413,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     required DateTime createdAt,
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.pendingSync = const Value.absent(),
+    this.ownerKey = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -333,6 +426,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<bool>? isDeleted,
+    Expression<bool>? pendingSync,
+    Expression<String>? ownerKey,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -342,6 +437,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (pendingSync != null) 'pending_sync': pendingSync,
+      if (ownerKey != null) 'owner_key': ownerKey,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -353,6 +450,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Value<DateTime>? createdAt,
     Value<DateTime?>? updatedAt,
     Value<bool>? isDeleted,
+    Value<bool>? pendingSync,
+    Value<String?>? ownerKey,
     Value<int>? rowid,
   }) {
     return FoldersCompanion(
@@ -362,6 +461,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      pendingSync: pendingSync ?? this.pendingSync,
+      ownerKey: ownerKey ?? this.ownerKey,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -387,6 +488,12 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (pendingSync.present) {
+      map['pending_sync'] = Variable<bool>(pendingSync.value);
+    }
+    if (ownerKey.present) {
+      map['owner_key'] = Variable<String>(ownerKey.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -402,6 +509,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('pendingSync: $pendingSync, ')
+          ..write('ownerKey: $ownerKey, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -499,6 +608,32 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _pendingSyncMeta = const VerificationMeta(
+    'pendingSync',
+  );
+  @override
+  late final GeneratedColumn<bool> pendingSync = GeneratedColumn<bool>(
+    'pending_sync',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pending_sync" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _ownerKeyMeta = const VerificationMeta(
+    'ownerKey',
+  );
+  @override
+  late final GeneratedColumn<String> ownerKey = GeneratedColumn<String>(
+    'owner_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -509,6 +644,8 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     folderId,
     updatedAt,
     isDeleted,
+    pendingSync,
+    ownerKey,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -575,6 +712,21 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
       );
     }
+    if (data.containsKey('pending_sync')) {
+      context.handle(
+        _pendingSyncMeta,
+        pendingSync.isAcceptableOrUnknown(
+          data['pending_sync']!,
+          _pendingSyncMeta,
+        ),
+      );
+    }
+    if (data.containsKey('owner_key')) {
+      context.handle(
+        _ownerKeyMeta,
+        ownerKey.isAcceptableOrUnknown(data['owner_key']!, _ownerKeyMeta),
+      );
+    }
     return context;
   }
 
@@ -616,6 +768,14 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
       )!,
+      pendingSync: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pending_sync'],
+      )!,
+      ownerKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner_key'],
+      ),
     );
   }
 
@@ -634,6 +794,8 @@ class Note extends DataClass implements Insertable<Note> {
   final String? folderId;
   final DateTime? updatedAt;
   final bool isDeleted;
+  final bool pendingSync;
+  final String? ownerKey;
   const Note({
     required this.id,
     required this.title,
@@ -643,6 +805,8 @@ class Note extends DataClass implements Insertable<Note> {
     this.folderId,
     this.updatedAt,
     required this.isDeleted,
+    required this.pendingSync,
+    this.ownerKey,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -661,6 +825,10 @@ class Note extends DataClass implements Insertable<Note> {
       map['updated_at'] = Variable<DateTime>(updatedAt);
     }
     map['is_deleted'] = Variable<bool>(isDeleted);
+    map['pending_sync'] = Variable<bool>(pendingSync);
+    if (!nullToAbsent || ownerKey != null) {
+      map['owner_key'] = Variable<String>(ownerKey);
+    }
     return map;
   }
 
@@ -680,6 +848,10 @@ class Note extends DataClass implements Insertable<Note> {
           ? const Value.absent()
           : Value(updatedAt),
       isDeleted: Value(isDeleted),
+      pendingSync: Value(pendingSync),
+      ownerKey: ownerKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(ownerKey),
     );
   }
 
@@ -697,6 +869,8 @@ class Note extends DataClass implements Insertable<Note> {
       folderId: serializer.fromJson<String?>(json['folderId']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      pendingSync: serializer.fromJson<bool>(json['pendingSync']),
+      ownerKey: serializer.fromJson<String?>(json['ownerKey']),
     );
   }
   @override
@@ -711,6 +885,8 @@ class Note extends DataClass implements Insertable<Note> {
       'folderId': serializer.toJson<String?>(folderId),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'pendingSync': serializer.toJson<bool>(pendingSync),
+      'ownerKey': serializer.toJson<String?>(ownerKey),
     };
   }
 
@@ -723,6 +899,8 @@ class Note extends DataClass implements Insertable<Note> {
     Value<String?> folderId = const Value.absent(),
     Value<DateTime?> updatedAt = const Value.absent(),
     bool? isDeleted,
+    bool? pendingSync,
+    Value<String?> ownerKey = const Value.absent(),
   }) => Note(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -732,6 +910,8 @@ class Note extends DataClass implements Insertable<Note> {
     folderId: folderId.present ? folderId.value : this.folderId,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     isDeleted: isDeleted ?? this.isDeleted,
+    pendingSync: pendingSync ?? this.pendingSync,
+    ownerKey: ownerKey.present ? ownerKey.value : this.ownerKey,
   );
   Note copyWithCompanion(NotesCompanion data) {
     return Note(
@@ -743,6 +923,10 @@ class Note extends DataClass implements Insertable<Note> {
       folderId: data.folderId.present ? data.folderId.value : this.folderId,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      pendingSync: data.pendingSync.present
+          ? data.pendingSync.value
+          : this.pendingSync,
+      ownerKey: data.ownerKey.present ? data.ownerKey.value : this.ownerKey,
     );
   }
 
@@ -756,7 +940,9 @@ class Note extends DataClass implements Insertable<Note> {
           ..write('audioPath: $audioPath, ')
           ..write('folderId: $folderId, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('isDeleted: $isDeleted')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('pendingSync: $pendingSync, ')
+          ..write('ownerKey: $ownerKey')
           ..write(')'))
         .toString();
   }
@@ -771,6 +957,8 @@ class Note extends DataClass implements Insertable<Note> {
     folderId,
     updatedAt,
     isDeleted,
+    pendingSync,
+    ownerKey,
   );
   @override
   bool operator ==(Object other) =>
@@ -783,7 +971,9 @@ class Note extends DataClass implements Insertable<Note> {
           other.audioPath == this.audioPath &&
           other.folderId == this.folderId &&
           other.updatedAt == this.updatedAt &&
-          other.isDeleted == this.isDeleted);
+          other.isDeleted == this.isDeleted &&
+          other.pendingSync == this.pendingSync &&
+          other.ownerKey == this.ownerKey);
 }
 
 class NotesCompanion extends UpdateCompanion<Note> {
@@ -795,6 +985,8 @@ class NotesCompanion extends UpdateCompanion<Note> {
   final Value<String?> folderId;
   final Value<DateTime?> updatedAt;
   final Value<bool> isDeleted;
+  final Value<bool> pendingSync;
+  final Value<String?> ownerKey;
   final Value<int> rowid;
   const NotesCompanion({
     this.id = const Value.absent(),
@@ -805,6 +997,8 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.folderId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.pendingSync = const Value.absent(),
+    this.ownerKey = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NotesCompanion.insert({
@@ -816,6 +1010,8 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.folderId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.pendingSync = const Value.absent(),
+    this.ownerKey = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -830,6 +1026,8 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Expression<String>? folderId,
     Expression<DateTime>? updatedAt,
     Expression<bool>? isDeleted,
+    Expression<bool>? pendingSync,
+    Expression<String>? ownerKey,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -841,6 +1039,8 @@ class NotesCompanion extends UpdateCompanion<Note> {
       if (folderId != null) 'folder_id': folderId,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (pendingSync != null) 'pending_sync': pendingSync,
+      if (ownerKey != null) 'owner_key': ownerKey,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -854,6 +1054,8 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Value<String?>? folderId,
     Value<DateTime?>? updatedAt,
     Value<bool>? isDeleted,
+    Value<bool>? pendingSync,
+    Value<String?>? ownerKey,
     Value<int>? rowid,
   }) {
     return NotesCompanion(
@@ -865,6 +1067,8 @@ class NotesCompanion extends UpdateCompanion<Note> {
       folderId: folderId ?? this.folderId,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      pendingSync: pendingSync ?? this.pendingSync,
+      ownerKey: ownerKey ?? this.ownerKey,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -896,6 +1100,12 @@ class NotesCompanion extends UpdateCompanion<Note> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (pendingSync.present) {
+      map['pending_sync'] = Variable<bool>(pendingSync.value);
+    }
+    if (ownerKey.present) {
+      map['owner_key'] = Variable<String>(ownerKey.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -913,6 +1123,8 @@ class NotesCompanion extends UpdateCompanion<Note> {
           ..write('folderId: $folderId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('pendingSync: $pendingSync, ')
+          ..write('ownerKey: $ownerKey, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1934,6 +2146,8 @@ typedef $$FoldersTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
+      Value<bool> pendingSync,
+      Value<String?> ownerKey,
       Value<int> rowid,
     });
 typedef $$FoldersTableUpdateCompanionBuilder =
@@ -1944,6 +2158,8 @@ typedef $$FoldersTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
+      Value<bool> pendingSync,
+      Value<String?> ownerKey,
       Value<int> rowid,
     });
 
@@ -1983,6 +2199,16 @@ class $$FoldersTableFilterComposer
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pendingSync => $composableBuilder(
+    column: $table.pendingSync,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ownerKey => $composableBuilder(
+    column: $table.ownerKey,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2025,6 +2251,16 @@ class $$FoldersTableOrderingComposer
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get pendingSync => $composableBuilder(
+    column: $table.pendingSync,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ownerKey => $composableBuilder(
+    column: $table.ownerKey,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$FoldersTableAnnotationComposer
@@ -2053,6 +2289,14 @@ class $$FoldersTableAnnotationComposer
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<bool> get pendingSync => $composableBuilder(
+    column: $table.pendingSync,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get ownerKey =>
+      $composableBuilder(column: $table.ownerKey, builder: (column) => column);
 }
 
 class $$FoldersTableTableManager
@@ -2089,6 +2333,8 @@ class $$FoldersTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<bool> pendingSync = const Value.absent(),
+                Value<String?> ownerKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoldersCompanion(
                 id: id,
@@ -2097,6 +2343,8 @@ class $$FoldersTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                pendingSync: pendingSync,
+                ownerKey: ownerKey,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2107,6 +2355,8 @@ class $$FoldersTableTableManager
                 required DateTime createdAt,
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<bool> pendingSync = const Value.absent(),
+                Value<String?> ownerKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoldersCompanion.insert(
                 id: id,
@@ -2115,6 +2365,8 @@ class $$FoldersTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                pendingSync: pendingSync,
+                ownerKey: ownerKey,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2149,6 +2401,8 @@ typedef $$NotesTableCreateCompanionBuilder =
       Value<String?> folderId,
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
+      Value<bool> pendingSync,
+      Value<String?> ownerKey,
       Value<int> rowid,
     });
 typedef $$NotesTableUpdateCompanionBuilder =
@@ -2161,6 +2415,8 @@ typedef $$NotesTableUpdateCompanionBuilder =
       Value<String?> folderId,
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
+      Value<bool> pendingSync,
+      Value<String?> ownerKey,
       Value<int> rowid,
     });
 
@@ -2209,6 +2465,16 @@ class $$NotesTableFilterComposer extends Composer<_$AppDatabase, $NotesTable> {
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pendingSync => $composableBuilder(
+    column: $table.pendingSync,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ownerKey => $composableBuilder(
+    column: $table.ownerKey,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2261,6 +2527,16 @@ class $$NotesTableOrderingComposer
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get pendingSync => $composableBuilder(
+    column: $table.pendingSync,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ownerKey => $composableBuilder(
+    column: $table.ownerKey,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NotesTableAnnotationComposer
@@ -2295,6 +2571,14 @@ class $$NotesTableAnnotationComposer
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<bool> get pendingSync => $composableBuilder(
+    column: $table.pendingSync,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get ownerKey =>
+      $composableBuilder(column: $table.ownerKey, builder: (column) => column);
 }
 
 class $$NotesTableTableManager
@@ -2333,6 +2617,8 @@ class $$NotesTableTableManager
                 Value<String?> folderId = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<bool> pendingSync = const Value.absent(),
+                Value<String?> ownerKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion(
                 id: id,
@@ -2343,6 +2629,8 @@ class $$NotesTableTableManager
                 folderId: folderId,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                pendingSync: pendingSync,
+                ownerKey: ownerKey,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2355,6 +2643,8 @@ class $$NotesTableTableManager
                 Value<String?> folderId = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<bool> pendingSync = const Value.absent(),
+                Value<String?> ownerKey = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion.insert(
                 id: id,
@@ -2365,6 +2655,8 @@ class $$NotesTableTableManager
                 folderId: folderId,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                pendingSync: pendingSync,
+                ownerKey: ownerKey,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

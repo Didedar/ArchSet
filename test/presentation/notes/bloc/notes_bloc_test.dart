@@ -15,6 +15,7 @@ Note _note(String id) => Note(
       content: 'Content $id',
       date: DateTime(2026, 1, 1),
       isDeleted: false,
+      pendingSync: false,
     );
 
 void main() {

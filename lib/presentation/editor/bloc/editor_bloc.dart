@@ -54,6 +54,7 @@ class EditorBloc extends Bloc<EditorEvent, EditorState> {
       audioPath: event.audioPath,
       updatedAt: DateTime.now(),
       isDeleted: false,
+      pendingSync: false,
     );
     await _notesRepository.insertNote(note);
     emit(const EditorSaveSuccess());

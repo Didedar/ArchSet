@@ -15,6 +15,7 @@ Folder _folder(String id) => Folder(
       color: '#E8B731',
       createdAt: DateTime(2026, 1, 1),
       isDeleted: false,
+      pendingSync: false,
     );
 
 void main() {

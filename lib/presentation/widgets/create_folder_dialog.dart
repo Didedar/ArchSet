@@ -70,6 +70,7 @@ class _CreateFolderDialogState extends State<CreateFolderDialog>
       color: _selectedColor,
       createdAt: DateTime.now(),
       isDeleted: false,
+      pendingSync: false,
     );
 
     context.read<FoldersBloc>().add(FoldersCreateRequested(folder));
