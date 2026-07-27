@@ -10,6 +10,7 @@ import '../../presentation/locale/bloc/locale_bloc.dart';
 import '../../presentation/notes/bloc/folders_bloc.dart';
 import '../../presentation/notes/bloc/notes_bloc.dart';
 import '../../presentation/session/bloc/session_cubit.dart';
+import '../../presentation/session/guest_claim_listener.dart';
 import '../../presentation/sync/bloc/sync_bloc.dart';
 import '../../presentation/theme/bloc/theme_bloc.dart';
 import '../../presentation/transcription/bloc/transcription_bloc.dart';
@@ -103,7 +104,7 @@ class AppScope extends StatelessWidget {
             ),
           ),
         ],
-        child: child,
+        child: GuestClaimListener(child: child),
       ),
     );
   }
