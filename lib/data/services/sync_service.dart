@@ -471,87 +471,137 @@ class SyncService {
   /// coordinate, so a blind `as double?` cast would throw.
   static double? _toDouble(Object? value) => (value as num?)?.toDouble();
 
-  /// Apply changes received from server
+  /// Parses a nullable ISO-8601 timestamp. The server is expected to always
+  /// send `updated_at`, but a note's `date` can legitimately arrive as null.
+  static DateTime? _parseDate(Object? value) =>
+      value == null ? null : DateTime.parse(value as String);
+
+  /// A server row loses when the local copy has unpushed edits, or is at
+  /// least as new (equal timestamps => no-op, which also neutralises the
+  /// echo of a row we just pushed and cleared).
+  bool _serverLoses(
+    DateTime? localUpdatedAt,
+    bool localPending,
+    DateTime serverUpdatedAt,
+  ) {
+    if (localPending) return true;
+    if (localUpdatedAt == null) return false;
+    return !localUpdatedAt.isBefore(serverUpdatedAt); // local >= server
+  }
+
+  /// Apply changes received from server.
+  ///
+  /// Runs inside a single transaction so a mid-apply failure can't leave
+  /// folders and notes in an inconsistent state. Each row is checked against
+  /// the local copy via [_serverLoses] before being written: a local row
+  /// that still has unpushed edits, or is already at least as new as the
+  /// incoming one, keeps its local state instead of being clobbered by a
+  /// stale server echo (see C4/C5).
   Future<void> _applyServerChanges(
     List<dynamic> serverNotes,
     List<dynamic> serverFolders,
   ) async {
-    // Apply folder changes first (notes may reference them)
-    for (final folderData in serverFolders) {
-      final folderId = folderData['id'] as String;
-      final isDeleted = folderData['is_deleted'] as bool? ?? false;
+    await _database.transaction(() async {
+      // Apply folder changes first (notes may reference them)
+      for (final folderData in serverFolders) {
+        final folderId = folderData['id'] as String;
+        final isDeleted = folderData['is_deleted'] as bool? ?? false;
+        final serverUpdatedAt =
+            _parseDate(folderData['updated_at']) ?? DateTime.now();
 
-      if (isDeleted) {
-        // Soft delete locally - DO NOT hard delete otherwise we lose the tombstone
-        // and might re-sync it if we have a stale local state.
-        // Actually, if server says deleted, we should mark as deleted locally.
-        await (_database.update(
+        final local = await (_database.select(
           _database.folders,
-        )..where((f) => f.id.equals(folderId))).write(
-          FoldersCompanion(
-            isDeleted: const Value(true),
-            updatedAt: Value(
-              DateTime.parse(folderData['updated_at'] as String),
+        )..where((f) => f.id.equals(folderId))).getSingleOrNull();
+        if (local != null &&
+            _serverLoses(
+              local.updatedAt,
+              local.pendingSync,
+              serverUpdatedAt,
+            )) {
+          continue;
+        }
+
+        if (isDeleted) {
+          // Soft delete locally - DO NOT hard delete otherwise we lose the
+          // tombstone and might re-sync it if we have a stale local state.
+          await (_database.update(
+            _database.folders,
+          )..where((f) => f.id.equals(folderId))).write(
+            FoldersCompanion(
+              isDeleted: const Value(true),
+              updatedAt: Value(serverUpdatedAt),
+              pendingSync: const Value(false),
             ),
-          ),
-        );
-      } else {
-        // Upsert folder
-        await _database
-            .into(_database.folders)
-            .insertOnConflictUpdate(
-              FoldersCompanion.insert(
-                id: folderId,
-                name: folderData['name'] as String,
-                color: Value(folderData['color'] as String? ?? '#E8B731'),
-                createdAt: DateTime.parse(
-                  folderData['created_at'] as String? ??
-                      DateTime.now().toIso8601String(),
+          );
+        } else {
+          // Upsert folder
+          await _database
+              .into(_database.folders)
+              .insertOnConflictUpdate(
+                FoldersCompanion.insert(
+                  id: folderId,
+                  name: folderData['name'] as String,
+                  color: Value(folderData['color'] as String? ?? '#E8B731'),
+                  createdAt:
+                      _parseDate(folderData['created_at']) ?? serverUpdatedAt,
+                  updatedAt: Value(serverUpdatedAt),
+                  isDeleted: const Value(false),
+                  pendingSync: const Value(false),
                 ),
-                updatedAt: Value(
-                  DateTime.parse(folderData['updated_at'] as String),
-                ),
-                isDeleted: const Value(false),
-              ),
-            );
+              );
+        }
       }
-    }
 
-    // Apply note changes
-    for (final noteData in serverNotes) {
-      final noteId = noteData['id'] as String;
-      final isDeleted = noteData['is_deleted'] as bool? ?? false;
+      // Apply note changes
+      for (final noteData in serverNotes) {
+        final noteId = noteData['id'] as String;
+        final isDeleted = noteData['is_deleted'] as bool? ?? false;
+        final serverUpdatedAt =
+            _parseDate(noteData['updated_at']) ?? DateTime.now();
 
-      if (isDeleted) {
-        // Soft delete locally
-        await (_database.update(
+        final local = await (_database.select(
           _database.notes,
-        )..where((n) => n.id.equals(noteId))).write(
-          NotesCompanion(
-            isDeleted: const Value(true),
-            updatedAt: Value(DateTime.parse(noteData['updated_at'] as String)),
-          ),
-        );
-      } else {
-        // Upsert note
-        await _database
-            .into(_database.notes)
-            .insertOnConflictUpdate(
-              NotesCompanion.insert(
-                id: noteId,
-                title: noteData['title'] as String? ?? '',
-                content: noteData['content'] as String? ?? '',
-                date: DateTime.parse(noteData['date'] as String),
-                audioPath: Value(noteData['audio_path'] as String?),
-                folderId: Value(noteData['folder_id'] as String?),
-                updatedAt: Value(
-                  DateTime.parse(noteData['updated_at'] as String),
+        )..where((n) => n.id.equals(noteId))).getSingleOrNull();
+        if (local != null &&
+            _serverLoses(
+              local.updatedAt,
+              local.pendingSync,
+              serverUpdatedAt,
+            )) {
+          continue;
+        }
+
+        if (isDeleted) {
+          // Soft delete locally
+          await (_database.update(
+            _database.notes,
+          )..where((n) => n.id.equals(noteId))).write(
+            NotesCompanion(
+              isDeleted: const Value(true),
+              updatedAt: Value(serverUpdatedAt),
+              pendingSync: const Value(false),
+            ),
+          );
+        } else {
+          // Upsert note
+          await _database
+              .into(_database.notes)
+              .insertOnConflictUpdate(
+                NotesCompanion.insert(
+                  id: noteId,
+                  title: noteData['title'] as String? ?? '',
+                  content: noteData['content'] as String? ?? '',
+                  date: _parseDate(noteData['date']) ?? serverUpdatedAt,
+                  audioPath: Value(noteData['audio_path'] as String?),
+                  folderId: Value(noteData['folder_id'] as String?),
+                  updatedAt: Value(serverUpdatedAt),
+                  isDeleted: const Value(false),
+                  pendingSync: const Value(false),
                 ),
-                isDeleted: const Value(false),
-              ),
-            );
+              );
+        }
       }
-    }
+    });
   }
 
   void _updateStatus(SyncStatus status) {

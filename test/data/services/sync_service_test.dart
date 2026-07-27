@@ -43,6 +43,19 @@ void main() {
       'sync_timestamp': DateTime.now().toIso8601String(),
     };
 
+    /// Like [emptyPullResponse] but with a caller-supplied `notes` payload,
+    /// for tests that need the pull side of the round trip to echo back
+    /// specific server rows.
+    Map<String, dynamic> pullResponseWithNotes(
+      List<Map<String, dynamic>> notes,
+    ) => {
+      'notes': notes,
+      'folders': [],
+      'artifacts': [],
+      'artifact_comments': [],
+      'sync_timestamp': DateTime.now().toIso8601String(),
+    };
+
     setUp(() {
       database = AppDatabase.forTesting(NativeDatabase.memory());
       apiService = _MockApiService();
@@ -84,6 +97,8 @@ void main() {
       String id, {
       required bool pendingSync,
       DateTime? updatedAt,
+      DateTime? date,
+      bool isDeleted = false,
     }) async {
       await database
           .into(database.notes)
@@ -92,9 +107,9 @@ void main() {
               id: id,
               title: 'Title $id',
               content: 'Content $id',
-              date: DateTime(2026, 1, 1),
+              date: date ?? DateTime(2026, 1, 1),
               updatedAt: updatedAt,
-              isDeleted: false,
+              isDeleted: isDeleted,
               pendingSync: pendingSync,
             ),
           );
@@ -300,6 +315,112 @@ void main() {
         verify(() => apiService.post(any(), any())).called(1);
       },
     );
+
+    group('C4/C5: safe server apply (LWW guard, null-date fallback)', () {
+      test(
+        'a local note edited mid-round-trip is not clobbered by a stale '
+        'server echo of its pre-edit copy',
+        () async {
+          final t1 = DateTime(2026, 1, 1);
+          final t2 = t1.add(const Duration(minutes: 5));
+          // Locally dirty and newer than the copy the server is about to
+          // echo back.
+          await insertNote('n1', pendingSync: true, updatedAt: t2, date: t1);
+
+          when(() => apiService.post(any(), any())).thenAnswer(
+            (_) async => pullResponseWithNotes([
+              {
+                'id': 'n1',
+                'title': 'Stale Server Title',
+                'content': 'Stale server content',
+                'date': t1.toIso8601String(),
+                'audio_path': null,
+                'folder_id': null,
+                'is_deleted': false,
+                'updated_at': t1.toIso8601String(),
+              },
+            ]),
+          );
+
+          final service = buildService();
+          final result = await service.sync();
+
+          expect(result.status, SyncStatus.success);
+          final row = await readNote('n1');
+          expect(row.title, 'Title n1');
+        },
+      );
+
+      test(
+        'a new server note with a null date applies using updated_at as '
+        'fallback instead of crashing',
+        () async {
+          final t = DateTime(2026, 5, 1, 10, 30);
+
+          when(() => apiService.post(any(), any())).thenAnswer(
+            (_) async => pullResponseWithNotes([
+              {
+                'id': 'srv',
+                'title': 'Server Note',
+                'content': 'Server content',
+                'date': null,
+                'audio_path': null,
+                'folder_id': null,
+                'is_deleted': false,
+                'updated_at': t.toIso8601String(),
+              },
+            ]),
+          );
+
+          final service = buildService();
+          final result = await service.sync();
+
+          expect(result.status, SyncStatus.success);
+          final row = await readNote('srv');
+          expect(row.date, t);
+        },
+      );
+
+      test(
+        'a note deleted locally after a prior push is not resurrected by '
+        'a stale live echo from the server',
+        () async {
+          final t1 = DateTime(2026, 6, 1);
+          final t2 = t1.add(const Duration(minutes: 5));
+          // Deleted locally (and dirty from that delete) after t1, which is
+          // the copy the server still has and echoes back as live.
+          await insertNote(
+            'n1',
+            pendingSync: true,
+            updatedAt: t2,
+            date: t1,
+            isDeleted: true,
+          );
+
+          when(() => apiService.post(any(), any())).thenAnswer(
+            (_) async => pullResponseWithNotes([
+              {
+                'id': 'n1',
+                'title': 'Title n1',
+                'content': 'Content n1',
+                'date': t1.toIso8601String(),
+                'audio_path': null,
+                'folder_id': null,
+                'is_deleted': false,
+                'updated_at': t1.toIso8601String(),
+              },
+            ]),
+          );
+
+          final service = buildService();
+          final result = await service.sync();
+
+          expect(result.status, SyncStatus.success);
+          final row = await readNote('n1');
+          expect(row.isDeleted, isTrue);
+        },
+      );
+    });
   });
 
   group('ApiService.checkHealth', () {
