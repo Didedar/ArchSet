@@ -275,40 +275,54 @@ class AuthService implements AuthRepository {
 
   /// Load user from storage (for app startup).
   ///
-  /// This sits on the splash critical path, so it must not wait on the network.
-  /// The three keychain reads run concurrently, and the server-side
-  /// revalidation is fire-and-forget: the cached identity is returned
-  /// immediately and refreshed in the background. Offline access is unaffected,
-  /// and a stale token still surfaces as a 401 on the next real API call.
+  /// Fail-closed: a stored identity is only returned once its token is
+  /// confirmed valid, either directly against `/auth/me` or via a successful
+  /// refresh. If the token is actively rejected (401) and the refresh also
+  /// fails, the session is dead, so the namespaced session is cleared and
+  /// `null` is returned. If the server is merely unreachable (offline, 5xx),
+  /// that's ambiguous — not proof the token is bad — so the token is left
+  /// untouched and `null` is returned; a later online start can still
+  /// recover it. Never touches the local diary.
   @override
   Future<AuthUser?> loadStoredUser() async {
-    final results = await Future.wait([
-      _storage.read(key: AuthStorageKeys.userId(_originSlug)),
-      _storage.read(key: AuthStorageKeys.userEmail(_originSlug)),
-      getAccessToken(),
-    ]);
-    final userId = results[0];
-    final userEmail = results[1];
-    final token = results[2];
+    final token = await getAccessToken();
+    if (token == null) return null;
 
-    if (userId == null || userEmail == null || token == null) return null;
+    final me = await _getMe(token);
+    switch (me) {
+      case _MeOk(:final user):
+        await _persistUser(user);
+        return user;
+      case _MeUnreachable():
+        return null; // keep token; unverified, not disproven
+      case _MeRejected():
+        break; // try a refresh
+    }
 
-    _currentUser = AuthUser(
-      id: userId,
-      email: userEmail,
-      createdAt: DateTime.now(),
-    );
+    final refreshed = await refreshAccessToken();
+    if (refreshed) {
+      final newToken = await getAccessToken();
+      if (newToken != null) {
+        final retry = await _getMe(newToken);
+        if (retry is _MeOk) {
+          await _persistUser(retry.user);
+          return retry.user;
+        }
+      }
+    }
 
-    unawaited(_revalidateSession(token));
-
-    return _currentUser;
+    // Token was rejected and the refresh failed too: fail closed.
+    await _clearNamespacedSession();
+    _currentUser = null;
+    return null;
   }
 
-  /// Best-effort background refresh of the cached user. Never throws — a
-  /// failure here just means we keep using the cached identity.
-  Future<void> _revalidateSession(String token) async {
+  /// Confirms a token against the backend. A 401 means the token is actively
+  /// rejected; anything else short of a clean 200 (timeout, socket error,
+  /// 5xx) is ambiguous and must never be treated as proof the token is bad.
+  Future<_MeResult> _getMe(String token) async {
     try {
-      final userResponse = await _client
+      final resp = await _client
           .get(
             Uri.parse('$_baseUrl/auth/me'),
             headers: {
@@ -318,28 +332,42 @@ class AuthService implements AuthRepository {
           )
           .timeout(_requestTimeout);
 
-      if (userResponse.statusCode == 200) {
-        final user = AuthUser.fromJson(jsonDecode(userResponse.body));
-        _currentUser = user;
-        await Future.wait([
-          _storage.write(
-            key: AuthStorageKeys.userId(_originSlug),
-            value: user.id,
-          ),
-          _storage.write(
-            key: AuthStorageKeys.userEmail(_originSlug),
-            value: user.email,
-          ),
-        ]);
-      } else if (userResponse.statusCode == 401) {
-        // Token may just be expired. Refresh if we can; deliberately do NOT
-        // clear stored credentials on failure, so a transient server or
-        // network fault can't silently log the user out.
-        await refreshAccessToken();
+      if (resp.statusCode == 200) {
+        return _MeOk(AuthUser.fromJson(jsonDecode(resp.body)));
       }
+      if (resp.statusCode == 401) return const _MeRejected();
+      return const _MeUnreachable(); // 5xx/other: ambiguous, don't destroy
     } catch (e) {
-      debugPrint('Session revalidation skipped: $e');
+      return const _MeUnreachable(); // offline/network error: preserve token
     }
+  }
+
+  /// Caches a server-confirmed identity and persists it under this backend's
+  /// namespaced keys, plus the un-namespaced `currentOwnerId`.
+  Future<void> _persistUser(AuthUser user) async {
+    _currentUser = user;
+    await Future.wait([
+      _storage.write(key: AuthStorageKeys.userId(_originSlug), value: user.id),
+      _storage.write(
+        key: AuthStorageKeys.userEmail(_originSlug),
+        value: user.email,
+      ),
+      _storage.write(key: AuthStorageKeys.currentOwnerId, value: user.id),
+    ]);
+  }
+
+  /// Wipes every key this backend origin owns, plus `currentOwnerId`. Only
+  /// called once a token is confirmed dead (401 + failed refresh) — never
+  /// for a merely-unreachable server. Deliberately leaves the local diary
+  /// untouched.
+  Future<void> _clearNamespacedSession() async {
+    await Future.wait([
+      _storage.delete(key: AuthStorageKeys.accessToken(_originSlug)),
+      _storage.delete(key: AuthStorageKeys.refreshToken(_originSlug)),
+      _storage.delete(key: AuthStorageKeys.userId(_originSlug)),
+      _storage.delete(key: AuthStorageKeys.userEmail(_originSlug)),
+      _storage.delete(key: AuthStorageKeys.currentOwnerId),
+    ]);
   }
 
   /// Releases the shared HTTP client.
@@ -347,4 +375,26 @@ class AuthService implements AuthRepository {
     _client.close();
     _sessionExpired.close();
   }
+}
+
+/// Outcome of confirming a token against `/auth/me`.
+sealed class _MeResult {
+  const _MeResult();
+}
+
+/// The token is valid; the server returned the current user.
+final class _MeOk extends _MeResult {
+  const _MeOk(this.user);
+  final AuthUser user;
+}
+
+/// The token was actively rejected (401).
+final class _MeRejected extends _MeResult {
+  const _MeRejected();
+}
+
+/// The server couldn't be reached, or answered ambiguously (timeout, socket
+/// error, 5xx). Not proof the token is bad.
+final class _MeUnreachable extends _MeResult {
+  const _MeUnreachable();
 }
