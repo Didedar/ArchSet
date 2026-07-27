@@ -196,6 +196,39 @@ async def test_sync_drops_a_new_folder_that_is_already_deleted(
 
 
 @pytest.mark.asyncio
+async def test_sync_persists_a_folder_and_its_note_in_one_payload(
+    client: AsyncClient, auth_headers: dict
+):
+    """The most common offline workflow: an archaeologist creates a folder
+    AND notes inside it while offline, then syncs the whole batch together.
+
+    The note references a folder that only exists in this same payload, so
+    the server must create the folder before the note -- otherwise the note
+    INSERT's folder_id points at a row that isn't there yet, violating the
+    notes.folder_id -> folders.id foreign key.
+    """
+    folder = _folder_item("offline-folder", name="Site A")
+    note = _note_item("offline-note", title="Framed wall")
+    note["folder_id"] = "offline-folder"
+
+    response = await client.post(
+        "/api/v1/sync",
+        json={"notes": [note], "folders": [folder]},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+
+    folders = await client.get("/api/v1/folders", headers=auth_headers)
+    assert [f["id"] for f in folders.json()] == ["offline-folder"]
+
+    notes = await client.get("/api/v1/notes", headers=auth_headers)
+    assert [(n["id"], n["folder_id"]) for n in notes.json()] == [
+        ("offline-note", "offline-folder")
+    ]
+
+
+@pytest.mark.asyncio
 async def test_sync_with_another_users_note_id_raises_instead_of_leaking(
     client: AsyncClient, auth_headers: dict, other_auth_headers: dict
 ):

@@ -54,6 +54,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -75,6 +76,21 @@ test_engine = create_async_engine(
 TestSessionLocal = async_sessionmaker(
     test_engine, class_=AsyncSession, expire_on_commit=False
 )
+
+
+@event.listens_for(test_engine.sync_engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+    """SQLite ignores foreign keys unless PRAGMA foreign_keys=ON is set per
+    connection, outside a transaction -- so it's set here on the raw DBAPI
+    connection as soon as it's opened, rather than via a SQL statement
+    issued through a session/transaction. Without this, tests would pass
+    even when application code violates a FK (e.g. inserting a note whose
+    folder_id doesn't exist yet), silently hiding bugs that a
+    FK-enforcing database (Postgres in production) would reject.
+    """
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
 
 
 @pytest_asyncio.fixture(autouse=True)

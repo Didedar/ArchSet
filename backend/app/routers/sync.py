@@ -37,12 +37,20 @@ async def sync_data(
     **Deleted Items**: Items with `is_deleted: true` will be soft-deleted
     on the server. Clients should hide these but keep them for sync.
 
-    **Ordering**: Collections are synced parents-first (notes -> artifacts ->
-    artifact comments) so that references between them resolve within a
-    single request. Every collection is optional, so clients that don't send
-    artifacts behave exactly as before.
+    **Ordering**: Collections are synced parents-first (folders -> notes ->
+    artifacts -> artifact comments) so that references between them resolve
+    within a single request. Every collection is optional, so clients that
+    don't send artifacts behave exactly as before.
     """
     service = SyncService(db)
+
+    # Sync folders -- before notes, so note.folder_id can resolve (a note's
+    # folder_id FK must reference a folder row that already exists).
+    synced_folders = await service.sync_folders(
+        user=current_user,
+        client_folders=sync_request.folders,
+        last_sync_at=sync_request.last_sync_at
+    )
 
     # Sync notes
     synced_notes = await service.sync_notes(
@@ -50,13 +58,6 @@ async def sync_data(
         client_notes=sync_request.notes,
         last_sync_at=sync_request.last_sync_at,
         background_tasks=background_tasks
-    )
-
-    # Sync folders
-    synced_folders = await service.sync_folders(
-        user=current_user,
-        client_folders=sync_request.folders,
-        last_sync_at=sync_request.last_sync_at
     )
 
     # Sync artifacts -- after notes, so artifact.note_id can resolve
