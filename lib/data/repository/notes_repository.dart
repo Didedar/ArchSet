@@ -39,26 +39,31 @@ class NotesRepository {
             date: Value(note.date),
             audioPath: Value(note.audioPath),
             folderId: Value(note.folderId),
+            updatedAt: Value(DateTime.now()),
+            pendingSync: const Value(true),
             isDeleted: const Value(false),
           ),
           mode: InsertMode.insertOrReplace,
         );
   }
 
-  /// Update an existing note
+  /// Update an existing note.
+  ///
+  /// Deliberately omits `date` from the write: `date` is the immutable diary
+  /// date and must never be touched by an edit, only by the initial insert.
   Future<void> updateNote(Note note) async {
-    await database
-        .update(database.notes)
-        .replace(
-          NotesCompanion(
-            id: Value(note.id),
-            title: Value(note.title),
-            content: Value(note.content),
-            date: Value(note.date),
-            audioPath: Value(note.audioPath),
-            folderId: Value(note.folderId),
-          ),
-        );
+    await (database.update(
+      database.notes,
+    )..where((t) => t.id.equals(note.id))).write(
+      NotesCompanion(
+        title: Value(note.title),
+        content: Value(note.content),
+        audioPath: Value(note.audioPath),
+        folderId: Value(note.folderId),
+        updatedAt: Value(DateTime.now()),
+        pendingSync: const Value(true),
+      ),
+    );
   }
 
   /// Delete a note and its associated audio files
@@ -102,6 +107,7 @@ class NotesRepository {
       NotesCompanion(
         isDeleted: const Value(true),
         updatedAt: Value(DateTime.now()),
+        pendingSync: const Value(true),
       ),
     );
   }
@@ -150,6 +156,7 @@ class NotesRepository {
       NotesCompanion(
         folderId: Value(folderId),
         updatedAt: Value(DateTime.now()),
+        pendingSync: const Value(true),
       ),
     );
   }
@@ -205,6 +212,8 @@ class NotesRepository {
             name: Value(folder.name),
             color: Value(folder.color),
             createdAt: Value(folder.createdAt),
+            updatedAt: Value(DateTime.now()),
+            pendingSync: const Value(true),
             isDeleted: const Value(false),
           ),
         );
@@ -219,6 +228,7 @@ class NotesRepository {
         name: Value(folder.name),
         color: Value(folder.color),
         updatedAt: Value(DateTime.now()),
+        pendingSync: const Value(true),
       ),
     );
   }
@@ -228,7 +238,13 @@ class NotesRepository {
     // Move all notes in this folder to "All Notes"
     await (database.update(database.notes)
           ..where((t) => t.folderId.equals(folderId)))
-        .write(const NotesCompanion(folderId: Value(null)));
+        .write(
+          NotesCompanion(
+            folderId: const Value(null),
+            updatedAt: Value(DateTime.now()),
+            pendingSync: const Value(true),
+          ),
+        );
 
     // Soft delete the folder
     await (database.update(
@@ -237,6 +253,7 @@ class NotesRepository {
       FoldersCompanion(
         isDeleted: const Value(true),
         updatedAt: Value(DateTime.now()),
+        pendingSync: const Value(true),
       ),
     );
   }
