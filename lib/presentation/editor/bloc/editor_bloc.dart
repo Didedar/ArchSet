@@ -40,24 +40,49 @@ class EditorBloc extends Bloc<EditorEvent, EditorState> {
   ) async {
     emit(const EditorSaveInProgress());
 
-    if (event.title.isEmpty && event.plainText.isEmpty) {
+    final hasText = event.title.isNotEmpty || event.plainText.isNotEmpty;
+    final hasAudio = event.audioPath != null && event.audioPath!.isNotEmpty;
+    if (!hasText && !hasAudio) {
       emit(const EditorSaveSuccess());
       return;
     }
 
-    final note = Note(
-      id: event.noteId,
-      title: event.title,
-      content: event.contentJson,
-      date: DateTime.now(),
-      folderId: event.folderId,
-      audioPath: event.audioPath,
-      updatedAt: DateTime.now(),
-      isDeleted: false,
-      pendingSync: false,
-    );
-    await _notesRepository.insertNote(note);
-    emit(const EditorSaveSuccess());
+    try {
+      final existing = await _notesRepository.getNoteById(event.noteId);
+      if (existing == null) {
+        final now = DateTime.now();
+        await _notesRepository.insertNote(
+          Note(
+            id: event.noteId,
+            title: event.title,
+            content: event.contentJson,
+            date: now,
+            folderId: event.folderId,
+            audioPath: event.audioPath,
+            updatedAt: now,
+            isDeleted: false,
+            pendingSync: true,
+          ),
+        );
+      } else {
+        await _notesRepository.updateNote(
+          Note(
+            id: existing.id,
+            title: event.title,
+            content: event.contentJson,
+            date: existing.date,
+            folderId: event.folderId,
+            audioPath: event.audioPath,
+            updatedAt: DateTime.now(),
+            isDeleted: existing.isDeleted,
+            pendingSync: true,
+          ),
+        );
+      }
+      emit(const EditorSaveSuccess());
+    } catch (e) {
+      emit(EditorSaveFailure(message: e.toString()));
+    }
   }
 
   Future<void> _onDeleteRequested(

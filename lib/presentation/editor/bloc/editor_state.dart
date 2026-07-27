@@ -19,6 +19,17 @@ final class EditorSaveSuccess extends EditorState {
   const EditorSaveSuccess();
 }
 
+/// [message] carries the caught exception's string when saving (whether
+/// the initial `getNoteById` lookup or the subsequent insert/update) fails.
+final class EditorSaveFailure extends EditorState {
+  const EditorSaveFailure({this.message});
+
+  final String? message;
+
+  @override
+  List<Object?> get props => [message];
+}
+
 final class EditorDeleteInProgress extends EditorState {
   const EditorDeleteInProgress();
 }
