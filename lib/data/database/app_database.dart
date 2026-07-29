@@ -185,10 +185,4 @@ class AppDatabase extends _$AppDatabase {
       ),
     );
   }
-
-  /// Clear all data from the database
-  Future<void> clearAllData() async {
-    await delete(notes).go();
-    await delete(folders).go();
-  }
 }

@@ -551,12 +551,22 @@ class SettingsPage extends StatelessWidget {
 
     if (shouldLogout == true) {
       try {
+        // Best-effort: offline data stays local and syncs later, so logout
+        // must never block on this. SyncOffline/SyncIdle are terminal too
+        // (offline/unreachable and guest/no-op sync never reach
+        // Success/Failure), and the timeout is a safety net for any sync
+        // that ends without emitting a terminal state at all -- either way
+        // logout always proceeds.
         final syncBloc = context.read<SyncBloc>();
         final syncFinished = syncBloc.stream.firstWhere(
-          (state) => state is SyncSuccess || state is SyncFailure,
+          (state) =>
+              state is SyncSuccess ||
+              state is SyncFailure ||
+              state is SyncOffline ||
+              state is SyncIdle,
         );
         syncBloc.add(const SyncRequested());
-        await syncFinished;
+        await syncFinished.timeout(const Duration(seconds: 8));
       } catch (e) {
         debugPrint('Sync failed before logout: $e');
       }
