@@ -57,6 +57,7 @@ class AppScope extends StatelessWidget {
             lazy: false,
             create: (_) => SessionCubit(
               repository: dependencies.auth.repository,
+              ownerHolder: dependencies.core.currentOwner,
               sessionExpiredSignal:
                   dependencies.auth.repository.onSessionExpired,
             )..bootstrap(),

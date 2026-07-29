@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:archset_r2/data/current_owner_holder.dart';
 import 'package:archset_r2/data/services/auth_service.dart';
 import 'package:archset_r2/domain/repositories/auth_repository.dart';
 import 'package:archset_r2/presentation/session/bloc/session_cubit.dart';
@@ -120,5 +121,62 @@ void main() {
 
       await controller.close();
     });
+  });
+
+  /// Closes a cross-account data leak: [NotesRepository] shares this same
+  /// [CurrentOwnerHolder] instance (via DI) to stamp writes and scope reads,
+  /// so it must track every session transition, not just login.
+  group('ownerHolder', () {
+    late CurrentOwnerHolder holder;
+
+    setUp(() {
+      holder = CurrentOwnerHolder();
+    });
+
+    blocTest<SessionCubit, AppSession>(
+      'becomes user.id when bootstrap resolves an authenticated session',
+      setUp: () => when(() => repository.loadStoredUser())
+          .thenAnswer((_) async => user),
+      build: () => SessionCubit(repository: repository, ownerHolder: holder),
+      act: (cubit) => cubit.bootstrap(),
+      verify: (_) => expect(holder.value, user.id),
+    );
+
+    blocTest<SessionCubit, AppSession>(
+      'stays null when bootstrap resolves a guest session',
+      setUp: () => when(() => repository.loadStoredUser())
+          .thenAnswer((_) async => null),
+      build: () => SessionCubit(repository: repository, ownerHolder: holder),
+      act: (cubit) => cubit.bootstrap(),
+      verify: (_) => expect(holder.value, isNull),
+    );
+
+    blocTest<SessionCubit, AppSession>(
+      'becomes user.id on loginSuccess',
+      build: () => SessionCubit(repository: repository, ownerHolder: holder),
+      act: (cubit) => cubit.loginSuccess(user),
+      verify: (_) => expect(holder.value, user.id),
+    );
+
+    blocTest<SessionCubit, AppSession>(
+      'reverts to null on logout after being set by loginSuccess',
+      setUp: () => when(() => repository.logout()).thenAnswer((_) async {}),
+      build: () => SessionCubit(repository: repository, ownerHolder: holder),
+      act: (cubit) async {
+        cubit.loginSuccess(user);
+        await cubit.logout();
+      },
+      verify: (_) => expect(holder.value, isNull),
+    );
+
+    blocTest<SessionCubit, AppSession>(
+      'reverts to null on sessionLost after being set by loginSuccess',
+      build: () => SessionCubit(repository: repository, ownerHolder: holder),
+      act: (cubit) {
+        cubit.loginSuccess(user);
+        cubit.sessionLost();
+      },
+      verify: (_) => expect(holder.value, isNull),
+    );
   });
 }

@@ -1,19 +1,40 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart';
+import '../current_owner_holder.dart';
 import '../database/app_database.dart';
 
 class NotesRepository {
   final AppDatabase database;
 
-  NotesRepository(this.database);
+  /// The account local writes are stamped with and local reads are scoped
+  /// to (null = guest). Shared with [SessionCubit] via DI so both stay in
+  /// sync with the current auth state.
+  final CurrentOwnerHolder _owner;
+
+  NotesRepository(this.database, {CurrentOwnerHolder? ownerHolder})
+      : _owner = ownerHolder ?? CurrentOwnerHolder();
+
+  /// Owner filter shared by every watch query: a signed-in user sees their
+  /// own rows plus still-unclaimed guest rows (about to be claimed), a
+  /// guest sees only unclaimed rows, and another account's rows are always
+  /// excluded. This -- plus stamping `ownerKey` on every write below -- is
+  /// what stops one account's notes/folders from leaking into another's.
+  Expression<bool> _ownerFilter(GeneratedColumn<String> ownerKey) {
+    final owner = _owner.value;
+    return owner == null
+        ? ownerKey.isNull()
+        : (ownerKey.equals(owner) | ownerKey.isNull());
+  }
 
   // ==================== NOTES OPERATIONS ====================
 
   /// Stream of all notes, ordered by date descending
   Stream<List<Note>> watchAllNotes() {
     return (database.select(database.notes)
-          ..where((t) => t.isDeleted.equals(false))
+          ..where(
+            (t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey),
+          )
           ..orderBy([
             (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
           ]))
@@ -42,6 +63,7 @@ class NotesRepository {
             updatedAt: Value(DateTime.now()),
             pendingSync: const Value(true),
             isDeleted: const Value(false),
+            ownerKey: Value(_owner.value),
           ),
           mode: InsertMode.insertOrReplace,
         );
@@ -62,6 +84,7 @@ class NotesRepository {
         folderId: Value(note.folderId),
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
+        ownerKey: Value(_owner.value),
       ),
     );
   }
@@ -108,6 +131,7 @@ class NotesRepository {
         isDeleted: const Value(true),
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
+        ownerKey: Value(_owner.value),
       ),
     );
   }
@@ -157,6 +181,7 @@ class NotesRepository {
         folderId: Value(folderId),
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
+        ownerKey: Value(_owner.value),
       ),
     );
   }
@@ -166,7 +191,12 @@ class NotesRepository {
     if (folderId == null) {
       // All notes without a folder
       return (database.select(database.notes)
-            ..where((t) => t.folderId.isNull() & t.isDeleted.equals(false))
+            ..where(
+              (t) =>
+                  t.folderId.isNull() &
+                  t.isDeleted.equals(false) &
+                  _ownerFilter(t.ownerKey),
+            )
             ..orderBy([
               (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
             ]))
@@ -174,7 +204,10 @@ class NotesRepository {
     }
     return (database.select(database.notes)
           ..where(
-            (t) => t.folderId.equals(folderId) & t.isDeleted.equals(false),
+            (t) =>
+                t.folderId.equals(folderId) &
+                t.isDeleted.equals(false) &
+                _ownerFilter(t.ownerKey),
           )
           ..orderBy([
             (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
@@ -187,7 +220,9 @@ class NotesRepository {
   /// Stream of all folders, ordered by creation date
   Stream<List<Folder>> watchAllFolders() {
     return (database.select(database.folders)
-          ..where((t) => t.isDeleted.equals(false))
+          ..where(
+            (t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey),
+          )
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
@@ -215,6 +250,7 @@ class NotesRepository {
             updatedAt: Value(DateTime.now()),
             pendingSync: const Value(true),
             isDeleted: const Value(false),
+            ownerKey: Value(_owner.value),
           ),
         );
   }
@@ -229,6 +265,7 @@ class NotesRepository {
         color: Value(folder.color),
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
+        ownerKey: Value(_owner.value),
       ),
     );
   }
@@ -243,6 +280,7 @@ class NotesRepository {
             folderId: const Value(null),
             updatedAt: Value(DateTime.now()),
             pendingSync: const Value(true),
+            ownerKey: Value(_owner.value),
           ),
         );
 
@@ -254,6 +292,7 @@ class NotesRepository {
         isDeleted: const Value(true),
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
+        ownerKey: Value(_owner.value),
       ),
     );
   }
@@ -263,7 +302,10 @@ class NotesRepository {
     final count = database.notes.id.count();
     final query = database.selectOnly(database.notes)
       ..addColumns([database.notes.folderId, count])
-      ..where(database.notes.isDeleted.equals(false))
+      ..where(
+        database.notes.isDeleted.equals(false) &
+            _ownerFilter(database.notes.ownerKey),
+      )
       ..groupBy([database.notes.folderId]);
 
     return query.watch().map((rows) {
@@ -285,7 +327,8 @@ class NotesRepository {
       ..addColumns([count])
       ..where(
         database.notes.folderId.isNull() &
-            database.notes.isDeleted.equals(false),
+            database.notes.isDeleted.equals(false) &
+            _ownerFilter(database.notes.ownerKey),
       );
 
     return query.watchSingle().map((row) => row.read(count) ?? 0);

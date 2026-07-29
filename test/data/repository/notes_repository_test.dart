@@ -1,3 +1,4 @@
+import 'package:archset_r2/data/current_owner_holder.dart';
 import 'package:archset_r2/data/database/app_database.dart';
 import 'package:archset_r2/data/repository/notes_repository.dart';
 // `show Value` keeps drift's `isNull` query helper from shadowing the
@@ -13,13 +14,23 @@ import 'package:flutter_test/flutter_test.dart';
 /// `WHERE pending_sync = 1`. These tests read the row back from SQLite
 /// after each write instead of mocking the database, because the behaviour
 /// under test is exactly what ends up persisted.
+///
+/// The `ownerKey stamping` / `owner-scoped reads` groups close a critical
+/// cross-account leak: previously nothing stamped `ownerKey` on write and
+/// nothing filtered reads by it, so every row (including ones pulled from
+/// the server for a signed-in user) had `ownerKey == null` and
+/// `ClaimService`/`watchAllNotes` could sweep or display one account's rows
+/// under another. [CurrentOwnerHolder] is the shared, mutable "who owns
+/// local data right now" cell -- set by [SessionCubit] on auth transitions.
 void main() {
   late AppDatabase database;
   late NotesRepository repository;
+  late CurrentOwnerHolder ownerHolder;
 
   setUp(() {
     database = AppDatabase.forTesting(NativeDatabase.memory());
-    repository = NotesRepository(database);
+    ownerHolder = CurrentOwnerHolder();
+    repository = NotesRepository(database, ownerHolder: ownerHolder);
   });
 
   tearDown(() => database.close());
@@ -253,6 +264,213 @@ void main() {
       final n1 = await readNote('n1');
       expect(n1.folderId, 'f2');
       expect(n1.pendingSync, isFalse);
+    });
+  });
+
+  group('ownerKey stamping', () {
+    test('insertNote stamps ownerKey from the current owner holder', () async {
+      ownerHolder.value = 'me';
+
+      await repository.insertNote(note('n1'));
+
+      final saved = await readNote('n1');
+      expect(saved.ownerKey, 'me');
+    });
+
+    test('insertNote stamps a null ownerKey for a guest holder', () async {
+      ownerHolder.value = null;
+
+      await repository.insertNote(note('n1'));
+
+      final saved = await readNote('n1');
+      expect(saved.ownerKey, isNull);
+    });
+
+    test('updateNote stamps ownerKey from the current owner holder', () async {
+      await repository.insertNote(note('n1'));
+      ownerHolder.value = 'me';
+
+      await repository.updateNote(note('n1', title: 'Updated'));
+
+      final saved = await readNote('n1');
+      expect(saved.ownerKey, 'me');
+    });
+
+    test(
+      'moveNoteToFolder stamps ownerKey from the current owner holder',
+      () async {
+        await repository.insertNote(note('n1'));
+        ownerHolder.value = 'me';
+
+        await repository.moveNoteToFolder('n1', 'folder-2');
+
+        final saved = await readNote('n1');
+        expect(saved.ownerKey, 'me');
+      },
+    );
+
+    test('deleteNote stamps ownerKey from the current owner holder', () async {
+      await repository.insertNote(note('n1'));
+      ownerHolder.value = 'me';
+
+      await repository.deleteNote('n1');
+
+      final saved = await readNote('n1');
+      expect(saved.ownerKey, 'me');
+    });
+
+    test('createFolder stamps ownerKey from the current owner holder', () async {
+      ownerHolder.value = 'me';
+
+      await repository.createFolder(folder('f1'));
+
+      final saved = await readFolder('f1');
+      expect(saved.ownerKey, 'me');
+    });
+
+    test('updateFolder stamps ownerKey from the current owner holder', () async {
+      await repository.createFolder(folder('f1'));
+      ownerHolder.value = 'me';
+
+      await repository.updateFolder(folder('f1', name: 'Renamed'));
+
+      final saved = await readFolder('f1');
+      expect(saved.ownerKey, 'me');
+    });
+
+    test(
+      'deleteFolder stamps ownerKey on reparented notes and the deleted '
+      'folder',
+      () async {
+        await repository.createFolder(folder('f1'));
+        await repository.insertNote(note('n1', folderId: 'f1'));
+        ownerHolder.value = 'me';
+
+        await repository.deleteFolder('f1');
+
+        final n1 = await readNote('n1');
+        final f1 = await readFolder('f1');
+        expect(n1.ownerKey, 'me');
+        expect(f1.ownerKey, 'me');
+      },
+    );
+  });
+
+  group('owner-scoped reads', () {
+    /// Inserts a note directly (bypassing the repository) so it can be
+    /// stamped with an arbitrary owner, simulating a row that belongs to a
+    /// different, already-authenticated account.
+    Future<void> insertRawNote(
+      String id, {
+      required String ownerKey,
+      String? folderId,
+    }) => database
+        .into(database.notes)
+        .insert(
+          NotesCompanion.insert(
+            id: id,
+            title: 'Title $id',
+            content: 'Content $id',
+            date: DateTime(2026, 1, 1),
+            folderId: Value(folderId),
+            ownerKey: Value(ownerKey),
+          ),
+        );
+
+    Future<void> insertRawFolder(String id, {required String ownerKey}) =>
+        database
+            .into(database.folders)
+            .insert(
+              FoldersCompanion.insert(
+                id: id,
+                name: 'Folder $id',
+                createdAt: DateTime(2026, 1, 1),
+                ownerKey: Value(ownerKey),
+              ),
+            );
+
+    test(
+      "watchAllNotes returns the current owner's rows plus unclaimed guest "
+      "rows, but not another account's",
+      () async {
+        ownerHolder.value = 'me';
+        await repository.insertNote(note('mine'));
+        ownerHolder.value = null;
+        await repository.insertNote(note('guest'));
+        await insertRawNote('other', ownerKey: 'other-user');
+        ownerHolder.value = 'me';
+
+        final result = await repository.watchAllNotes().first;
+
+        final ids = result.map((n) => n.id).toSet();
+        expect(ids, {'mine', 'guest'});
+      },
+    );
+
+    test(
+      "watchAllFolders returns the current owner's rows plus unclaimed "
+      "guest rows, but not another account's",
+      () async {
+        ownerHolder.value = 'me';
+        await repository.createFolder(folder('mine'));
+        ownerHolder.value = null;
+        await repository.createFolder(folder('guest'));
+        await insertRawFolder('other', ownerKey: 'other-user');
+        ownerHolder.value = 'me';
+
+        final result = await repository.watchAllFolders().first;
+
+        final ids = result.map((f) => f.id).toSet();
+        expect(ids, {'mine', 'guest'});
+      },
+    );
+
+    test(
+      'watchNotesInFolder scopes both the uncategorised and specific-folder '
+      'branches to the current owner',
+      () async {
+        await repository.createFolder(folder('f1'));
+        await insertRawNote(
+          'other-in-folder',
+          ownerKey: 'other-user',
+          folderId: 'f1',
+        );
+        ownerHolder.value = 'me';
+        await repository.insertNote(note('mine-in-folder', folderId: 'f1'));
+        await repository.insertNote(note('mine-uncategorised'));
+
+        final inFolder = await repository.watchNotesInFolder('f1').first;
+        final uncategorised = await repository.watchNotesInFolder(null).first;
+
+        expect(inFolder.map((n) => n.id), ['mine-in-folder']);
+        expect(uncategorised.map((n) => n.id), ['mine-uncategorised']);
+      },
+    );
+
+    test(
+      "watchAllNotesCount only counts the current owner's uncategorised "
+      'notes',
+      () async {
+        await insertRawNote('other-1', ownerKey: 'other-user');
+        ownerHolder.value = 'me';
+        await repository.insertNote(note('mine-1'));
+        await repository.insertNote(note('mine-2'));
+
+        final count = await repository.watchAllNotesCount().first;
+
+        expect(count, 2);
+      },
+    );
+
+    test("watchFolderNoteCounts only counts the current owner's notes", () async {
+      await repository.createFolder(folder('f1'));
+      await insertRawNote('other-1', ownerKey: 'other-user', folderId: 'f1');
+      ownerHolder.value = 'me';
+      await repository.insertNote(note('mine-1', folderId: 'f1'));
+
+      final counts = await repository.watchFolderNoteCounts().first;
+
+      expect(counts['f1'], 1);
     });
   });
 }

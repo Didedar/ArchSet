@@ -4,6 +4,11 @@ import 'notes_dependencies.dart';
 
 abstract class NotesDependenciesBuilder {
   static NotesDependencies build(CoreDependencies core) {
-    return NotesDependencies(repository: NotesRepository(core.database));
+    return NotesDependencies(
+      repository: NotesRepository(
+        core.database,
+        ownerHolder: core.currentOwner,
+      ),
+    );
   }
 }

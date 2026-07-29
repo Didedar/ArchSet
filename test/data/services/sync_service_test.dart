@@ -29,6 +29,13 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('SyncService', () {
+    // The account every test is signed in as unless a test overrides
+    // 'current_owner_id' directly. Used as the default owner for rows
+    // inserted via the [insertNote]/[insertFolder] helpers below, so
+    // existing "this dirty row gets pushed" tests keep behaving exactly as
+    // before now that the push query also filters by owner.
+    const ownerId = 'user-1';
+
     late AppDatabase database;
     late _MockApiService apiService;
     late _MockConnectivity connectivity;
@@ -64,7 +71,7 @@ void main() {
           StreamController<List<ConnectivityResult>>.broadcast();
 
       storageValues = installFakeSecureStorage();
-      storageValues['current_owner_id'] = 'user-1';
+      storageValues['current_owner_id'] = ownerId;
 
       when(
         () => connectivity.checkConnectivity(),
@@ -99,6 +106,7 @@ void main() {
       DateTime? updatedAt,
       DateTime? date,
       bool isDeleted = false,
+      String? ownerKey = ownerId,
     }) async {
       await database
           .into(database.notes)
@@ -111,6 +119,7 @@ void main() {
               updatedAt: updatedAt,
               isDeleted: isDeleted,
               pendingSync: pendingSync,
+              ownerKey: ownerKey,
             ),
           );
     }
@@ -119,6 +128,7 @@ void main() {
       String id, {
       required bool pendingSync,
       DateTime? updatedAt,
+      String? ownerKey = ownerId,
     }) async {
       await database
           .into(database.folders)
@@ -131,6 +141,7 @@ void main() {
               updatedAt: updatedAt,
               isDeleted: false,
               pendingSync: pendingSync,
+              ownerKey: ownerKey,
             ),
           );
     }
@@ -418,6 +429,87 @@ void main() {
           expect(result.status, SyncStatus.success);
           final row = await readNote('n1');
           expect(row.isDeleted, isTrue);
+        },
+      );
+    });
+
+    group('owner-scoped sync (cross-account leak fix)', () {
+      test(
+        'a pendingSync row owned by a different account is never pushed',
+        () async {
+          await insertNote('mine', pendingSync: true); // ownerKey: ownerId
+          await insertNote('not-mine', pendingSync: true, ownerKey: 'other');
+          await insertFolder('mine-folder', pendingSync: true);
+          await insertFolder(
+            'not-mine-folder',
+            pendingSync: true,
+            ownerKey: 'other',
+          );
+
+          late Map<String, dynamic> pushedPayload;
+          when(() => apiService.post(any(), any())).thenAnswer((
+            invocation,
+          ) async {
+            pushedPayload =
+                invocation.positionalArguments[1] as Map<String, dynamic>;
+            return emptyPullResponse();
+          });
+
+          final service = buildService();
+          final result = await service.sync();
+
+          expect(result.status, SyncStatus.success);
+          final noteIds = (pushedPayload['notes'] as List)
+              .map((n) => (n as Map)['id'])
+              .toList();
+          final folderIds = (pushedPayload['folders'] as List)
+              .map((f) => (f as Map)['id'])
+              .toList();
+          expect(noteIds, ['mine']);
+          expect(folderIds, ['mine-folder']);
+        },
+      );
+
+      test(
+        'a note and folder pulled from the server are stamped with the '
+        'current owner id',
+        () async {
+          final t = DateTime(2026, 4, 1);
+          when(() => apiService.post(any(), any())).thenAnswer(
+            (_) async => {
+              'notes': [
+                {
+                  'id': 'srv-note',
+                  'title': 'Server Note',
+                  'content': 'Server content',
+                  'date': t.toIso8601String(),
+                  'audio_path': null,
+                  'folder_id': null,
+                  'is_deleted': false,
+                  'updated_at': t.toIso8601String(),
+                },
+              ],
+              'folders': [
+                {
+                  'id': 'srv-folder',
+                  'name': 'Server Folder',
+                  'color': '#123456',
+                  'is_deleted': false,
+                  'updated_at': t.toIso8601String(),
+                },
+              ],
+              'artifacts': [],
+              'artifact_comments': [],
+              'sync_timestamp': DateTime.now().toIso8601String(),
+            },
+          );
+
+          final service = buildService();
+          final result = await service.sync();
+
+          expect(result.status, SyncStatus.success);
+          expect((await readNote('srv-note')).ownerKey, ownerId);
+          expect((await readFolder('srv-folder')).ownerKey, ownerId);
         },
       );
     });

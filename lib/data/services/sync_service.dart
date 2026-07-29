@@ -195,9 +195,10 @@ class SyncService {
         await _loadLastSyncTime();
       }
 
-      // Get unsynced (pendingSync == true) local notes and folders
-      final localNotes = await _getUnsyncedNotes();
-      final localFolders = await _getUnsyncedFolders();
+      // Get unsynced (pendingSync == true) local notes and folders owned by
+      // the currently authenticated account -- never another account's.
+      final localNotes = await _getUnsyncedNotes(ownerId);
+      final localFolders = await _getUnsyncedFolders(ownerId);
       final localArtifacts = await _getUnsyncedArtifacts();
       final localComments = await _getUnsyncedArtifactComments();
 
@@ -231,7 +232,7 @@ class SyncService {
       final serverArtifacts = (response['artifacts'] as List?) ?? [];
       final serverComments = (response['artifact_comments'] as List?) ?? [];
 
-      await _applyServerChanges(serverNotes, serverFolders);
+      await _applyServerChanges(serverNotes, serverFolders, ownerId);
       await _applyServerArtifactChanges(serverArtifacts, serverComments);
 
       // Update last sync timestamp
@@ -264,18 +265,26 @@ class SyncService {
     }
   }
 
-  /// Get local notes with a pending (unsynced) local change.
-  Future<List<Note>> _getUnsyncedNotes() async {
-    return (_database.select(
-      _database.notes,
-    )..where((tbl) => tbl.pendingSync.equals(true))).get();
+  /// Get local notes with a pending (unsynced) local change, owned by
+  /// [ownerId]. The owner filter is what stops a previous account's still-
+  /// dirty rows on a shared device from being swept into a different
+  /// account's push payload.
+  Future<List<Note>> _getUnsyncedNotes(String ownerId) async {
+    return (_database.select(_database.notes)..where(
+          (tbl) =>
+              tbl.pendingSync.equals(true) & tbl.ownerKey.equals(ownerId),
+        ))
+        .get();
   }
 
-  /// Get local folders with a pending (unsynced) local change.
-  Future<List<Folder>> _getUnsyncedFolders() async {
-    return (_database.select(
-      _database.folders,
-    )..where((tbl) => tbl.pendingSync.equals(true))).get();
+  /// Get local folders with a pending (unsynced) local change, owned by
+  /// [ownerId]. See [_getUnsyncedNotes].
+  Future<List<Folder>> _getUnsyncedFolders(String ownerId) async {
+    return (_database.select(_database.folders)..where(
+          (tbl) =>
+              tbl.pendingSync.equals(true) & tbl.ownerKey.equals(ownerId),
+        ))
+        .get();
   }
 
   /// Push payload shape for a single note. Keys match what the backend's
@@ -497,9 +506,16 @@ class SyncService {
   /// that still has unpushed edits, or is already at least as new as the
   /// incoming one, keeps its local state instead of being clobbered by a
   /// stale server echo (see C4/C5).
+  ///
+  /// Every upserted row is stamped with [ownerId]: the backend's `/sync`
+  /// pull is already scoped to the authenticated account, so anything it
+  /// returns belongs to [ownerId]. Stamping it locally is what stops a
+  /// pulled row from silently reading as "unclaimed" (ownerKey null) and
+  /// leaking into a different account's view/claim/push later.
   Future<void> _applyServerChanges(
     List<dynamic> serverNotes,
     List<dynamic> serverFolders,
+    String ownerId,
   ) async {
     await _database.transaction(() async {
       // Apply folder changes first (notes may reference them)
@@ -547,6 +563,7 @@ class SyncService {
                   updatedAt: Value(serverUpdatedAt),
                   isDeleted: const Value(false),
                   pendingSync: const Value(false),
+                  ownerKey: Value(ownerId),
                 ),
               );
         }
@@ -597,6 +614,7 @@ class SyncService {
                   updatedAt: Value(serverUpdatedAt),
                   isDeleted: const Value(false),
                   pendingSync: const Value(false),
+                  ownerKey: Value(ownerId),
                 ),
               );
         }

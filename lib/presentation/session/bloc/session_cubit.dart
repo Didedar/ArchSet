@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
+import '../../../data/current_owner_holder.dart';
 import '../../../data/services/auth_service.dart' show AuthUser;
 import '../../../domain/repositories/auth_repository.dart';
 
@@ -47,13 +48,20 @@ final class SessionUnauthenticated extends AppSession {
 class SessionCubit extends Cubit<AppSession> {
   SessionCubit({
     required AuthRepository repository,
+    CurrentOwnerHolder? ownerHolder,
     Stream<void>? sessionExpiredSignal,
   })  : _repository = repository,
+        _ownerHolder = ownerHolder ?? CurrentOwnerHolder(),
         super(const SessionUnknown()) {
     _expiredSub = sessionExpiredSignal?.listen((_) => sessionLost());
   }
 
   final AuthRepository _repository;
+
+  /// The account local data is currently scoped to. Shared via DI with
+  /// [NotesRepository] so both stay in lockstep with auth state; kept in
+  /// sync with every emitted [AppSession] by [_emit].
+  final CurrentOwnerHolder _ownerHolder;
   StreamSubscription<void>? _expiredSub;
 
   /// Cold start. Never yields [SessionUnauthenticated]: a missing/dead
@@ -62,20 +70,30 @@ class SessionCubit extends Cubit<AppSession> {
   Future<void> bootstrap() async {
     try {
       final user = await _repository.loadStoredUser();
-      emit(user != null ? SessionAuthenticated(user) : const SessionGuest());
+      _emit(user != null ? SessionAuthenticated(user) : const SessionGuest());
     } catch (_) {
-      emit(const SessionGuest());
+      _emit(const SessionGuest());
     }
   }
 
-  void loginSuccess(AuthUser user) => emit(SessionAuthenticated(user));
+  void loginSuccess(AuthUser user) => _emit(SessionAuthenticated(user));
 
   Future<void> logout() async {
     await _repository.logout();
-    emit(const SessionUnauthenticated());
+    _emit(const SessionUnauthenticated());
   }
 
-  void sessionLost() => emit(const SessionUnauthenticated());
+  void sessionLost() => _emit(const SessionUnauthenticated());
+
+  /// Single choke point for every state transition: updates [_ownerHolder]
+  /// before emitting, so anything reacting to the new [AppSession] (e.g. a
+  /// repository read triggered by a rebuilt widget) already sees the right
+  /// owner.
+  void _emit(AppSession session) {
+    _ownerHolder.value =
+        session is SessionAuthenticated ? session.user.id : null;
+    emit(session);
+  }
 
   @override
   Future<void> close() async {

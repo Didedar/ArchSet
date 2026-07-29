@@ -12,7 +12,10 @@ abstract class EditorDependenciesBuilder {
   ) {
     final apiService = ApiService(authService: auth.repository);
     return EditorDependencies(
-      notesRepository: NotesRepository(core.database),
+      notesRepository: NotesRepository(
+        core.database,
+        ownerHolder: core.currentOwner,
+      ),
       geminiService: BackendGeminiService(apiService: apiService),
       apiService: apiService,
     );
