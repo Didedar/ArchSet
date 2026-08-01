@@ -1,6 +1,5 @@
 
 import os
-import whisper
 import warnings
 from functools import lru_cache
 from typing import Optional
@@ -17,6 +16,10 @@ class WhisperService:
     def get_model(cls):
         """Lazy load the Whisper model."""
         if cls._model is None:
+            # Imported lazily so a missing openai-whisper (a heavy, optional
+            # dependency that pulls in torch) doesn't crash app startup — only
+            # actual transcription needs it. Callers wrap get_model in try/except.
+            import whisper
             print("Loading Whisper 'base' model for offline transcription...")
             # 'base' is a good balance for offline mobile/desktop app
             cls._model = whisper.load_model("base")

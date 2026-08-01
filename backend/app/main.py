@@ -35,14 +35,15 @@ async def lifespan(app: FastAPI):
     # Initialize RAG Service (Vector DB setup)
     await rag_service.initialize()
     
-    # Ensure Whisper model is downloaded (if online)
-    from .services.whisper_service import WhisperService
-    # Run in thread pool to not block async loop if it takes time (though it's startup)
+    # Ensure Whisper model is downloaded (if online + installed). Offline
+    # transcription is optional — a missing openai-whisper must not take down
+    # auth/notes/folders/sync, which don't use it.
     import asyncio
     try:
+        from .services.whisper_service import WhisperService
         await asyncio.to_thread(WhisperService.ensure_model_downloaded)
     except Exception as e:
-        print(f"Startup warning: Whisper model check failed: {e}")
+        print(f"Startup warning: Whisper unavailable, offline transcription disabled: {e}")
     
     # Create upload directory if it doesn't exist
     os.makedirs(settings.upload_dir, exist_ok=True)
