@@ -124,6 +124,8 @@ class AppStrings {
   static const String guestModeDescription = 'guest_mode_description';
   static const String signInOrCreateAccount = 'sign_in_or_create_account';
   static const String signedIn = 'signed_in';
+  static const String unsyncedWarningTitle = 'unsynced_warning_title';
+  static const String unsyncedWarningBody = 'unsynced_warning_body';
 
   /// Every key declared above. Used by the locale-parity test to assert no
   /// language is missing a translation (`tr` would silently fall back to
@@ -243,6 +245,8 @@ class AppStrings {
     guestModeDescription,
     signInOrCreateAccount,
     signedIn,
+    unsyncedWarningTitle,
+    unsyncedWarningBody,
   ];
 
   /// Language codes with a translation table. `en` is the fallback in [tr].
@@ -377,6 +381,11 @@ class AppStrings {
           'and sync them across your devices.',
       signInOrCreateAccount: 'Sign in or create account',
       signedIn: 'Signed in',
+      unsyncedWarningTitle: 'Unsynced entries',
+      unsyncedWarningBody:
+          'Some entries have not reached the server yet. If you sign out now '
+          'they stay on this device, and your colleagues will only see them '
+          'after you sign in to this account again.',
     },
     'ru': {
       settings: 'Настройки',
@@ -505,6 +514,11 @@ class AppStrings {
           'их копию и синхронизировать между устройствами.',
       signInOrCreateAccount: 'Войти или создать аккаунт',
       signedIn: 'Вы вошли',
+      unsyncedWarningTitle: 'Несинхронизированные записи',
+      unsyncedWarningBody:
+          'Часть записей ещё не отправлена на сервер. Если выйти сейчас, они '
+          'останутся на этом устройстве, и коллеги увидят их только после '
+          'того, как вы снова войдёте в этот аккаунт.',
     },
     'kk': {
       settings: 'Баптаулар',
@@ -632,6 +646,11 @@ class AppStrings {
           'құрылғылар арасында синхрондау үшін кіріңіз.',
       signInOrCreateAccount: 'Кіру немесе аккаунт жасау',
       signedIn: 'Сіз кірдіңіз',
+      unsyncedWarningTitle: 'Синхрондалмаған жазбалар',
+      unsyncedWarningBody:
+          'Кейбір жазбалар серверге әлі жіберілмеген. Қазір шықсаңыз, олар '
+          'осы құрылғыда қалады, ал әріптестеріңіз оларды сіз осы аккаунтқа '
+          'қайта кіргеннен кейін ғана көреді.',
     },
     'zh': {
       settings: '设置',
@@ -751,6 +770,10 @@ class AppStrings {
       guestModeDescription: '笔记仅保存在本设备上。登录后即可备份，并在多台设备间同步。',
       signInOrCreateAccount: '登录或注册账号',
       signedIn: '已登录',
+      unsyncedWarningTitle: '未同步的记录',
+      unsyncedWarningBody:
+          '部分记录尚未上传到服务器。如果现在退出登录，它们将保留在本设备上，'
+          '同事只有在您重新登录此账号后才能看到。',
     },
   };
 

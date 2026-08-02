@@ -55,11 +55,7 @@ void main() {
     );
   }
 
-  Folder folder(
-    String id, {
-    String name = 'Folder',
-    String color = '#E8B731',
-  }) {
+  Folder folder(String id, {String name = 'Folder', String color = '#E8B731'}) {
     return Folder(
       id: id,
       name: name,
@@ -84,8 +80,9 @@ void main() {
       );
 
   Future<void> clearFolderFlag(String id) =>
-      (database.update(database.folders)..where((t) => t.id.equals(id)))
-          .write(const FoldersCompanion(pendingSync: Value(false)));
+      (database.update(database.folders)..where((t) => t.id.equals(id))).write(
+        const FoldersCompanion(pendingSync: Value(false)),
+      );
 
   group('insertNote', () {
     test('stamps pendingSync=true and a fresh updatedAt', () async {
@@ -139,13 +136,14 @@ void main() {
 
     test('bumps updatedAt forward from a stale value', () async {
       await repository.insertNote(note('n1'));
-      await (database.update(database.notes)..where((t) => t.id.equals('n1')))
-          .write(
-            NotesCompanion(
-              pendingSync: const Value(false),
-              updatedAt: Value(DateTime(2000, 1, 1)),
-            ),
-          );
+      await (database.update(
+        database.notes,
+      )..where((t) => t.id.equals('n1'))).write(
+        NotesCompanion(
+          pendingSync: const Value(false),
+          updatedAt: Value(DateTime(2000, 1, 1)),
+        ),
+      );
 
       await repository.updateNote(note('n1', title: 'Updated'));
 
@@ -215,19 +213,22 @@ void main() {
   });
 
   group('updateFolder', () {
-    test('flips pendingSync back to true, bumps updatedAt, edits fields', () async {
-      await repository.createFolder(folder('f1', name: 'Original'));
-      await clearFolderFlag('f1');
+    test(
+      'flips pendingSync back to true, bumps updatedAt, edits fields',
+      () async {
+        await repository.createFolder(folder('f1', name: 'Original'));
+        await clearFolderFlag('f1');
 
-      await repository.updateFolder(
-        folder('f1', name: 'Renamed', color: '#ABCDEF'),
-      );
+        await repository.updateFolder(
+          folder('f1', name: 'Renamed', color: '#ABCDEF'),
+        );
 
-      final saved = await readFolder('f1');
-      expect(saved.name, 'Renamed');
-      expect(saved.color, '#ABCDEF');
-      expect(saved.pendingSync, isTrue);
-    });
+        final saved = await readFolder('f1');
+        expect(saved.name, 'Renamed');
+        expect(saved.color, '#ABCDEF');
+        expect(saved.pendingSync, isTrue);
+      },
+    );
   });
 
   group('deleteFolder', () {
@@ -319,41 +320,44 @@ void main() {
       expect(saved.ownerKey, 'me');
     });
 
-    test('createFolder stamps ownerKey from the current owner holder', () async {
-      ownerHolder.value = 'me';
-
-      await repository.createFolder(folder('f1'));
-
-      final saved = await readFolder('f1');
-      expect(saved.ownerKey, 'me');
-    });
-
-    test('updateFolder stamps ownerKey from the current owner holder', () async {
-      await repository.createFolder(folder('f1'));
-      ownerHolder.value = 'me';
-
-      await repository.updateFolder(folder('f1', name: 'Renamed'));
-
-      final saved = await readFolder('f1');
-      expect(saved.ownerKey, 'me');
-    });
-
     test(
-      'deleteFolder stamps ownerKey on reparented notes and the deleted '
-      'folder',
+      'createFolder stamps ownerKey from the current owner holder',
       () async {
-        await repository.createFolder(folder('f1'));
-        await repository.insertNote(note('n1', folderId: 'f1'));
         ownerHolder.value = 'me';
 
-        await repository.deleteFolder('f1');
+        await repository.createFolder(folder('f1'));
 
-        final n1 = await readNote('n1');
-        final f1 = await readFolder('f1');
-        expect(n1.ownerKey, 'me');
-        expect(f1.ownerKey, 'me');
+        final saved = await readFolder('f1');
+        expect(saved.ownerKey, 'me');
       },
     );
+
+    test(
+      'updateFolder stamps ownerKey from the current owner holder',
+      () async {
+        await repository.createFolder(folder('f1'));
+        ownerHolder.value = 'me';
+
+        await repository.updateFolder(folder('f1', name: 'Renamed'));
+
+        final saved = await readFolder('f1');
+        expect(saved.ownerKey, 'me');
+      },
+    );
+
+    test('deleteFolder stamps ownerKey on reparented notes and the deleted '
+        'folder', () async {
+      await repository.createFolder(folder('f1'));
+      await repository.insertNote(note('n1', folderId: 'f1'));
+      ownerHolder.value = 'me';
+
+      await repository.deleteFolder('f1');
+
+      final n1 = await readNote('n1');
+      final f1 = await readFolder('f1');
+      expect(n1.ownerKey, 'me');
+      expect(f1.ownerKey, 'me');
+    });
   });
 
   group('owner-scoped reads', () {
@@ -389,88 +393,127 @@ void main() {
               ),
             );
 
+    test("watchAllNotes returns the current owner's rows plus unclaimed guest "
+        "rows, but not another account's", () async {
+      ownerHolder.value = 'me';
+      await repository.insertNote(note('mine'));
+      ownerHolder.value = null;
+      await repository.insertNote(note('guest'));
+      await insertRawNote('other', ownerKey: 'other-user');
+      ownerHolder.value = 'me';
+
+      final result = await repository.watchAllNotes().first;
+
+      final ids = result.map((n) => n.id).toSet();
+      expect(ids, {'mine', 'guest'});
+    });
+
+    test("watchAllFolders returns the current owner's rows plus unclaimed "
+        "guest rows, but not another account's", () async {
+      ownerHolder.value = 'me';
+      await repository.createFolder(folder('mine'));
+      ownerHolder.value = null;
+      await repository.createFolder(folder('guest'));
+      await insertRawFolder('other', ownerKey: 'other-user');
+      ownerHolder.value = 'me';
+
+      final result = await repository.watchAllFolders().first;
+
+      final ids = result.map((f) => f.id).toSet();
+      expect(ids, {'mine', 'guest'});
+    });
+
+    test('watchNotesInFolder scopes both the uncategorised and specific-folder '
+        'branches to the current owner', () async {
+      await repository.createFolder(folder('f1'));
+      await insertRawNote(
+        'other-in-folder',
+        ownerKey: 'other-user',
+        folderId: 'f1',
+      );
+      ownerHolder.value = 'me';
+      await repository.insertNote(note('mine-in-folder', folderId: 'f1'));
+      await repository.insertNote(note('mine-uncategorised'));
+
+      final inFolder = await repository.watchNotesInFolder('f1').first;
+      final uncategorised = await repository.watchNotesInFolder(null).first;
+
+      expect(inFolder.map((n) => n.id), ['mine-in-folder']);
+      expect(uncategorised.map((n) => n.id), ['mine-uncategorised']);
+    });
+
+    test("watchAllNotesCount only counts the current owner's uncategorised "
+        'notes', () async {
+      await insertRawNote('other-1', ownerKey: 'other-user');
+      ownerHolder.value = 'me';
+      await repository.insertNote(note('mine-1'));
+      await repository.insertNote(note('mine-2'));
+
+      final count = await repository.watchAllNotesCount().first;
+
+      expect(count, 2);
+    });
+
     test(
-      "watchAllNotes returns the current owner's rows plus unclaimed guest "
-      "rows, but not another account's",
-      () async {
-        ownerHolder.value = 'me';
-        await repository.insertNote(note('mine'));
-        ownerHolder.value = null;
-        await repository.insertNote(note('guest'));
-        await insertRawNote('other', ownerKey: 'other-user');
-        ownerHolder.value = 'me';
-
-        final result = await repository.watchAllNotes().first;
-
-        final ids = result.map((n) => n.id).toSet();
-        expect(ids, {'mine', 'guest'});
-      },
-    );
-
-    test(
-      "watchAllFolders returns the current owner's rows plus unclaimed "
-      "guest rows, but not another account's",
-      () async {
-        ownerHolder.value = 'me';
-        await repository.createFolder(folder('mine'));
-        ownerHolder.value = null;
-        await repository.createFolder(folder('guest'));
-        await insertRawFolder('other', ownerKey: 'other-user');
-        ownerHolder.value = 'me';
-
-        final result = await repository.watchAllFolders().first;
-
-        final ids = result.map((f) => f.id).toSet();
-        expect(ids, {'mine', 'guest'});
-      },
-    );
-
-    test(
-      'watchNotesInFolder scopes both the uncategorised and specific-folder '
-      'branches to the current owner',
+      "watchFolderNoteCounts only counts the current owner's notes",
       () async {
         await repository.createFolder(folder('f1'));
-        await insertRawNote(
-          'other-in-folder',
-          ownerKey: 'other-user',
-          folderId: 'f1',
-        );
+        await insertRawNote('other-1', ownerKey: 'other-user', folderId: 'f1');
         ownerHolder.value = 'me';
-        await repository.insertNote(note('mine-in-folder', folderId: 'f1'));
-        await repository.insertNote(note('mine-uncategorised'));
+        await repository.insertNote(note('mine-1', folderId: 'f1'));
 
-        final inFolder = await repository.watchNotesInFolder('f1').first;
-        final uncategorised = await repository.watchNotesInFolder(null).first;
+        final counts = await repository.watchFolderNoteCounts().first;
 
-        expect(inFolder.map((n) => n.id), ['mine-in-folder']);
-        expect(uncategorised.map((n) => n.id), ['mine-uncategorised']);
+        expect(counts['f1'], 1);
       },
     );
 
-    test(
-      "watchAllNotesCount only counts the current owner's uncategorised "
-      'notes',
-      () async {
+    /// `pendingSyncCount()` drives the "you have unsent work" warning shown
+    /// before sign-out. It is the only query in the repository whose result
+    /// the user never sees directly -- they only see a dialog appear or not
+    /// appear -- so a wrong predicate here fails silently. That makes it
+    /// worth pinning both halves of its WHERE clause explicitly.
+    group('pendingSyncCount', () {
+      test('counts only rows that are actually dirty', () async {
+        ownerHolder.value = 'me';
+        await repository.insertNote(note('dirty-1'));
+        await repository.insertNote(note('dirty-2'));
+        await repository.insertNote(note('clean-1'));
+        await clearNoteFlag('clean-1');
+
+        expect(await repository.pendingSyncCount(), 2);
+      });
+
+      test("does not count another account's dirty rows", () async {
+        // Same cross-account leak this whole group exists to prevent: without
+        // the owner filter this would report a stranger's unsent work as the
+        // signed-in user's own.
         await insertRawNote('other-1', ownerKey: 'other-user');
+        await (database.update(database.notes)
+              ..where((t) => t.id.equals('other-1')))
+            .write(const NotesCompanion(pendingSync: Value(true)));
         ownerHolder.value = 'me';
         await repository.insertNote(note('mine-1'));
-        await repository.insertNote(note('mine-2'));
 
-        final count = await repository.watchAllNotesCount().first;
+        expect(await repository.pendingSyncCount(), 1);
+      });
 
-        expect(count, 2);
-      },
-    );
+      test('is zero when everything has been synced', () async {
+        ownerHolder.value = 'me';
+        await repository.insertNote(note('n1'));
+        await clearNoteFlag('n1');
 
-    test("watchFolderNoteCounts only counts the current owner's notes", () async {
-      await repository.createFolder(folder('f1'));
-      await insertRawNote('other-1', ownerKey: 'other-user', folderId: 'f1');
-      ownerHolder.value = 'me';
-      await repository.insertNote(note('mine-1', folderId: 'f1'));
+        expect(await repository.pendingSyncCount(), 0);
+      });
 
-      final counts = await repository.watchFolderNoteCounts().first;
+      test('counts a pending deletion as unsent work', () async {
+        ownerHolder.value = 'me';
+        await repository.insertNote(note('n1'));
+        await clearNoteFlag('n1');
+        await repository.deleteNote('n1');
 
-      expect(counts['f1'], 1);
+        expect(await repository.pendingSyncCount(), 1);
+      });
     });
   });
 }

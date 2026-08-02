@@ -13,7 +13,7 @@ class NotesRepository {
   final CurrentOwnerHolder _owner;
 
   NotesRepository(this.database, {CurrentOwnerHolder? ownerHolder})
-      : _owner = ownerHolder ?? CurrentOwnerHolder();
+    : _owner = ownerHolder ?? CurrentOwnerHolder();
 
   /// Owner filter shared by every watch query: a signed-in user sees their
   /// own rows plus still-unclaimed guest rows (about to be claimed), a
@@ -32,9 +32,7 @@ class NotesRepository {
   /// Stream of all notes, ordered by date descending
   Stream<List<Note>> watchAllNotes() {
     return (database.select(database.notes)
-          ..where(
-            (t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey),
-          )
+          ..where((t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey))
           ..orderBy([
             (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
           ]))
@@ -220,9 +218,7 @@ class NotesRepository {
   /// Stream of all folders, ordered by creation date
   Stream<List<Folder>> watchAllFolders() {
     return (database.select(database.folders)
-          ..where(
-            (t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey),
-          )
+          ..where((t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey))
           ..orderBy([
             (t) =>
                 OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
@@ -273,16 +269,16 @@ class NotesRepository {
   /// Delete a folder and move its notes to "All Notes" (null folderId)
   Future<void> deleteFolder(String folderId) async {
     // Move all notes in this folder to "All Notes"
-    await (database.update(database.notes)
-          ..where((t) => t.folderId.equals(folderId)))
-        .write(
-          NotesCompanion(
-            folderId: const Value(null),
-            updatedAt: Value(DateTime.now()),
-            pendingSync: const Value(true),
-            ownerKey: Value(_owner.value),
-          ),
-        );
+    await (database.update(
+      database.notes,
+    )..where((t) => t.folderId.equals(folderId))).write(
+      NotesCompanion(
+        folderId: const Value(null),
+        updatedAt: Value(DateTime.now()),
+        pendingSync: const Value(true),
+        ownerKey: Value(_owner.value),
+      ),
+    );
 
     // Soft delete the folder
     await (database.update(
@@ -332,5 +328,27 @@ class NotesRepository {
       );
 
     return query.watchSingle().map((row) => row.read(count) ?? 0);
+  }
+
+  /// How many of this owner's notes carry local changes the server has not
+  /// acknowledged yet.
+  ///
+  /// Used to warn before a sign-out that would strand them: the rows survive
+  /// on the device, but `ownerKey` scoping hides them until the same account
+  /// signs back in, so from the user's side the work simply vanishes.
+  ///
+  /// Deleted rows are counted too -- a pending deletion is unsent work in the
+  /// same way an edit is.
+  Future<int> pendingSyncCount() async {
+    final count = database.notes.id.count();
+    final query = database.selectOnly(database.notes)
+      ..addColumns([count])
+      ..where(
+        database.notes.pendingSync.equals(true) &
+            _ownerFilter(database.notes.ownerKey),
+      );
+
+    final row = await query.getSingle();
+    return row.read(count) ?? 0;
   }
 }

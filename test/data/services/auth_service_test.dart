@@ -126,6 +126,7 @@ void main() {
       expect(storageValues.containsKey('refresh_token'), isFalse);
       expect(storageValues.containsKey('user_id'), isFalse);
       expect(storageValues.containsKey('user_email'), isFalse);
+      expect(storageValues.containsKey('user_created_at'), isFalse);
     });
   });
 
@@ -298,12 +299,71 @@ void main() {
       expect(storageValues[AuthStorageKeys.accessToken(slug)], 'new-access');
     });
 
+    test('401 followed by a successful refresh, but the retry is '
+        'unreachable, still returns the cached user and keeps the new '
+        'tokens', () async {
+      storageValues[AuthStorageKeys.accessToken(slug)] = 'stale-token';
+      storageValues[AuthStorageKeys.refreshToken(slug)] = 'refresh-token';
+      storageValues[AuthStorageKeys.userId(slug)] = 'old-id';
+      storageValues[AuthStorageKeys.userEmail(slug)] = 'old@example.com';
+      storageValues[AuthStorageKeys.userCreatedAt(slug)] =
+          '2026-01-01T00:00:00.000Z';
+
+      var meCalls = 0;
+      final client = MockClient((request) async {
+        const headers = {'content-type': 'application/json'};
+        final path = request.url.path;
+        if (path.endsWith('/auth/me')) {
+          meCalls++;
+          if (meCalls == 1) {
+            return http.Response(
+              jsonEncode({'detail': 'Unauthorized'}),
+              401,
+              headers: headers,
+            );
+          }
+          // The retry against the freshly refreshed token can't reach the
+          // server either -- this must not be treated as proof the brand-new
+          // token is bad.
+          throw const SocketException('offline');
+        }
+        if (path.endsWith('/auth/refresh')) {
+          return http.Response(
+            jsonEncode({
+              'access_token': 'new-access',
+              'refresh_token': 'new-refresh',
+            }),
+            200,
+            headers: headers,
+          );
+        }
+        fail('unexpected HTTP call: ${request.method} ${request.url}');
+      });
+      final service = _service(baseUrl: _localBaseUrl, client: client);
+      addTearDown(service.dispose);
+
+      final user = await service.loadStoredUser();
+
+      // The refresh already succeeded and minted a new token pair before the
+      // retry hit a socket error. Wiping the session here would be strictly
+      // worse than never having refreshed: pre-refresh, reconnecting would
+      // have recovered the old token; here it would destroy a token that was
+      // never actually disproven.
+      expect(user, isNotNull);
+      expect(user!.id, 'old-id');
+      expect(meCalls, 2);
+      expect(storageValues[AuthStorageKeys.accessToken(slug)], 'new-access');
+      expect(storageValues[AuthStorageKeys.refreshToken(slug)], 'new-refresh');
+    });
+
     test('401 with a failed refresh clears the namespaced session and returns '
         'null', () async {
       storageValues[AuthStorageKeys.accessToken(slug)] = 'dead-token';
       storageValues[AuthStorageKeys.refreshToken(slug)] = 'dead-refresh';
       storageValues[AuthStorageKeys.userId(slug)] = 'old-id';
       storageValues[AuthStorageKeys.userEmail(slug)] = 'old@example.com';
+      storageValues[AuthStorageKeys.userCreatedAt(slug)] =
+          '2026-01-01T00:00:00.000Z';
       storageValues[AuthStorageKeys.currentOwnerId] = 'old-id';
 
       final client = MockClient((request) async {
@@ -337,16 +397,27 @@ void main() {
         isFalse,
       );
       expect(
+        storageValues.containsKey(AuthStorageKeys.userCreatedAt(slug)),
+        isFalse,
+      );
+      expect(
         storageValues.containsKey(AuthStorageKeys.currentOwnerId),
         isFalse,
       );
     });
 
-    test('a network error (offline) returns null but preserves the stored '
-        'access token', () async {
+    test('a network error (offline) returns the cached user, preserves the '
+        'stored access token, and restores currentOwnerId', () async {
       storageValues[AuthStorageKeys.accessToken(slug)] = 'still-good-token';
       storageValues[AuthStorageKeys.userId(slug)] = 'old-id';
       storageValues[AuthStorageKeys.userEmail(slug)] = 'old@example.com';
+      storageValues[AuthStorageKeys.userCreatedAt(slug)] =
+          '2026-01-01T00:00:00.000Z';
+      // currentOwnerId deliberately absent: a DIFFERENT backend origin's
+      // fail-closed wipe deletes this un-namespaced key even though it never
+      // touches this origin's own namespaced session. Restoring it here is
+      // what lets SyncService.sync() -- which only checks currentOwnerId --
+      // see this account as signed in again.
 
       final client = MockClient((request) async {
         throw const SocketException('offline');
@@ -356,10 +427,63 @@ void main() {
 
       final user = await service.loadStoredUser();
 
-      expect(user, isNull);
+      // "Couldn't verify" must not collapse into "no user": that is what made
+      // an offline launch look like a guest session with an empty diary.
+      expect(user, isNotNull);
+      expect(user!.id, 'old-id');
+      expect(user.email, 'old@example.com');
       expect(
         storageValues[AuthStorageKeys.accessToken(slug)],
         'still-good-token',
+      );
+      expect(storageValues[AuthStorageKeys.currentOwnerId], 'old-id');
+    });
+
+    test(
+      'a network error with no cached identity still returns null',
+      () async {
+        storageValues[AuthStorageKeys.accessToken(slug)] = 'still-good-token';
+
+        final client = MockClient((request) async {
+          throw const SocketException('offline');
+        });
+        final service = _service(baseUrl: _localBaseUrl, client: client);
+        addTearDown(service.dispose);
+
+        expect(await service.loadStoredUser(), isNull);
+      },
+    );
+
+    test('a session cached before createdAt was stored still loads', () async {
+      storageValues[AuthStorageKeys.accessToken(slug)] = 'still-good-token';
+      storageValues[AuthStorageKeys.userId(slug)] = 'legacy-id';
+      storageValues[AuthStorageKeys.userEmail(slug)] = 'legacy@example.com';
+      // No userCreatedAt key: this device signed in before Task 1 shipped.
+
+      final client = MockClient((request) async {
+        throw const SocketException('offline');
+      });
+      final service = _service(baseUrl: _localBaseUrl, client: client);
+      addTearDown(service.dispose);
+
+      final user = await service.loadStoredUser();
+
+      expect(user?.id, 'legacy-id');
+    });
+  });
+
+  group('cached identity', () {
+    test('login persists createdAt', () async {
+      final slug = AuthStorageKeys.originSlug(_prodBaseUrl);
+      final client = _clientFor(userId: 'u1', userEmail: 'u1@example.com');
+      final service = _service(baseUrl: _prodBaseUrl, client: client);
+      addTearDown(service.dispose);
+
+      await service.login('u1@example.com', 'password');
+
+      expect(
+        storageValues[AuthStorageKeys.userCreatedAt(slug)],
+        '2026-01-01T00:00:00.000Z',
       );
     });
   });

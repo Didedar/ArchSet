@@ -64,6 +64,8 @@ void main() {
       storageValues[AuthStorageKeys.refreshToken(slug)] = 'refresh-token';
       storageValues[AuthStorageKeys.userId(slug)] = 'user-1';
       storageValues[AuthStorageKeys.userEmail(slug)] = 'a@example.com';
+      storageValues[AuthStorageKeys.userCreatedAt(slug)] =
+          '2026-01-01T00:00:00.000Z';
       storageValues[AuthStorageKeys.currentOwnerId] = 'user-1';
 
       await service.logout();
@@ -82,6 +84,10 @@ void main() {
       );
       expect(
         storageValues.containsKey(AuthStorageKeys.userEmail(slug)),
+        isFalse,
+      );
+      expect(
+        storageValues.containsKey(AuthStorageKeys.userCreatedAt(slug)),
         isFalse,
       );
       expect(

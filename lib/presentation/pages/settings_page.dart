@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../core/di/app_scope.dart';
 import '../auth/pages/sign_in_email_page.dart';
 import '../locale/bloc/locale_bloc.dart';
 import '../session/bloc/session_cubit.dart';
@@ -679,6 +680,56 @@ class SettingsPage extends StatelessWidget {
   }
 
   Future<void> _handleSignOut(BuildContext context, Locale locale) async {
+    // Signing out while entries are still unsent strands them: the rows stay
+    // in SQLite, but `ownerKey` scoping hides them until this same account
+    // signs back in, so from the user's side a day of field notes simply
+    // disappears. Warn, don't block -- leaving is their call to make, just
+    // not blind.
+    final pending = await context.di.notes.repository.pendingSyncCount();
+    if (!context.mounted) return;
+
+    if (pending > 0) {
+      final proceed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: Theme.of(context).dialogBackgroundColor,
+          title: Text(
+            AppStrings.tr(locale, AppStrings.unsyncedWarningTitle),
+            style: GoogleFonts.inter(
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          content: Text(
+            AppStrings.tr(locale, AppStrings.unsyncedWarningBody),
+            style: GoogleFonts.inter(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(
+                AppStrings.tr(locale, AppStrings.cancel),
+                style: GoogleFonts.inter(
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.onSurface.withOpacity(0.5),
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(
+                AppStrings.tr(locale, AppStrings.confirm),
+                style: GoogleFonts.inter(color: Colors.redAccent),
+              ),
+            ),
+          ],
+        ),
+      );
+      if (proceed != true || !context.mounted) return;
+    }
+
     final shouldLogout = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
