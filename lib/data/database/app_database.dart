@@ -15,6 +15,11 @@ class Folders extends Table {
   BoolColumn get pendingSync => boolean().withDefault(const Constant(false))();
   TextColumn get ownerKey => text().nullable()();
 
+  /// The server revision this row's local state was based on. Null means the
+  /// row has never been to the server. Written by the sync layer, not by the
+  /// repository.
+  IntColumn get baseRevision => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -32,6 +37,11 @@ class Notes extends Table {
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
   BoolColumn get pendingSync => boolean().withDefault(const Constant(false))();
   TextColumn get ownerKey => text().nullable()();
+
+  /// The server revision this row's local state was based on. Null means the
+  /// row has never been to the server. Written by the sync layer, not by the
+  /// repository.
+  IntColumn get baseRevision => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -55,6 +65,11 @@ class ImageMetadata extends Table {
   DateTimeColumn get updatedAt => dateTime().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
 
+  /// The server revision this row's local state was based on. Null means the
+  /// row has never been to the server. Written by the sync layer, not by the
+  /// repository.
+  IntColumn get baseRevision => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -67,6 +82,11 @@ class ArtifactComments extends Table {
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime().nullable()();
   BoolColumn get isDeleted => boolean().withDefault(const Constant(false))();
+
+  /// The server revision this row's local state was based on. Null means the
+  /// row has never been to the server. Written by the sync layer, not by the
+  /// repository.
+  IntColumn get baseRevision => integer().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -84,7 +104,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   /// Indexes covering every filter/sort the repository actually issues.
   ///
@@ -172,6 +192,35 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(notes, notes.ownerKey);
         await m.addColumn(folders, folders.pendingSync);
         await m.addColumn(folders, folders.ownerKey);
+      }
+      if (from < 10) {
+        // baseRevision records the server revision a local edit was based on,
+        // so conflicts can be detected from a server-assigned counter rather
+        // than device clocks. Existing rows backfill to null -- they have
+        // never been to the server under this scheme, and null is
+        // distinguishable from a real revision in a way that zero would not
+        // be. No logic reads it yet.
+        //
+        // The `from >=` guards are load-bearing. `createTable` above builds
+        // from the *current* schema, so a table created earlier in this same
+        // upgrade run already has base_revision; adding it again fails with
+        // "duplicate column name". Each guard is the version at which that
+        // table started being created rather than migrated:
+        //   folders           -> from < 2
+        //   image_metadata    -> from < 6
+        //   artifact_comments -> from < 8
+        // `notes` has existed since v1 and is never created here, so it is
+        // always an addColumn.
+        await m.addColumn(notes, notes.baseRevision);
+        if (from >= 2) {
+          await m.addColumn(folders, folders.baseRevision);
+        }
+        if (from >= 6) {
+          await m.addColumn(imageMetadata, imageMetadata.baseRevision);
+        }
+        if (from >= 8) {
+          await m.addColumn(artifactComments, artifactComments.baseRevision);
+        }
       }
     },
   );

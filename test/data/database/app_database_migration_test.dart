@@ -5,7 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 
-/// Verifies the v6 -> v9 upgrade against a database built with the real v6
+/// Verifies the v6 -> v10 upgrade against a database built with the real v6
 /// schema, because a broken migration corrupts existing users' data rather
 /// than failing loudly in review.
 void main() {
@@ -101,7 +101,62 @@ void main() {
     return db;
   }
 
-  test('upgrades a v6 database to v9 and keeps existing photos', () async {
+  /// The schema exactly as it shipped at version 9: v8 plus the per-row sync
+  /// bookkeeping (`pending_sync`, `owner_key`), and before `base_revision`.
+  Database buildV9Database() {
+    final db = sqlite3.openInMemory();
+    db.execute('''
+      CREATE TABLE folders (
+        id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT '#E8B731',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        pending_sync INTEGER NOT NULL DEFAULT 0,
+        owner_key TEXT NULL,
+        PRIMARY KEY (id)
+      );
+      CREATE TABLE notes (
+        id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        date INTEGER NOT NULL,
+        audio_path TEXT NULL,
+        folder_id TEXT NULL,
+        updated_at INTEGER NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        pending_sync INTEGER NOT NULL DEFAULT 0,
+        owner_key TEXT NULL,
+        PRIMARY KEY (id)
+      );
+      CREATE TABLE image_metadata (
+        id TEXT NOT NULL,
+        image_path TEXT NOT NULL,
+        latitude REAL NULL,
+        longitude REAL NULL,
+        analysis_result TEXT NULL,
+        captured_at INTEGER NOT NULL,
+        note_id TEXT NULL,
+        updated_at INTEGER NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (id)
+      );
+      CREATE TABLE artifact_comments (
+        id TEXT NOT NULL,
+        artifact_id TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (id)
+      );
+    ''');
+    db.userVersion = 9;
+    return db;
+  }
+
+  test('upgrades a v6 database to v10 and keeps existing photos', () async {
     final raw = buildV6Database();
     // A photo captured before the upgrade: has coordinates, no note link.
     raw.execute(
@@ -116,7 +171,7 @@ void main() {
     // Any query forces the migration to run.
     final rows = await database.select(database.imageMetadata).get();
 
-    expect(database.schemaVersion, 9);
+    expect(database.schemaVersion, 10);
     expect(rows.single.id, 'legacy');
     expect(rows.single.latitude, 12.5);
     // New columns take their defaults rather than dropping the row.
@@ -125,27 +180,78 @@ void main() {
     expect(rows.single.isDeleted, isFalse);
   });
 
-  test('upgrades a v8 database to v9, adding sync columns with safe defaults', () async {
-    final raw = buildV8Database();
+  test(
+    'upgrades a v8 database to v10, adding sync columns with safe defaults',
+    () async {
+      final raw = buildV8Database();
+      raw.execute(
+        "INSERT INTO folders (id, name, color, created_at, is_deleted) "
+        "VALUES ('f-legacy','Old','#E8B731',1767225600,0)",
+      );
+      raw.execute(
+        "INSERT INTO notes (id, title, content, date, is_deleted) "
+        "VALUES ('n-legacy','T','C',1767225600,0)",
+      );
+      final database = AppDatabase.forTesting(NativeDatabase.opened(raw));
+      addTearDown(database.close);
+
+      final notes = await database.select(database.notes).get();
+      final folders = await database.select(database.folders).get();
+
+      expect(database.schemaVersion, 10);
+      expect(notes.single.pendingSync, isFalse);
+      expect(notes.single.ownerKey, isNull);
+      expect(folders.single.pendingSync, isFalse);
+      expect(folders.single.ownerKey, isNull);
+    },
+  );
+
+  test('upgrades a v9 database to v10, adding baseRevision without losing '
+      'rows', () async {
+    final raw = buildV9Database();
     raw.execute(
-      "INSERT INTO folders (id, name, color, created_at, is_deleted) "
-      "VALUES ('f-legacy','Old','#E8B731',1767225600,0)",
+      "INSERT INTO folders (id, name, color, created_at, is_deleted, "
+      "pending_sync, owner_key) "
+      "VALUES ('f-legacy','Раскоп 3','#E8B731',1767225600,0,1,'ivan')",
     );
     raw.execute(
-      "INSERT INTO notes (id, title, content, date, is_deleted) "
-      "VALUES ('n-legacy','T','C',1767225600,0)",
+      "INSERT INTO notes (id, title, content, date, is_deleted, pending_sync, "
+      "owner_key) VALUES ('n-legacy','Слой 2','C',1767225600,0,1,'ivan')",
+    );
+    raw.execute(
+      "INSERT INTO image_metadata (id, image_path, captured_at, is_deleted) "
+      "VALUES ('a-legacy','/photos/a.jpg',1767225600,0)",
+    );
+    raw.execute(
+      "INSERT INTO artifact_comments (id, artifact_id, body, created_at, "
+      "is_deleted) VALUES ('c-legacy','a-legacy','Керамика',1767225600,0)",
     );
     final database = AppDatabase.forTesting(NativeDatabase.opened(raw));
     addTearDown(database.close);
 
     final notes = await database.select(database.notes).get();
     final folders = await database.select(database.folders).get();
+    final artifacts = await database.select(database.imageMetadata).get();
+    final comments = await database.select(database.artifactComments).get();
 
-    expect(database.schemaVersion, 9);
-    expect(notes.single.pendingSync, isFalse);
-    expect(notes.single.ownerKey, isNull);
-    expect(folders.single.pendingSync, isFalse);
-    expect(folders.single.ownerKey, isNull);
+    expect(database.schemaVersion, 10);
+
+    // Null, not zero: a row that has never been to the server has no revision
+    // to have been based on, and zero would look like a real one.
+    expect(notes.single.baseRevision, isNull);
+    expect(folders.single.baseRevision, isNull);
+    expect(artifacts.single.baseRevision, isNull);
+    expect(comments.single.baseRevision, isNull);
+
+    // The migration must not disturb what was already there -- in particular
+    // the dirty flags, which are what a pending sync depends on.
+    expect(notes.single.title, 'Слой 2');
+    expect(notes.single.pendingSync, isTrue);
+    expect(notes.single.ownerKey, 'ivan');
+    expect(folders.single.name, 'Раскоп 3');
+    expect(folders.single.pendingSync, isTrue);
+    expect(artifacts.single.imagePath, '/photos/a.jpg');
+    expect(comments.single.body, 'Керамика');
   });
 
   test('the migrated v9 notes table accepts the new sync columns', () async {
@@ -154,16 +260,18 @@ void main() {
     );
     addTearDown(database.close);
 
-    await database.into(database.notes).insert(
-      NotesCompanion.insert(
-        id: 'n-new',
-        title: 'T',
-        content: 'C',
-        date: DateTime(2026, 1, 1),
-        pendingSync: const Value(true),
-        ownerKey: const Value('user-1'),
-      ),
-    );
+    await database
+        .into(database.notes)
+        .insert(
+          NotesCompanion.insert(
+            id: 'n-new',
+            title: 'T',
+            content: 'C',
+            date: DateTime(2026, 1, 1),
+            pendingSync: const Value(true),
+            ownerKey: const Value('user-1'),
+          ),
+        );
 
     final row = await (database.select(
       database.notes,
@@ -209,7 +317,7 @@ void main() {
     expect(comments.single.body, 'found near the hearth');
   });
 
-  test('a fresh database is created directly at v9', () async {
+  test('a fresh database is created directly at v10', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 

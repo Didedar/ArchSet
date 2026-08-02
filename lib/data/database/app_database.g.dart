@@ -99,6 +99,17 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _baseRevisionMeta = const VerificationMeta(
+    'baseRevision',
+  );
+  @override
+  late final GeneratedColumn<int> baseRevision = GeneratedColumn<int>(
+    'base_revision',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -109,6 +120,7 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     isDeleted,
     pendingSync,
     ownerKey,
+    baseRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -176,6 +188,15 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         ownerKey.isAcceptableOrUnknown(data['owner_key']!, _ownerKeyMeta),
       );
     }
+    if (data.containsKey('base_revision')) {
+      context.handle(
+        _baseRevisionMeta,
+        baseRevision.isAcceptableOrUnknown(
+          data['base_revision']!,
+          _baseRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -217,6 +238,10 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         DriftSqlType.string,
         data['${effectivePrefix}owner_key'],
       ),
+      baseRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}base_revision'],
+      ),
     );
   }
 
@@ -235,6 +260,11 @@ class Folder extends DataClass implements Insertable<Folder> {
   final bool isDeleted;
   final bool pendingSync;
   final String? ownerKey;
+
+  /// The server revision this row's local state was based on. Null means the
+  /// row has never been to the server. Written by the sync layer, not by the
+  /// repository.
+  final int? baseRevision;
   const Folder({
     required this.id,
     required this.name,
@@ -244,6 +274,7 @@ class Folder extends DataClass implements Insertable<Folder> {
     required this.isDeleted,
     required this.pendingSync,
     this.ownerKey,
+    this.baseRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -259,6 +290,9 @@ class Folder extends DataClass implements Insertable<Folder> {
     map['pending_sync'] = Variable<bool>(pendingSync);
     if (!nullToAbsent || ownerKey != null) {
       map['owner_key'] = Variable<String>(ownerKey);
+    }
+    if (!nullToAbsent || baseRevision != null) {
+      map['base_revision'] = Variable<int>(baseRevision);
     }
     return map;
   }
@@ -277,6 +311,9 @@ class Folder extends DataClass implements Insertable<Folder> {
       ownerKey: ownerKey == null && nullToAbsent
           ? const Value.absent()
           : Value(ownerKey),
+      baseRevision: baseRevision == null && nullToAbsent
+          ? const Value.absent()
+          : Value(baseRevision),
     );
   }
 
@@ -294,6 +331,7 @@ class Folder extends DataClass implements Insertable<Folder> {
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       pendingSync: serializer.fromJson<bool>(json['pendingSync']),
       ownerKey: serializer.fromJson<String?>(json['ownerKey']),
+      baseRevision: serializer.fromJson<int?>(json['baseRevision']),
     );
   }
   @override
@@ -308,6 +346,7 @@ class Folder extends DataClass implements Insertable<Folder> {
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'pendingSync': serializer.toJson<bool>(pendingSync),
       'ownerKey': serializer.toJson<String?>(ownerKey),
+      'baseRevision': serializer.toJson<int?>(baseRevision),
     };
   }
 
@@ -320,6 +359,7 @@ class Folder extends DataClass implements Insertable<Folder> {
     bool? isDeleted,
     bool? pendingSync,
     Value<String?> ownerKey = const Value.absent(),
+    Value<int?> baseRevision = const Value.absent(),
   }) => Folder(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -329,6 +369,7 @@ class Folder extends DataClass implements Insertable<Folder> {
     isDeleted: isDeleted ?? this.isDeleted,
     pendingSync: pendingSync ?? this.pendingSync,
     ownerKey: ownerKey.present ? ownerKey.value : this.ownerKey,
+    baseRevision: baseRevision.present ? baseRevision.value : this.baseRevision,
   );
   Folder copyWithCompanion(FoldersCompanion data) {
     return Folder(
@@ -342,6 +383,9 @@ class Folder extends DataClass implements Insertable<Folder> {
           ? data.pendingSync.value
           : this.pendingSync,
       ownerKey: data.ownerKey.present ? data.ownerKey.value : this.ownerKey,
+      baseRevision: data.baseRevision.present
+          ? data.baseRevision.value
+          : this.baseRevision,
     );
   }
 
@@ -355,7 +399,8 @@ class Folder extends DataClass implements Insertable<Folder> {
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('pendingSync: $pendingSync, ')
-          ..write('ownerKey: $ownerKey')
+          ..write('ownerKey: $ownerKey, ')
+          ..write('baseRevision: $baseRevision')
           ..write(')'))
         .toString();
   }
@@ -370,6 +415,7 @@ class Folder extends DataClass implements Insertable<Folder> {
     isDeleted,
     pendingSync,
     ownerKey,
+    baseRevision,
   );
   @override
   bool operator ==(Object other) =>
@@ -382,7 +428,8 @@ class Folder extends DataClass implements Insertable<Folder> {
           other.updatedAt == this.updatedAt &&
           other.isDeleted == this.isDeleted &&
           other.pendingSync == this.pendingSync &&
-          other.ownerKey == this.ownerKey);
+          other.ownerKey == this.ownerKey &&
+          other.baseRevision == this.baseRevision);
 }
 
 class FoldersCompanion extends UpdateCompanion<Folder> {
@@ -394,6 +441,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
   final Value<bool> isDeleted;
   final Value<bool> pendingSync;
   final Value<String?> ownerKey;
+  final Value<int?> baseRevision;
   final Value<int> rowid;
   const FoldersCompanion({
     this.id = const Value.absent(),
@@ -404,6 +452,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     this.isDeleted = const Value.absent(),
     this.pendingSync = const Value.absent(),
     this.ownerKey = const Value.absent(),
+    this.baseRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FoldersCompanion.insert({
@@ -415,6 +464,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     this.isDeleted = const Value.absent(),
     this.pendingSync = const Value.absent(),
     this.ownerKey = const Value.absent(),
+    this.baseRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -428,6 +478,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Expression<bool>? isDeleted,
     Expression<bool>? pendingSync,
     Expression<String>? ownerKey,
+    Expression<int>? baseRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -439,6 +490,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (pendingSync != null) 'pending_sync': pendingSync,
       if (ownerKey != null) 'owner_key': ownerKey,
+      if (baseRevision != null) 'base_revision': baseRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -452,6 +504,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Value<bool>? isDeleted,
     Value<bool>? pendingSync,
     Value<String?>? ownerKey,
+    Value<int?>? baseRevision,
     Value<int>? rowid,
   }) {
     return FoldersCompanion(
@@ -463,6 +516,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       isDeleted: isDeleted ?? this.isDeleted,
       pendingSync: pendingSync ?? this.pendingSync,
       ownerKey: ownerKey ?? this.ownerKey,
+      baseRevision: baseRevision ?? this.baseRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -494,6 +548,9 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     if (ownerKey.present) {
       map['owner_key'] = Variable<String>(ownerKey.value);
     }
+    if (baseRevision.present) {
+      map['base_revision'] = Variable<int>(baseRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -511,6 +568,7 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
           ..write('isDeleted: $isDeleted, ')
           ..write('pendingSync: $pendingSync, ')
           ..write('ownerKey: $ownerKey, ')
+          ..write('baseRevision: $baseRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -634,6 +692,17 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _baseRevisionMeta = const VerificationMeta(
+    'baseRevision',
+  );
+  @override
+  late final GeneratedColumn<int> baseRevision = GeneratedColumn<int>(
+    'base_revision',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -646,6 +715,7 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     isDeleted,
     pendingSync,
     ownerKey,
+    baseRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -727,6 +797,15 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         ownerKey.isAcceptableOrUnknown(data['owner_key']!, _ownerKeyMeta),
       );
     }
+    if (data.containsKey('base_revision')) {
+      context.handle(
+        _baseRevisionMeta,
+        baseRevision.isAcceptableOrUnknown(
+          data['base_revision']!,
+          _baseRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -776,6 +855,10 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         DriftSqlType.string,
         data['${effectivePrefix}owner_key'],
       ),
+      baseRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}base_revision'],
+      ),
     );
   }
 
@@ -796,6 +879,11 @@ class Note extends DataClass implements Insertable<Note> {
   final bool isDeleted;
   final bool pendingSync;
   final String? ownerKey;
+
+  /// The server revision this row's local state was based on. Null means the
+  /// row has never been to the server. Written by the sync layer, not by the
+  /// repository.
+  final int? baseRevision;
   const Note({
     required this.id,
     required this.title,
@@ -807,6 +895,7 @@ class Note extends DataClass implements Insertable<Note> {
     required this.isDeleted,
     required this.pendingSync,
     this.ownerKey,
+    this.baseRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -828,6 +917,9 @@ class Note extends DataClass implements Insertable<Note> {
     map['pending_sync'] = Variable<bool>(pendingSync);
     if (!nullToAbsent || ownerKey != null) {
       map['owner_key'] = Variable<String>(ownerKey);
+    }
+    if (!nullToAbsent || baseRevision != null) {
+      map['base_revision'] = Variable<int>(baseRevision);
     }
     return map;
   }
@@ -852,6 +944,9 @@ class Note extends DataClass implements Insertable<Note> {
       ownerKey: ownerKey == null && nullToAbsent
           ? const Value.absent()
           : Value(ownerKey),
+      baseRevision: baseRevision == null && nullToAbsent
+          ? const Value.absent()
+          : Value(baseRevision),
     );
   }
 
@@ -871,6 +966,7 @@ class Note extends DataClass implements Insertable<Note> {
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       pendingSync: serializer.fromJson<bool>(json['pendingSync']),
       ownerKey: serializer.fromJson<String?>(json['ownerKey']),
+      baseRevision: serializer.fromJson<int?>(json['baseRevision']),
     );
   }
   @override
@@ -887,6 +983,7 @@ class Note extends DataClass implements Insertable<Note> {
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'pendingSync': serializer.toJson<bool>(pendingSync),
       'ownerKey': serializer.toJson<String?>(ownerKey),
+      'baseRevision': serializer.toJson<int?>(baseRevision),
     };
   }
 
@@ -901,6 +998,7 @@ class Note extends DataClass implements Insertable<Note> {
     bool? isDeleted,
     bool? pendingSync,
     Value<String?> ownerKey = const Value.absent(),
+    Value<int?> baseRevision = const Value.absent(),
   }) => Note(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -912,6 +1010,7 @@ class Note extends DataClass implements Insertable<Note> {
     isDeleted: isDeleted ?? this.isDeleted,
     pendingSync: pendingSync ?? this.pendingSync,
     ownerKey: ownerKey.present ? ownerKey.value : this.ownerKey,
+    baseRevision: baseRevision.present ? baseRevision.value : this.baseRevision,
   );
   Note copyWithCompanion(NotesCompanion data) {
     return Note(
@@ -927,6 +1026,9 @@ class Note extends DataClass implements Insertable<Note> {
           ? data.pendingSync.value
           : this.pendingSync,
       ownerKey: data.ownerKey.present ? data.ownerKey.value : this.ownerKey,
+      baseRevision: data.baseRevision.present
+          ? data.baseRevision.value
+          : this.baseRevision,
     );
   }
 
@@ -942,7 +1044,8 @@ class Note extends DataClass implements Insertable<Note> {
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('pendingSync: $pendingSync, ')
-          ..write('ownerKey: $ownerKey')
+          ..write('ownerKey: $ownerKey, ')
+          ..write('baseRevision: $baseRevision')
           ..write(')'))
         .toString();
   }
@@ -959,6 +1062,7 @@ class Note extends DataClass implements Insertable<Note> {
     isDeleted,
     pendingSync,
     ownerKey,
+    baseRevision,
   );
   @override
   bool operator ==(Object other) =>
@@ -973,7 +1077,8 @@ class Note extends DataClass implements Insertable<Note> {
           other.updatedAt == this.updatedAt &&
           other.isDeleted == this.isDeleted &&
           other.pendingSync == this.pendingSync &&
-          other.ownerKey == this.ownerKey);
+          other.ownerKey == this.ownerKey &&
+          other.baseRevision == this.baseRevision);
 }
 
 class NotesCompanion extends UpdateCompanion<Note> {
@@ -987,6 +1092,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
   final Value<bool> isDeleted;
   final Value<bool> pendingSync;
   final Value<String?> ownerKey;
+  final Value<int?> baseRevision;
   final Value<int> rowid;
   const NotesCompanion({
     this.id = const Value.absent(),
@@ -999,6 +1105,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.isDeleted = const Value.absent(),
     this.pendingSync = const Value.absent(),
     this.ownerKey = const Value.absent(),
+    this.baseRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NotesCompanion.insert({
@@ -1012,6 +1119,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.isDeleted = const Value.absent(),
     this.pendingSync = const Value.absent(),
     this.ownerKey = const Value.absent(),
+    this.baseRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -1028,6 +1136,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Expression<bool>? isDeleted,
     Expression<bool>? pendingSync,
     Expression<String>? ownerKey,
+    Expression<int>? baseRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1041,6 +1150,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (pendingSync != null) 'pending_sync': pendingSync,
       if (ownerKey != null) 'owner_key': ownerKey,
+      if (baseRevision != null) 'base_revision': baseRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1056,6 +1166,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Value<bool>? isDeleted,
     Value<bool>? pendingSync,
     Value<String?>? ownerKey,
+    Value<int?>? baseRevision,
     Value<int>? rowid,
   }) {
     return NotesCompanion(
@@ -1069,6 +1180,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
       isDeleted: isDeleted ?? this.isDeleted,
       pendingSync: pendingSync ?? this.pendingSync,
       ownerKey: ownerKey ?? this.ownerKey,
+      baseRevision: baseRevision ?? this.baseRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1106,6 +1218,9 @@ class NotesCompanion extends UpdateCompanion<Note> {
     if (ownerKey.present) {
       map['owner_key'] = Variable<String>(ownerKey.value);
     }
+    if (baseRevision.present) {
+      map['base_revision'] = Variable<int>(baseRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1125,6 +1240,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
           ..write('isDeleted: $isDeleted, ')
           ..write('pendingSync: $pendingSync, ')
           ..write('ownerKey: $ownerKey, ')
+          ..write('baseRevision: $baseRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1236,6 +1352,17 @@ class $ImageMetadataTable extends ImageMetadata
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _baseRevisionMeta = const VerificationMeta(
+    'baseRevision',
+  );
+  @override
+  late final GeneratedColumn<int> baseRevision = GeneratedColumn<int>(
+    'base_revision',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1247,6 +1374,7 @@ class $ImageMetadataTable extends ImageMetadata
     noteId,
     updatedAt,
     isDeleted,
+    baseRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1320,6 +1448,15 @@ class $ImageMetadataTable extends ImageMetadata
         isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
       );
     }
+    if (data.containsKey('base_revision')) {
+      context.handle(
+        _baseRevisionMeta,
+        baseRevision.isAcceptableOrUnknown(
+          data['base_revision']!,
+          _baseRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1365,6 +1502,10 @@ class $ImageMetadataTable extends ImageMetadata
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
       )!,
+      baseRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}base_revision'],
+      ),
     );
   }
 
@@ -1385,6 +1526,11 @@ class ImageMetadataData extends DataClass
   final String? noteId;
   final DateTime? updatedAt;
   final bool isDeleted;
+
+  /// The server revision this row's local state was based on. Null means the
+  /// row has never been to the server. Written by the sync layer, not by the
+  /// repository.
+  final int? baseRevision;
   const ImageMetadataData({
     required this.id,
     required this.imagePath,
@@ -1395,6 +1541,7 @@ class ImageMetadataData extends DataClass
     this.noteId,
     this.updatedAt,
     required this.isDeleted,
+    this.baseRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1418,6 +1565,9 @@ class ImageMetadataData extends DataClass
       map['updated_at'] = Variable<DateTime>(updatedAt);
     }
     map['is_deleted'] = Variable<bool>(isDeleted);
+    if (!nullToAbsent || baseRevision != null) {
+      map['base_revision'] = Variable<int>(baseRevision);
+    }
     return map;
   }
 
@@ -1442,6 +1592,9 @@ class ImageMetadataData extends DataClass
           ? const Value.absent()
           : Value(updatedAt),
       isDeleted: Value(isDeleted),
+      baseRevision: baseRevision == null && nullToAbsent
+          ? const Value.absent()
+          : Value(baseRevision),
     );
   }
 
@@ -1460,6 +1613,7 @@ class ImageMetadataData extends DataClass
       noteId: serializer.fromJson<String?>(json['noteId']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      baseRevision: serializer.fromJson<int?>(json['baseRevision']),
     );
   }
   @override
@@ -1475,6 +1629,7 @@ class ImageMetadataData extends DataClass
       'noteId': serializer.toJson<String?>(noteId),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'baseRevision': serializer.toJson<int?>(baseRevision),
     };
   }
 
@@ -1488,6 +1643,7 @@ class ImageMetadataData extends DataClass
     Value<String?> noteId = const Value.absent(),
     Value<DateTime?> updatedAt = const Value.absent(),
     bool? isDeleted,
+    Value<int?> baseRevision = const Value.absent(),
   }) => ImageMetadataData(
     id: id ?? this.id,
     imagePath: imagePath ?? this.imagePath,
@@ -1500,6 +1656,7 @@ class ImageMetadataData extends DataClass
     noteId: noteId.present ? noteId.value : this.noteId,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     isDeleted: isDeleted ?? this.isDeleted,
+    baseRevision: baseRevision.present ? baseRevision.value : this.baseRevision,
   );
   ImageMetadataData copyWithCompanion(ImageMetadataCompanion data) {
     return ImageMetadataData(
@@ -1516,6 +1673,9 @@ class ImageMetadataData extends DataClass
       noteId: data.noteId.present ? data.noteId.value : this.noteId,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      baseRevision: data.baseRevision.present
+          ? data.baseRevision.value
+          : this.baseRevision,
     );
   }
 
@@ -1530,7 +1690,8 @@ class ImageMetadataData extends DataClass
           ..write('capturedAt: $capturedAt, ')
           ..write('noteId: $noteId, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('isDeleted: $isDeleted')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('baseRevision: $baseRevision')
           ..write(')'))
         .toString();
   }
@@ -1546,6 +1707,7 @@ class ImageMetadataData extends DataClass
     noteId,
     updatedAt,
     isDeleted,
+    baseRevision,
   );
   @override
   bool operator ==(Object other) =>
@@ -1559,7 +1721,8 @@ class ImageMetadataData extends DataClass
           other.capturedAt == this.capturedAt &&
           other.noteId == this.noteId &&
           other.updatedAt == this.updatedAt &&
-          other.isDeleted == this.isDeleted);
+          other.isDeleted == this.isDeleted &&
+          other.baseRevision == this.baseRevision);
 }
 
 class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
@@ -1572,6 +1735,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
   final Value<String?> noteId;
   final Value<DateTime?> updatedAt;
   final Value<bool> isDeleted;
+  final Value<int?> baseRevision;
   final Value<int> rowid;
   const ImageMetadataCompanion({
     this.id = const Value.absent(),
@@ -1583,6 +1747,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     this.noteId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.baseRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ImageMetadataCompanion.insert({
@@ -1595,6 +1760,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     this.noteId = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.baseRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        imagePath = Value(imagePath),
@@ -1609,6 +1775,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     Expression<String>? noteId,
     Expression<DateTime>? updatedAt,
     Expression<bool>? isDeleted,
+    Expression<int>? baseRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1621,6 +1788,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
       if (noteId != null) 'note_id': noteId,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (baseRevision != null) 'base_revision': baseRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1635,6 +1803,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     Value<String?>? noteId,
     Value<DateTime?>? updatedAt,
     Value<bool>? isDeleted,
+    Value<int?>? baseRevision,
     Value<int>? rowid,
   }) {
     return ImageMetadataCompanion(
@@ -1647,6 +1816,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
       noteId: noteId ?? this.noteId,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      baseRevision: baseRevision ?? this.baseRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1681,6 +1851,9 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (baseRevision.present) {
+      map['base_revision'] = Variable<int>(baseRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1699,6 +1872,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
           ..write('noteId: $noteId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('baseRevision: $baseRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1777,6 +1951,17 @@ class $ArtifactCommentsTable extends ArtifactComments
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _baseRevisionMeta = const VerificationMeta(
+    'baseRevision',
+  );
+  @override
+  late final GeneratedColumn<int> baseRevision = GeneratedColumn<int>(
+    'base_revision',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1785,6 +1970,7 @@ class $ArtifactCommentsTable extends ArtifactComments
     createdAt,
     updatedAt,
     isDeleted,
+    baseRevision,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1839,6 +2025,15 @@ class $ArtifactCommentsTable extends ArtifactComments
         isDeleted.isAcceptableOrUnknown(data['is_deleted']!, _isDeletedMeta),
       );
     }
+    if (data.containsKey('base_revision')) {
+      context.handle(
+        _baseRevisionMeta,
+        baseRevision.isAcceptableOrUnknown(
+          data['base_revision']!,
+          _baseRevisionMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1872,6 +2067,10 @@ class $ArtifactCommentsTable extends ArtifactComments
         DriftSqlType.bool,
         data['${effectivePrefix}is_deleted'],
       )!,
+      baseRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}base_revision'],
+      ),
     );
   }
 
@@ -1888,6 +2087,11 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final bool isDeleted;
+
+  /// The server revision this row's local state was based on. Null means the
+  /// row has never been to the server. Written by the sync layer, not by the
+  /// repository.
+  final int? baseRevision;
   const ArtifactComment({
     required this.id,
     required this.artifactId,
@@ -1895,6 +2099,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
     required this.createdAt,
     this.updatedAt,
     required this.isDeleted,
+    this.baseRevision,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1907,6 +2112,9 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
       map['updated_at'] = Variable<DateTime>(updatedAt);
     }
     map['is_deleted'] = Variable<bool>(isDeleted);
+    if (!nullToAbsent || baseRevision != null) {
+      map['base_revision'] = Variable<int>(baseRevision);
+    }
     return map;
   }
 
@@ -1920,6 +2128,9 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
           ? const Value.absent()
           : Value(updatedAt),
       isDeleted: Value(isDeleted),
+      baseRevision: baseRevision == null && nullToAbsent
+          ? const Value.absent()
+          : Value(baseRevision),
     );
   }
 
@@ -1935,6 +2146,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
+      baseRevision: serializer.fromJson<int?>(json['baseRevision']),
     );
   }
   @override
@@ -1947,6 +2159,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'isDeleted': serializer.toJson<bool>(isDeleted),
+      'baseRevision': serializer.toJson<int?>(baseRevision),
     };
   }
 
@@ -1957,6 +2170,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
     DateTime? createdAt,
     Value<DateTime?> updatedAt = const Value.absent(),
     bool? isDeleted,
+    Value<int?> baseRevision = const Value.absent(),
   }) => ArtifactComment(
     id: id ?? this.id,
     artifactId: artifactId ?? this.artifactId,
@@ -1964,6 +2178,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     isDeleted: isDeleted ?? this.isDeleted,
+    baseRevision: baseRevision.present ? baseRevision.value : this.baseRevision,
   );
   ArtifactComment copyWithCompanion(ArtifactCommentsCompanion data) {
     return ArtifactComment(
@@ -1975,6 +2190,9 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       isDeleted: data.isDeleted.present ? data.isDeleted.value : this.isDeleted,
+      baseRevision: data.baseRevision.present
+          ? data.baseRevision.value
+          : this.baseRevision,
     );
   }
 
@@ -1986,14 +2204,22 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
           ..write('body: $body, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
-          ..write('isDeleted: $isDeleted')
+          ..write('isDeleted: $isDeleted, ')
+          ..write('baseRevision: $baseRevision')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, artifactId, body, createdAt, updatedAt, isDeleted);
+  int get hashCode => Object.hash(
+    id,
+    artifactId,
+    body,
+    createdAt,
+    updatedAt,
+    isDeleted,
+    baseRevision,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2003,7 +2229,8 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
           other.body == this.body &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
-          other.isDeleted == this.isDeleted);
+          other.isDeleted == this.isDeleted &&
+          other.baseRevision == this.baseRevision);
 }
 
 class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
@@ -2013,6 +2240,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
   final Value<DateTime> createdAt;
   final Value<DateTime?> updatedAt;
   final Value<bool> isDeleted;
+  final Value<int?> baseRevision;
   final Value<int> rowid;
   const ArtifactCommentsCompanion({
     this.id = const Value.absent(),
@@ -2021,6 +2249,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.baseRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ArtifactCommentsCompanion.insert({
@@ -2030,6 +2259,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     required DateTime createdAt,
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
+    this.baseRevision = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        artifactId = Value(artifactId),
@@ -2042,6 +2272,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<bool>? isDeleted,
+    Expression<int>? baseRevision,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2051,6 +2282,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (isDeleted != null) 'is_deleted': isDeleted,
+      if (baseRevision != null) 'base_revision': baseRevision,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2062,6 +2294,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     Value<DateTime>? createdAt,
     Value<DateTime?>? updatedAt,
     Value<bool>? isDeleted,
+    Value<int?>? baseRevision,
     Value<int>? rowid,
   }) {
     return ArtifactCommentsCompanion(
@@ -2071,6 +2304,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      baseRevision: baseRevision ?? this.baseRevision,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2096,6 +2330,9 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     if (isDeleted.present) {
       map['is_deleted'] = Variable<bool>(isDeleted.value);
     }
+    if (baseRevision.present) {
+      map['base_revision'] = Variable<int>(baseRevision.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2111,6 +2348,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
+          ..write('baseRevision: $baseRevision, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2148,6 +2386,7 @@ typedef $$FoldersTableCreateCompanionBuilder =
       Value<bool> isDeleted,
       Value<bool> pendingSync,
       Value<String?> ownerKey,
+      Value<int?> baseRevision,
       Value<int> rowid,
     });
 typedef $$FoldersTableUpdateCompanionBuilder =
@@ -2160,6 +2399,7 @@ typedef $$FoldersTableUpdateCompanionBuilder =
       Value<bool> isDeleted,
       Value<bool> pendingSync,
       Value<String?> ownerKey,
+      Value<int?> baseRevision,
       Value<int> rowid,
     });
 
@@ -2209,6 +2449,11 @@ class $$FoldersTableFilterComposer
 
   ColumnFilters<String> get ownerKey => $composableBuilder(
     column: $table.ownerKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2261,6 +2506,11 @@ class $$FoldersTableOrderingComposer
     column: $table.ownerKey,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$FoldersTableAnnotationComposer
@@ -2297,6 +2547,11 @@ class $$FoldersTableAnnotationComposer
 
   GeneratedColumn<String> get ownerKey =>
       $composableBuilder(column: $table.ownerKey, builder: (column) => column);
+
+  GeneratedColumn<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
+    builder: (column) => column,
+  );
 }
 
 class $$FoldersTableTableManager
@@ -2335,6 +2590,7 @@ class $$FoldersTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<bool> pendingSync = const Value.absent(),
                 Value<String?> ownerKey = const Value.absent(),
+                Value<int?> baseRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoldersCompanion(
                 id: id,
@@ -2345,6 +2601,7 @@ class $$FoldersTableTableManager
                 isDeleted: isDeleted,
                 pendingSync: pendingSync,
                 ownerKey: ownerKey,
+                baseRevision: baseRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2357,6 +2614,7 @@ class $$FoldersTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<bool> pendingSync = const Value.absent(),
                 Value<String?> ownerKey = const Value.absent(),
+                Value<int?> baseRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoldersCompanion.insert(
                 id: id,
@@ -2367,6 +2625,7 @@ class $$FoldersTableTableManager
                 isDeleted: isDeleted,
                 pendingSync: pendingSync,
                 ownerKey: ownerKey,
+                baseRevision: baseRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2403,6 +2662,7 @@ typedef $$NotesTableCreateCompanionBuilder =
       Value<bool> isDeleted,
       Value<bool> pendingSync,
       Value<String?> ownerKey,
+      Value<int?> baseRevision,
       Value<int> rowid,
     });
 typedef $$NotesTableUpdateCompanionBuilder =
@@ -2417,6 +2677,7 @@ typedef $$NotesTableUpdateCompanionBuilder =
       Value<bool> isDeleted,
       Value<bool> pendingSync,
       Value<String?> ownerKey,
+      Value<int?> baseRevision,
       Value<int> rowid,
     });
 
@@ -2475,6 +2736,11 @@ class $$NotesTableFilterComposer extends Composer<_$AppDatabase, $NotesTable> {
 
   ColumnFilters<String> get ownerKey => $composableBuilder(
     column: $table.ownerKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2537,6 +2803,11 @@ class $$NotesTableOrderingComposer
     column: $table.ownerKey,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NotesTableAnnotationComposer
@@ -2579,6 +2850,11 @@ class $$NotesTableAnnotationComposer
 
   GeneratedColumn<String> get ownerKey =>
       $composableBuilder(column: $table.ownerKey, builder: (column) => column);
+
+  GeneratedColumn<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
+    builder: (column) => column,
+  );
 }
 
 class $$NotesTableTableManager
@@ -2619,6 +2895,7 @@ class $$NotesTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<bool> pendingSync = const Value.absent(),
                 Value<String?> ownerKey = const Value.absent(),
+                Value<int?> baseRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion(
                 id: id,
@@ -2631,6 +2908,7 @@ class $$NotesTableTableManager
                 isDeleted: isDeleted,
                 pendingSync: pendingSync,
                 ownerKey: ownerKey,
+                baseRevision: baseRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2645,6 +2923,7 @@ class $$NotesTableTableManager
                 Value<bool> isDeleted = const Value.absent(),
                 Value<bool> pendingSync = const Value.absent(),
                 Value<String?> ownerKey = const Value.absent(),
+                Value<int?> baseRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion.insert(
                 id: id,
@@ -2657,6 +2936,7 @@ class $$NotesTableTableManager
                 isDeleted: isDeleted,
                 pendingSync: pendingSync,
                 ownerKey: ownerKey,
+                baseRevision: baseRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2692,6 +2972,7 @@ typedef $$ImageMetadataTableCreateCompanionBuilder =
       Value<String?> noteId,
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
+      Value<int?> baseRevision,
       Value<int> rowid,
     });
 typedef $$ImageMetadataTableUpdateCompanionBuilder =
@@ -2705,6 +2986,7 @@ typedef $$ImageMetadataTableUpdateCompanionBuilder =
       Value<String?> noteId,
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
+      Value<int?> baseRevision,
       Value<int> rowid,
     });
 
@@ -2759,6 +3041,11 @@ class $$ImageMetadataTableFilterComposer
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2816,6 +3103,11 @@ class $$ImageMetadataTableOrderingComposer
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ImageMetadataTableAnnotationComposer
@@ -2857,6 +3149,11 @@ class $$ImageMetadataTableAnnotationComposer
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
+    builder: (column) => column,
+  );
 }
 
 class $$ImageMetadataTableTableManager
@@ -2903,6 +3200,7 @@ class $$ImageMetadataTableTableManager
                 Value<String?> noteId = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<int?> baseRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ImageMetadataCompanion(
                 id: id,
@@ -2914,6 +3212,7 @@ class $$ImageMetadataTableTableManager
                 noteId: noteId,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                baseRevision: baseRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2927,6 +3226,7 @@ class $$ImageMetadataTableTableManager
                 Value<String?> noteId = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<int?> baseRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ImageMetadataCompanion.insert(
                 id: id,
@@ -2938,6 +3238,7 @@ class $$ImageMetadataTableTableManager
                 noteId: noteId,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                baseRevision: baseRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2973,6 +3274,7 @@ typedef $$ArtifactCommentsTableCreateCompanionBuilder =
       required DateTime createdAt,
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
+      Value<int?> baseRevision,
       Value<int> rowid,
     });
 typedef $$ArtifactCommentsTableUpdateCompanionBuilder =
@@ -2983,6 +3285,7 @@ typedef $$ArtifactCommentsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
+      Value<int?> baseRevision,
       Value<int> rowid,
     });
 
@@ -3022,6 +3325,11 @@ class $$ArtifactCommentsTableFilterComposer
 
   ColumnFilters<bool> get isDeleted => $composableBuilder(
     column: $table.isDeleted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3064,6 +3372,11 @@ class $$ArtifactCommentsTableOrderingComposer
     column: $table.isDeleted,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ArtifactCommentsTableAnnotationComposer
@@ -3094,6 +3407,11 @@ class $$ArtifactCommentsTableAnnotationComposer
 
   GeneratedColumn<bool> get isDeleted =>
       $composableBuilder(column: $table.isDeleted, builder: (column) => column);
+
+  GeneratedColumn<int> get baseRevision => $composableBuilder(
+    column: $table.baseRevision,
+    builder: (column) => column,
+  );
 }
 
 class $$ArtifactCommentsTableTableManager
@@ -3139,6 +3457,7 @@ class $$ArtifactCommentsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<int?> baseRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ArtifactCommentsCompanion(
                 id: id,
@@ -3147,6 +3466,7 @@ class $$ArtifactCommentsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                baseRevision: baseRevision,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3157,6 +3477,7 @@ class $$ArtifactCommentsTableTableManager
                 required DateTime createdAt,
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
+                Value<int?> baseRevision = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ArtifactCommentsCompanion.insert(
                 id: id,
@@ -3165,6 +3486,7 @@ class $$ArtifactCommentsTableTableManager
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
+                baseRevision: baseRevision,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
