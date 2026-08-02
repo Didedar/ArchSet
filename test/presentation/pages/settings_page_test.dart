@@ -10,6 +10,7 @@ import 'package:archset_r2/core/localization/app_strings.dart';
 import 'package:archset_r2/data/services/auth_service.dart' show AuthUser;
 import 'package:archset_r2/data/services/sync_service.dart';
 import 'package:archset_r2/presentation/auth/bloc/auth_bloc.dart';
+import 'package:archset_r2/presentation/auth/pages/sign_in_email_page.dart';
 import 'package:archset_r2/presentation/locale/bloc/locale_bloc.dart';
 import 'package:archset_r2/presentation/pages/settings_page.dart';
 import 'package:archset_r2/presentation/session/bloc/session_cubit.dart';
@@ -103,6 +104,16 @@ void main() {
     await syncStateController.close();
   });
 
+  /// Re-stubs the session mock. The last `whenListen` wins, so tests can
+  /// override the authenticated default set up in [setUp].
+  void givenSession(AppSession session) {
+    whenListen(
+      sessionCubit,
+      const Stream<AppSession>.empty(),
+      initialState: session,
+    );
+  }
+
   Future<void> pumpSettingsPage(WidgetTester tester) {
     return tester.pumpWidget(
       MultiBlocProvider(
@@ -146,6 +157,82 @@ void main() {
     await tester.tap(confirmButton);
     await tester.pump();
   }
+
+  /// Settings used to read [AuthBloc], which nothing in the app ever
+  /// bootstraps -- `AuthCheckRequested` is dispatched nowhere since routing
+  /// moved to [SessionCubit]. So `AuthBloc` sits at [AuthInitial] both for a
+  /// guest *and* for a signed-in user who has just restarted the app, and the
+  /// page rendered "Unknown" ids plus a Sign Out button in both cases. These
+  /// tests pin the page to [SessionCubit], the actual source of truth.
+  group('account state is read from SessionCubit, not AuthBloc', () {
+    String s(String key) => AppStrings.tr(locale, key);
+
+    testWidgets('a guest is shown as having no account', (tester) async {
+      givenSession(const SessionGuest());
+      await pumpSettingsPage(tester);
+
+      expect(find.text(s(AppStrings.guestMode)), findsWidgets);
+      expect(find.text(s(AppStrings.noAccount)), findsOneWidget);
+      expect(find.text(s(AppStrings.guestModeDescription)), findsOneWidget);
+      expect(find.text(s(AppStrings.signInOrCreateAccount)), findsOneWidget);
+
+      // The bug the user reported: none of this belongs to someone who never
+      // signed in.
+      expect(find.text(s(AppStrings.unknown)), findsNothing);
+      expect(find.text(s(AppStrings.signOut)), findsNothing);
+      expect(find.text(s(AppStrings.deleteAccount)), findsNothing);
+      expect(find.text(s(AppStrings.signedIn)), findsNothing);
+    });
+
+    testWidgets(
+      'a signed-in user is shown as having an account even when AuthBloc is '
+      'still AuthInitial (i.e. after an app restart)',
+      (tester) async {
+        // Exactly the real post-restart wiring: SessionCubit.bootstrap()
+        // restored the user, AuthBloc was never told anything.
+        whenListen(
+          authBloc,
+          const Stream<AuthState>.empty(),
+          initialState: const AuthInitial(),
+        );
+        givenSession(SessionAuthenticated(user));
+        await pumpSettingsPage(tester);
+
+        expect(find.text(s(AppStrings.signedIn)), findsOneWidget);
+        expect(find.text(user.email), findsWidgets);
+        expect(find.text(user.id), findsOneWidget);
+        expect(find.text(s(AppStrings.signOut)), findsOneWidget);
+        expect(find.text(s(AppStrings.deleteAccount)), findsOneWidget);
+
+        expect(find.text(s(AppStrings.unknown)), findsNothing);
+        expect(find.text(s(AppStrings.guestMode)), findsNothing);
+      },
+    );
+
+    testWidgets('a lost/expired session is treated as no account', (
+      tester,
+    ) async {
+      givenSession(const SessionUnauthenticated());
+      await pumpSettingsPage(tester);
+
+      expect(find.text(s(AppStrings.noAccount)), findsOneWidget);
+      expect(find.text(s(AppStrings.signOut)), findsNothing);
+      expect(find.text(s(AppStrings.unknown)), findsNothing);
+    });
+
+    testWidgets('the guest card opens the sign-in page', (tester) async {
+      givenSession(const SessionGuest());
+      await pumpSettingsPage(tester);
+
+      final button = find.text(s(AppStrings.signInOrCreateAccount));
+      await tester.ensureVisible(button);
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(SignInEmailPage), findsOneWidget);
+    });
+  });
 
   testWidgets(
     'signing out while offline (pre-logout sync ends in SyncOffline) still '

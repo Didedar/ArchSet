@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import '../auth/bloc/auth_bloc.dart';
+import '../auth/pages/sign_in_email_page.dart';
 import '../locale/bloc/locale_bloc.dart';
 import '../session/bloc/session_cubit.dart';
 import '../sync/bloc/sync_bloc.dart';
@@ -15,8 +15,15 @@ class SettingsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final authState = context.watch<AuthBloc>().state;
-    final user = authState is AuthAuthenticated ? authState.user : null;
+    // Account state comes from SessionCubit, the single source of truth for
+    // "who is using the app" (see its doc comment). Reading AuthBloc here was
+    // wrong twice over: it stays at AuthInitial for guests *and* for a signed-
+    // in user after a restart (nothing dispatches AuthCheckRequested any more
+    // -- SessionCubit.bootstrap() restores the session instead), so both cases
+    // rendered "Unknown" plus a Sign Out button.
+    final session = context.watch<SessionCubit>().state;
+    final user = session is SessionAuthenticated ? session.user : null;
+    final isGuest = user == null;
 
     final themeMode = context.watch<ThemeBloc>().state.mode;
     final isDarkMode =
@@ -43,29 +50,54 @@ class SettingsPage extends StatelessWidget {
             children: [
               // Header
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        AppStrings.tr(currentLocale, AppStrings.hello),
-                        style: GoogleFonts.inter(
-                          color: textColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: containerColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isGuest ? Icons.person_outline : Icons.person,
+                      color: textColor.withOpacity(isGuest ? 0.5 : 0.9),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          AppStrings.tr(
+                            currentLocale,
+                            isGuest ? AppStrings.guestMode : AppStrings.hello,
+                          ),
+                          style: GoogleFonts.inter(
+                            color: textColor,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      Text(
-                        user?.email ??
-                            AppStrings.tr(currentLocale, AppStrings.unknown),
-                        style: GoogleFonts.inter(
-                          color: textColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                        if (!isGuest)
+                          Text(
+                            user.email,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              color: textColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        const SizedBox(height: 6),
+                        _buildAccountStatusChip(
+                          context,
+                          isGuest: isGuest,
+                          locale: currentLocale,
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: Icon(Icons.close, color: textColor),
@@ -325,73 +357,88 @@ class SettingsPage extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // Section 3: User Info
-              Container(
-                decoration: BoxDecoration(
-                  color: containerColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  children: [
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.person,
-                      text: AppStrings.tr(currentLocale, AppStrings.userId),
-                      onTap: () {},
-                      textColor: textColor,
-                      trailing: Text(
-                        user?.id ??
-                            AppStrings.tr(currentLocale, AppStrings.unknown),
-                        style: GoogleFonts.inter(
-                          color: textColor.withOpacity(0.5),
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    _buildDivider(context),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.email_outlined,
-                      text: AppStrings.tr(currentLocale, AppStrings.email),
-                      onTap: () {},
-                      textColor: textColor,
-                      trailing: Text(
-                        user?.email ??
-                            AppStrings.tr(currentLocale, AppStrings.unknown),
-                        style: GoogleFonts.inter(
-                          color: textColor.withOpacity(0.5),
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    _buildDivider(context),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.logout,
-                      text: AppStrings.tr(currentLocale, AppStrings.signOut),
-                      onTap: () => _handleSignOut(context, currentLocale),
-                      textColor: textColor,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Delete Account
-              Container(
-                decoration: BoxDecoration(
-                  color: containerColor,
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: _buildMenuItem(
+              // Section 3: Account.
+              //
+              // A guest has no id, no email, nothing to sign out of and no
+              // account to delete -- showing those rows (filled with
+              // "Unknown") is what made the app look signed-in when it wasn't.
+              // They get a sign-in prompt instead.
+              if (isGuest)
+                _buildGuestCard(
                   context,
-                  icon: Icons.delete_outline,
-                  text: AppStrings.tr(currentLocale, AppStrings.deleteAccount),
-                  color: const Color(0xFFE99C9C), // Keep red tint
-                  onTap: () {}, // TODO: Implement delete account
-                  textColor: const Color(0xFFE99C9C),
+                  locale: currentLocale,
+                  containerColor: containerColor,
+                  textColor: textColor,
+                )
+              else ...[
+                Container(
+                  decoration: BoxDecoration(
+                    color: containerColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.person,
+                        text: AppStrings.tr(currentLocale, AppStrings.userId),
+                        onTap: () {},
+                        textColor: textColor,
+                        trailing: Text(
+                          user.id,
+                          style: GoogleFonts.inter(
+                            color: textColor.withOpacity(0.5),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      _buildDivider(context),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.email_outlined,
+                        text: AppStrings.tr(currentLocale, AppStrings.email),
+                        onTap: () {},
+                        textColor: textColor,
+                        trailing: Text(
+                          user.email,
+                          style: GoogleFonts.inter(
+                            color: textColor.withOpacity(0.5),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      _buildDivider(context),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.logout,
+                        text: AppStrings.tr(currentLocale, AppStrings.signOut),
+                        onTap: () => _handleSignOut(context, currentLocale),
+                        textColor: textColor,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 24),
+
+                // Delete Account
+                Container(
+                  decoration: BoxDecoration(
+                    color: containerColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: _buildMenuItem(
+                    context,
+                    icon: Icons.delete_outline,
+                    text: AppStrings.tr(
+                      currentLocale,
+                      AppStrings.deleteAccount,
+                    ),
+                    color: const Color(0xFFE99C9C), // Keep red tint
+                    onTap: () {}, // TODO: Implement delete account
+                    textColor: const Color(0xFFE99C9C),
+                  ),
+                ),
+              ],
               const SizedBox(height: 40),
 
               // Home Indicator Area
@@ -408,6 +455,126 @@ class SettingsPage extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// At-a-glance "do I have an account?" badge, so the answer doesn't depend
+  /// on the user reading an email address that may or may not be there.
+  Widget _buildAccountStatusChip(
+    BuildContext context, {
+    required bool isGuest,
+    required Locale locale,
+  }) {
+    final color = isGuest ? const Color(0xFFE0A030) : const Color(0xFF2E9E5B);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isGuest ? Icons.person_off_outlined : Icons.verified_user_outlined,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            AppStrings.tr(
+              locale,
+              isGuest ? AppStrings.noAccount : AppStrings.signedIn,
+            ),
+            style: GoogleFonts.inter(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Replaces the account rows for guests: explains that data is local-only
+  /// and offers the way out of guest mode.
+  Widget _buildGuestCard(
+    BuildContext context, {
+    required Locale locale,
+    required Color containerColor,
+    required Color textColor,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: containerColor,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.cloud_off_outlined,
+                size: 20,
+                color: textColor.withOpacity(0.7),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  AppStrings.tr(locale, AppStrings.guestMode),
+                  style: GoogleFonts.inter(
+                    color: textColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            AppStrings.tr(locale, AppStrings.guestModeDescription),
+            style: GoogleFonts.inter(
+              color: textColor.withOpacity(0.6),
+              fontSize: 14,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => const SignInEmailPage(),
+                ),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFff6d00),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.login, size: 18),
+              label: Text(
+                AppStrings.tr(locale, AppStrings.signInOrCreateAccount),
+                style: GoogleFonts.inter(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

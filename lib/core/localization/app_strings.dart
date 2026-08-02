@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/widgets.dart' show Locale;
 
 class AppStrings {
@@ -115,6 +116,137 @@ class AppStrings {
   static const String addComment = 'add_comment';
   static const String deleteComment = 'delete_comment';
   static const String imageUnavailable = 'image_unavailable';
+
+  // Guest mode / account state
+  static const String continueAsGuest = 'continue_as_guest';
+  static const String guestMode = 'guest_mode';
+  static const String noAccount = 'no_account';
+  static const String guestModeDescription = 'guest_mode_description';
+  static const String signInOrCreateAccount = 'sign_in_or_create_account';
+  static const String signedIn = 'signed_in';
+
+  /// Every key declared above. Used by the locale-parity test to assert no
+  /// language is missing a translation (`tr` would silently fall back to
+  /// English, which reads as a bug rather than a missing string).
+  static const List<String> allKeys = [
+    settings,
+    signOut,
+    signOutConfirmTitle,
+    signOutConfirmMessage,
+    cancel,
+    confirm,
+    termsOfUse,
+    privacyPolicy,
+    featureRequest,
+    darkMode,
+    language,
+    userId,
+    email,
+    deleteAccount,
+    hello,
+    unknown,
+    welcomeTo,
+    archset,
+    signInGoogle,
+    signInApple,
+    signInEmail,
+    myNotes,
+    all,
+    folders,
+    noFoldersYet,
+    tapToCreateFolder,
+    rename,
+    delete,
+    confirmDeleteFolder,
+    notesMovedToAll,
+    allNotes,
+    untitled,
+    justNow,
+    ago,
+    insertLink,
+    enterLinkUrl,
+    rewriteLoading,
+    rewriteFail,
+    rewriteSuccess,
+    aiRewriteResult,
+    noTextToRewrite,
+    noTranscription,
+    pdf,
+    aiChat,
+    image,
+    camera,
+    scan,
+    drawing,
+    transcription,
+    aiRewrite,
+    aiAssistant,
+    audioRecording,
+    deleteDiaryConfirmTitle,
+    deleteDiaryConfirmMessage,
+    diary,
+    apply,
+    insert,
+    deleteFolder,
+    moveToFolder,
+    deleteNote,
+    noNotesInFolder,
+    tapToCreateNote,
+    errorLoadingFolders,
+    createNewFolder,
+    copyTranscription,
+    share,
+    noTranscriptionAvailable,
+    noTranscriptionTextAvailable,
+    done,
+    errorSavingDrawing,
+    diaryBase,
+    diaryBaseDesc,
+    askQuestions,
+    askQuestionsDesc,
+    study,
+    studyDesc,
+    yourText,
+    failedToGetResponse,
+    errorLabel,
+    folderName,
+    colorLabel,
+    create,
+    transcriptionMode,
+    onlineGemini,
+    offlineWhisper,
+    downloadModel,
+    modelDownloaded,
+    downloading,
+    transcriptionSettings,
+    modelNotFound,
+    downloadWhisperDesc,
+    artifactsMap,
+    artifact,
+    noArtifactsYet,
+    noArtifactsHint,
+    withoutLocation,
+    withoutLocationTitle,
+    mapTokenMissing,
+    mapTokenMissingHint,
+    coordinates,
+    photographed,
+    openNote,
+    notAnalyzed,
+    comments,
+    noComments,
+    addComment,
+    deleteComment,
+    imageUnavailable,
+    continueAsGuest,
+    guestMode,
+    noAccount,
+    guestModeDescription,
+    signInOrCreateAccount,
+    signedIn,
+  ];
+
+  /// Language codes with a translation table. `en` is the fallback in [tr].
+  static const List<String> supportedLanguageCodes = ['en', 'ru', 'kk', 'zh'];
 
   static final Map<String, Map<String, String>> _localizedValues = {
     'en': {
@@ -237,6 +369,14 @@ class AppStrings {
       addComment: 'Write a comment...',
       deleteComment: 'Delete comment',
       imageUnavailable: 'Image unavailable',
+      continueAsGuest: 'Continue without an account',
+      guestMode: 'Guest mode',
+      noAccount: 'No account',
+      guestModeDescription:
+          'Your notes are stored only on this device. Sign in to back them up '
+          'and sync them across your devices.',
+      signInOrCreateAccount: 'Sign in or create account',
+      signedIn: 'Signed in',
     },
     'ru': {
       settings: 'Настройки',
@@ -357,6 +497,14 @@ class AppStrings {
       addComment: 'Написать комментарий...',
       deleteComment: 'Удалить комментарий',
       imageUnavailable: 'Изображение недоступно',
+      continueAsGuest: 'Продолжить без аккаунта',
+      guestMode: 'Гостевой режим',
+      noAccount: 'Нет аккаунта',
+      guestModeDescription:
+          'Записи хранятся только на этом устройстве. Войдите, чтобы сохранить '
+          'их копию и синхронизировать между устройствами.',
+      signInOrCreateAccount: 'Войти или создать аккаунт',
+      signedIn: 'Вы вошли',
     },
     'kk': {
       settings: 'Баптаулар',
@@ -476,6 +624,14 @@ class AppStrings {
       addComment: 'Пікір жазу...',
       deleteComment: 'Пікірді жою',
       imageUnavailable: 'Сурет қолжетімсіз',
+      continueAsGuest: 'Аккаунтсыз жалғастыру',
+      guestMode: 'Қонақ режимі',
+      noAccount: 'Аккаунт жоқ',
+      guestModeDescription:
+          'Жазбалар тек осы құрылғыда сақталады. Сақтық көшірмесін жасап, '
+          'құрылғылар арасында синхрондау үшін кіріңіз.',
+      signInOrCreateAccount: 'Кіру немесе аккаунт жасау',
+      signedIn: 'Сіз кірдіңіз',
     },
     'zh': {
       settings: '设置',
@@ -589,6 +745,12 @@ class AppStrings {
       addComment: '写评论...',
       deleteComment: '删除评论',
       imageUnavailable: '图片不可用',
+      continueAsGuest: '不登录继续使用',
+      guestMode: '访客模式',
+      noAccount: '无账号',
+      guestModeDescription: '笔记仅保存在本设备上。登录后即可备份，并在多台设备间同步。',
+      signInOrCreateAccount: '登录或注册账号',
+      signedIn: '已登录',
     },
   };
 
@@ -596,4 +758,11 @@ class AppStrings {
     return _localizedValues[locale.languageCode]?[key] ??
         _localizedValues['en']![key]!;
   }
+
+  /// Lookup with no English fallback. Exists so the locale-parity test can
+  /// tell "translated to the same text as English" apart from "not translated
+  /// at all" -- [tr]'s fallback makes those two indistinguishable.
+  @visibleForTesting
+  static String? rawValue(String languageCode, String key) =>
+      _localizedValues[languageCode]?[key];
 }
