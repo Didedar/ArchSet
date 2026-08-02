@@ -53,54 +53,69 @@ class _EmptyStateState extends State<EmptyState>
 
   @override
   Widget build(BuildContext context) {
+    // Derived from the theme, not hardcoded white: these strings used to be
+    // white at 75%/50% opacity regardless of theme, which made them invisible
+    // against the light theme's near-white scaffold.
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+
     return FadeTransition(
       opacity: _fadeAnimation,
       child: SlideTransition(
         position: _slideAnimation,
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (widget.icon != null)
-                Icon(widget.icon, size: 64, color: const Color(0xFF8C8C8C))
-              else
-                Image.asset(
-                  'assets/images/empty_notes_state.png',
-                  width: 98,
-                  height: 98,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Icon(
-                    Icons.note_outlined,
-                    size: 64,
-                    color: const Color(0xFF8C8C8C),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (widget.icon != null)
+                    Icon(
+                      widget.icon,
+                      size: 64,
+                      color: onSurface.withValues(alpha: 0.45),
+                    )
+                  else
+                    Image.asset(
+                      'assets/images/empty_notes_state.png',
+                      width: 98,
+                      height: 98,
+                      fit: BoxFit.contain,
+                      errorBuilder: (context, error, stackTrace) => Icon(
+                        Icons.note_outlined,
+                        size: 64,
+                        color: onSurface.withValues(alpha: 0.45),
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+                  Text(
+                    widget.title ??
+                        'No notes yet?\nSelect options below to get started',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 15,
+                      color: onSurface.withValues(alpha: 0.75),
+                      height: 1.5,
+                    ),
                   ),
-                ),
-              const SizedBox(height: 16),
-              Text(
-                widget.title ??
-                    'No notes yet?\nSelect options below to get started',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                  color: const Color.fromRGBO(255, 255, 255, 0.75),
-                  height: 1.5,
-                ),
+                  if (widget.subtitle != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.subtitle!,
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontWeight: FontWeight.w400,
+                        fontSize: 13,
+                        color: onSurface.withValues(alpha: 0.55),
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              if (widget.subtitle != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  widget.subtitle!,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.inter(
-                    fontWeight: FontWeight.w400,
-                    fontSize: 13,
-                    color: const Color.fromRGBO(255, 255, 255, 0.5),
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ],
+            ),
           ),
         ),
       ),

@@ -100,134 +100,139 @@ class _CreateFolderDialogState extends State<CreateFolderDialog>
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      AppStrings.tr(locale, AppStrings.createNewFolder),
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 20,
-                        color: textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-
-                    // Folder name input
-                    Container(
-                      height: 50,
-                      decoration: BoxDecoration(
-                        color: theme
-                            .scaffoldBackgroundColor, // Darker/Lighter background for input
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: TextField(
-                        controller: _nameController,
-                        autofocus: true,
+              // Scrollable: the dialog opens the keyboard as soon as the name
+              // field takes focus, which can leave less vertical room than the
+              // colour swatches + buttons need.
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        AppStrings.tr(locale, AppStrings.createNewFolder),
                         style: GoogleFonts.inter(
-                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 20,
                           color: textColor,
                         ),
-                        cursorColor: theme.colorScheme.primary,
-                        decoration: InputDecoration(
-                          hintText: AppStrings.tr(
-                            locale,
-                            AppStrings.folderName,
-                          ),
-                          hintStyle: GoogleFonts.inter(
+                      ),
+                      const SizedBox(height: 20),
+
+                      // Folder name input
+                      Container(
+                        height: 50,
+                        decoration: BoxDecoration(
+                          color: theme
+                              .scaffoldBackgroundColor, // Darker/Lighter background for input
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: TextField(
+                          controller: _nameController,
+                          autofocus: true,
+                          style: GoogleFonts.inter(
                             fontSize: 16,
-                            color: textColor.withOpacity(0.5),
+                            color: textColor,
                           ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 14,
+                          cursorColor: theme.colorScheme.primary,
+                          decoration: InputDecoration(
+                            hintText: AppStrings.tr(
+                              locale,
+                              AppStrings.folderName,
+                            ),
+                            hintStyle: GoogleFonts.inter(
+                              fontSize: 16,
+                              color: textColor.withOpacity(0.5),
+                            ),
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 14,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
+                      const SizedBox(height: 20),
 
-                    // Color picker
-                    Text(
-                      AppStrings.tr(locale, AppStrings.colorLabel),
-                      style: GoogleFonts.inter(
-                        fontWeight: FontWeight.w500,
-                        fontSize: 14,
-                        color: textColor.withOpacity(0.7),
+                      // Color picker
+                      Text(
+                        AppStrings.tr(locale, AppStrings.colorLabel),
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w500,
+                          fontSize: 14,
+                          color: textColor.withOpacity(0.7),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: _colors.map((color) {
-                        final isSelected = color == _selectedColor;
-                        return GestureDetector(
-                          onTap: () {
-                            HapticFeedback.selectionClick();
-                            setState(() => _selectedColor = color);
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: _colors.map((color) {
+                          final isSelected = color == _selectedColor;
+                          return GestureDetector(
+                            onTap: () {
+                              HapticFeedback.selectionClick();
+                              setState(() => _selectedColor = color);
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: Color(
+                                  int.parse(color.replaceFirst('#', '0xFF')),
+                                ),
+                                shape: BoxShape.circle,
+                                border: isSelected
+                                    ? Border.all(color: textColor, width: 3)
+                                    : null,
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: Color(
+                                            int.parse(
+                                              color.replaceFirst('#', '0xFF'),
+                                            ),
+                                          ).withOpacity(0.5),
+                                          blurRadius: 8,
+                                          spreadRadius: 2,
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Action buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _DialogButton(
+                              label: AppStrings.tr(locale, AppStrings.cancel),
+                              onTap: () => Navigator.of(context).pop(),
+                              isOutlined: true,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _DialogButton(
+                              label: AppStrings.tr(locale, AppStrings.create),
+                              onTap: _createFolder,
                               color: Color(
-                                int.parse(color.replaceFirst('#', '0xFF')),
-                              ),
-                              shape: BoxShape.circle,
-                              border: isSelected
-                                  ? Border.all(color: textColor, width: 3)
-                                  : null,
-                              boxShadow: isSelected
-                                  ? [
-                                      BoxShadow(
-                                        color: Color(
-                                          int.parse(
-                                            color.replaceFirst('#', '0xFF'),
-                                          ),
-                                        ).withOpacity(0.5),
-                                        blurRadius: 8,
-                                        spreadRadius: 2,
-                                      ),
-                                    ]
-                                  : null,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Action buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DialogButton(
-                            label: AppStrings.tr(locale, AppStrings.cancel),
-                            onTap: () => Navigator.of(context).pop(),
-                            isOutlined: true,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _DialogButton(
-                            label: AppStrings.tr(locale, AppStrings.create),
-                            onTap: _createFolder,
-                            color: Color(
-                              int.parse(
-                                _selectedColor.replaceFirst('#', '0xFF'),
+                                int.parse(
+                                  _selectedColor.replaceFirst('#', '0xFF'),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
