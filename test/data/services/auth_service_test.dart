@@ -299,6 +299,63 @@ void main() {
       expect(storageValues[AuthStorageKeys.accessToken(slug)], 'new-access');
     });
 
+    test('401 followed by a successful refresh, but the retry is '
+        'unreachable, still returns the cached user and keeps the new '
+        'tokens', () async {
+      storageValues[AuthStorageKeys.accessToken(slug)] = 'stale-token';
+      storageValues[AuthStorageKeys.refreshToken(slug)] = 'refresh-token';
+      storageValues[AuthStorageKeys.userId(slug)] = 'old-id';
+      storageValues[AuthStorageKeys.userEmail(slug)] = 'old@example.com';
+      storageValues[AuthStorageKeys.userCreatedAt(slug)] =
+          '2026-01-01T00:00:00.000Z';
+
+      var meCalls = 0;
+      final client = MockClient((request) async {
+        const headers = {'content-type': 'application/json'};
+        final path = request.url.path;
+        if (path.endsWith('/auth/me')) {
+          meCalls++;
+          if (meCalls == 1) {
+            return http.Response(
+              jsonEncode({'detail': 'Unauthorized'}),
+              401,
+              headers: headers,
+            );
+          }
+          // The retry against the freshly refreshed token can't reach the
+          // server either -- this must not be treated as proof the brand-new
+          // token is bad.
+          throw const SocketException('offline');
+        }
+        if (path.endsWith('/auth/refresh')) {
+          return http.Response(
+            jsonEncode({
+              'access_token': 'new-access',
+              'refresh_token': 'new-refresh',
+            }),
+            200,
+            headers: headers,
+          );
+        }
+        fail('unexpected HTTP call: ${request.method} ${request.url}');
+      });
+      final service = _service(baseUrl: _localBaseUrl, client: client);
+      addTearDown(service.dispose);
+
+      final user = await service.loadStoredUser();
+
+      // The refresh already succeeded and minted a new token pair before the
+      // retry hit a socket error. Wiping the session here would be strictly
+      // worse than never having refreshed: pre-refresh, reconnecting would
+      // have recovered the old token; here it would destroy a token that was
+      // never actually disproven.
+      expect(user, isNotNull);
+      expect(user!.id, 'old-id');
+      expect(meCalls, 2);
+      expect(storageValues[AuthStorageKeys.accessToken(slug)], 'new-access');
+      expect(storageValues[AuthStorageKeys.refreshToken(slug)], 'new-refresh');
+    });
+
     test('401 with a failed refresh clears the namespaced session and returns '
         'null', () async {
       storageValues[AuthStorageKeys.accessToken(slug)] = 'dead-token';
@@ -349,13 +406,18 @@ void main() {
       );
     });
 
-    test('a network error (offline) returns the cached user and preserves the '
-        'stored access token', () async {
+    test('a network error (offline) returns the cached user, preserves the '
+        'stored access token, and restores currentOwnerId', () async {
       storageValues[AuthStorageKeys.accessToken(slug)] = 'still-good-token';
       storageValues[AuthStorageKeys.userId(slug)] = 'old-id';
       storageValues[AuthStorageKeys.userEmail(slug)] = 'old@example.com';
       storageValues[AuthStorageKeys.userCreatedAt(slug)] =
           '2026-01-01T00:00:00.000Z';
+      // currentOwnerId deliberately absent: a DIFFERENT backend origin's
+      // fail-closed wipe deletes this un-namespaced key even though it never
+      // touches this origin's own namespaced session. Restoring it here is
+      // what lets SyncService.sync() -- which only checks currentOwnerId --
+      // see this account as signed in again.
 
       final client = MockClient((request) async {
         throw const SocketException('offline');
@@ -374,6 +436,7 @@ void main() {
         storageValues[AuthStorageKeys.accessToken(slug)],
         'still-good-token',
       );
+      expect(storageValues[AuthStorageKeys.currentOwnerId], 'old-id');
     });
 
     test(

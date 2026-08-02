@@ -261,16 +261,18 @@ class AuthService implements AuthRepository {
 
   /// Load user from storage (for app startup).
   ///
-  /// Fail-closed only against a server that actually answers. A stored
-  /// identity is returned outright once its token is confirmed valid, either
-  /// directly against `/auth/me` or via a successful refresh. If the token is
-  /// actively rejected (401) and the refresh also fails, the session is dead,
-  /// so the namespaced session is cleared and `null` is returned. If the
-  /// server is merely unreachable (offline, 5xx), that's ambiguous — not
-  /// proof the token is bad — so the token is left untouched and the last
-  /// verified identity is served back from the local cache instead (`null`
-  /// only if nothing was ever cached); a later online start still re-verifies
-  /// it. Never touches the local diary.
+  /// Fails closed only when the server actively rejects the token (401). A
+  /// stored identity is returned outright once its token is confirmed valid,
+  /// either directly against `/auth/me` or via a successful refresh. If the
+  /// token is actively rejected (401) and recovery doesn't produce a working
+  /// session either -- the refresh call itself fails, or the freshly
+  /// refreshed token is rejected too -- the session is dead, so the
+  /// namespaced session is cleared and `null` is returned. If the server is
+  /// merely unreachable (offline, 5xx) at either check, that's ambiguous —
+  /// not proof the token is bad — so the token is left untouched and the
+  /// last verified identity is served back from the local cache instead
+  /// (`null` only if nothing was ever cached); a later online start still
+  /// re-verifies it. Never touches the local diary.
   @override
   Future<AuthUser?> loadStoredUser() async {
     final token = await getAccessToken();
@@ -288,7 +290,7 @@ class AuthService implements AuthRepository {
         // filtered the user's own rows out -- an empty diary with no signal.
         // Keep the token AND the identity; the next successful contact
         // re-verifies, and a real 401 still logs out below.
-        return _cachedUser();
+        return _restoreCachedUser();
       case _MeRejected():
         break; // try a refresh
     }
@@ -298,14 +300,28 @@ class AuthService implements AuthRepository {
       final newToken = await getAccessToken();
       if (newToken != null) {
         final retry = await _getMe(newToken);
-        if (retry is _MeOk) {
-          await _persistUser(retry.user);
-          return retry.user;
+        switch (retry) {
+          case _MeOk(:final user):
+            await _persistUser(user);
+            return user;
+          case _MeUnreachable():
+            // Same reasoning as the first attempt, applied to the retry: the
+            // refresh already succeeded and minted a brand-new token pair,
+            // and the server merely couldn't be reached to confirm it. That
+            // is not disproof. Falling through to fail-closed here would
+            // destroy a token that was never rejected -- strictly worse than
+            // never refreshing, since a plain offline launch at least keeps
+            // the old token to retry later.
+            return _restoreCachedUser();
+          case _MeRejected():
+            break; // genuinely dead: fail closed below
         }
       }
     }
 
-    // Token was rejected and the refresh failed too: fail closed.
+    // Every recovery path came up empty: either the refresh call itself
+    // failed, or the freshly refreshed token was rejected outright. Fail
+    // closed.
     await _clearNamespacedSession();
     _currentUser = null;
     return null;
@@ -357,7 +373,15 @@ class AuthService implements AuthRepository {
   /// The last verified identity for this backend origin, rebuilt from secure
   /// storage. Only used when the server could not be reached -- never to
   /// override an answer the server actually gave.
-  Future<AuthUser?> _cachedUser() async {
+  ///
+  /// Also re-stamps the un-namespaced `currentOwnerId` to this user. Without
+  /// that, a *different* origin's fail-closed wipe (e.g. a dev build 401ing
+  /// against localhost with a dead refresh) would have deleted the global
+  /// `currentOwnerId` alongside its own namespaced keys, and this origin's
+  /// otherwise-valid cached session would then read back as authenticated
+  /// while `SyncService.sync()` -- which only checks `currentOwnerId` -- saw
+  /// no owner and silently refused to sync.
+  Future<AuthUser?> _restoreCachedUser() async {
     final id = await _storage.read(key: AuthStorageKeys.userId(_originSlug));
     final email = await _storage.read(
       key: AuthStorageKeys.userEmail(_originSlug),
@@ -377,6 +401,7 @@ class AuthService implements AuthRepository {
 
     final user = AuthUser(id: id, email: email, createdAt: createdAt);
     _currentUser = user;
+    await _storage.write(key: AuthStorageKeys.currentOwnerId, value: user.id);
     return user;
   }
 
