@@ -203,63 +203,85 @@ class _ArtifactsMapViewState extends State<_ArtifactsMapView> {
             ? state.unlocatedCount
             : 0;
 
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: MapWidget(
-                key: const ValueKey('artifacts_map'),
-                styleUri: theme.brightness == Brightness.dark
-                    ? MapboxStyles.DARK
-                    : MapboxStyles.OUTDOORS,
-                onMapCreated: _onMapCreated,
-              ),
-            ),
-            if (state is ArtifactsMapLoadFailure)
+        // SizedBox.expand is load-bearing, not decoration. Scaffold hands its
+        // body *loose* constraints, and a Stack under loose constraints sizes
+        // itself to its largest NON-positioned child. Every child here is
+        // positioned except the SafeArea header row, so the Stack collapsed to
+        // the height of the back button -- and `Positioned.fill` faithfully
+        // filled that ~110px box. That is why the map rendered as a strip
+        // across the top with blank scaffold below it.
+        return SizedBox.expand(
+          child: Stack(
+            children: [
               Positioned.fill(
-                child: _Banner(icon: Icons.error_outline, title: state.message),
-              )
-            else if (isEmpty)
-              Positioned.fill(
-                child: _Banner(
-                  icon: Icons.place_outlined,
-                  title: AppStrings.tr(locale, AppStrings.noArtifactsYet),
-                  subtitle: AppStrings.tr(locale, AppStrings.noArtifactsHint),
+                child: MapWidget(
+                  key: const ValueKey('artifacts_map'),
+                  styleUri: theme.brightness == Brightness.dark
+                      ? MapboxStyles.DARK
+                      : MapboxStyles.OUTDOORS,
+                  onMapCreated: _onMapCreated,
                 ),
               ),
-            SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    _CircleButton(
-                      icon: Icons.arrow_back,
-                      onTap: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 12),
-                    _TitlePill(
-                      label: AppStrings.tr(locale, AppStrings.artifactsMap),
-                    ),
-                  ],
+              if (state is ArtifactsMapLoadFailure)
+                Positioned.fill(
+                  child: _Banner(
+                    icon: Icons.error_outline,
+                    title: state.message,
+                  ),
+                )
+              else if (isEmpty)
+                Positioned.fill(
+                  child: _Banner(
+                    icon: Icons.place_outlined,
+                    title: AppStrings.tr(locale, AppStrings.noArtifactsYet),
+                    subtitle: AppStrings.tr(locale, AppStrings.noArtifactsHint),
+                  ),
                 ),
-              ),
-            ),
-            if (unlocatedCount > 0)
               Positioned(
+                top: 0,
                 left: 0,
                 right: 0,
-                bottom: 24,
-                child: Center(
-                  child: _UnlocatedChip(
-                    count: unlocatedCount,
-                    label: AppStrings.tr(locale, AppStrings.withoutLocation),
-                    onTap: () => UnlocatedArtifactsSheet.show(
-                      context,
-                      repository: widget.repository,
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        _CircleButton(
+                          icon: Icons.arrow_back,
+                          onTap: () => Navigator.pop(context),
+                        ),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: _TitlePill(
+                            label: AppStrings.tr(
+                              locale,
+                              AppStrings.artifactsMap,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
               ),
-          ],
+              if (unlocatedCount > 0)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 24,
+                  child: Center(
+                    child: _UnlocatedChip(
+                      count: unlocatedCount,
+                      label: AppStrings.tr(locale, AppStrings.withoutLocation),
+                      onTap: () => UnlocatedArtifactsSheet.show(
+                        context,
+                        repository: widget.repository,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
@@ -395,6 +417,8 @@ class _TitlePill extends StatelessWidget {
       ),
       child: Text(
         label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: theme.textTheme.titleSmall?.copyWith(
           fontFamily: 'Inter',
           fontWeight: FontWeight.w600,
