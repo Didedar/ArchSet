@@ -27,7 +27,7 @@ os.environ["DEBUG"] = "False"
 # these two classes must be stubbed out before rag_service is ever
 # imported, so its module-level constructor calls hit a harmless fake
 # instead of the real Gemini API. rag_service does `from llama_index.llms
-# .gemini import Gemini`, which binds its own local name to whatever these
+# .google_genai import GoogleGenAI`, which binds its own local name to whatever these
 # module attributes hold at that moment -- so this patch only works if it
 # runs before the first `from app...` import below.
 #
@@ -40,12 +40,12 @@ os.environ["DEBUG"] = "False"
 from llama_index.core.embeddings import MockEmbedding
 from llama_index.core.llms import MockLLM
 
-import llama_index.embeddings.gemini as _llama_gemini_embedding
-import llama_index.llms.gemini as _llama_gemini_llm
+import llama_index.embeddings.google_genai as _llama_genai_embedding
+import llama_index.llms.google_genai as _llama_genai_llm
 
-_llama_gemini_llm.Gemini = lambda *args, **kwargs: MockLLM()
-_llama_gemini_embedding.GeminiEmbedding = lambda *args, **kwargs: MockEmbedding(
-    embed_dim=8
+_llama_genai_llm.GoogleGenAI = lambda *args, **kwargs: MockLLM()
+_llama_genai_embedding.GoogleGenAIEmbedding = lambda *args, **kwargs: (
+    MockEmbedding(embed_dim=8)
 )
 
 from typing import AsyncGenerator

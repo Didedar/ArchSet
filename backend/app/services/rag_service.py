@@ -13,8 +13,10 @@ from llama_index.core import (
     Document,
     Settings as LlamaSettings,
 )
-from llama_index.llms.gemini import Gemini
-from llama_index.embeddings.gemini import GeminiEmbedding
+# Upstream renamed these packages: llama-index-{llms,embeddings}-gemini were
+# folded into the google_genai ones. The old module paths no longer exist.
+from llama_index.llms.google_genai import GoogleGenAI
+from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
 from ..config import get_settings
 
 # Setup logging
@@ -27,12 +29,12 @@ if settings.gemini_api_key:
     try:
         logger.info("Initializing LlamaIndex with Gemini...")
         # LLM
-        LlamaSettings.llm = Gemini(
+        LlamaSettings.llm = GoogleGenAI(
             api_key=settings.gemini_api_key,
             model_name="models/gemini-3-flash-preview"
         )
         # Embedding
-        LlamaSettings.embed_model = GeminiEmbedding(
+        LlamaSettings.embed_model = GoogleGenAIEmbedding(
             api_key=settings.gemini_api_key,
             model_name="models/gemini-embedding-001"
         )
