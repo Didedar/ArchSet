@@ -18,6 +18,7 @@ from .routers import (
     auth_router,
     notes_router,
     folders_router,
+    members_router,
     sync_router,
     gemini_router,
     ai_router,
@@ -95,6 +96,7 @@ API_PREFIX = "/api/v1"
 app.include_router(auth_router, prefix=API_PREFIX)
 app.include_router(notes_router, prefix=API_PREFIX)
 app.include_router(folders_router, prefix=API_PREFIX)
+app.include_router(members_router, prefix=API_PREFIX)
 app.include_router(sync_router, prefix=API_PREFIX)
 app.include_router(gemini_router, prefix=API_PREFIX)
 app.include_router(ai_router, prefix=API_PREFIX)
