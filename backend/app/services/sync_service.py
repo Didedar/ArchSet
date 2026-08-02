@@ -54,6 +54,7 @@ class SyncService:
         """
         sync_time = datetime.utcnow()
         notes_to_index = []
+        conflicted_ids: List[str] = []
         
         # Prefetch every note the client sent in a single query instead of
         # issuing one SELECT per item.
@@ -74,8 +75,23 @@ class SyncService:
             existing_note = existing_notes.get(client_note.id)
 
             if existing_note:
-                # Update if client version is newer
-                if client_note.updated_at > existing_note.updated_at:
+                # Optimistic concurrency. A client that names the revision it
+                # edited from only wins if that is still the current one --
+                # checked BEFORE the timestamp comparison on purpose, because
+                # a device whose clock runs fast (or that has been offline for
+                # a week) would otherwise win a race it actually lost.
+                stale = (
+                    client_note.base_revision is not None
+                    and client_note.base_revision != existing_note.revision
+                )
+                if stale:
+                    # Keep the server's version; the client forks its own copy
+                    # so neither edit is lost.
+                    conflicted_ids.append(client_note.id)
+                elif (
+                    client_note.base_revision is not None
+                    or client_note.updated_at > existing_note.updated_at
+                ):
                     existing_note.title = client_note.title
                     existing_note.content = client_note.content
                     existing_note.folder_id = client_note.folder_id
@@ -84,6 +100,7 @@ class SyncService:
                     existing_note.is_deleted = client_note.is_deleted
                     existing_note.updated_at = client_note.updated_at
                     existing_note.synced_at = sync_time
+                    existing_note.revision = existing_note.revision + 1
 
                     # If sync marks as deleted, remove media file
                     if client_note.is_deleted:
@@ -151,11 +168,28 @@ class SyncService:
             )
         
         result = await self.db.execute(query)
-        server_notes = result.scalars().all()
-        
+        server_notes = list(result.scalars().all())
+
+        # A conflicted note may not have changed since last_sync_at, in which
+        # case the query above misses it -- and the client would have no
+        # server version to keep beside its fork. Union them in explicitly.
+        if conflicted_ids:
+            already = {note.id for note in server_notes}
+            missing = [cid for cid in conflicted_ids if cid not in already]
+            if missing:
+                extra = await self.db.execute(
+                    select(Note).where(
+                        Note.id.in_(missing), Note.user_id == user.id
+                    )
+                )
+                server_notes.extend(extra.scalars().all())
+
         await self.db.commit()
-        
-        return [NoteResponse.model_validate(note) for note in server_notes]
+
+        return (
+            [NoteResponse.model_validate(note) for note in server_notes],
+            conflicted_ids,
+        )
     
     async def sync_folders(
         self,
@@ -194,11 +228,24 @@ class SyncService:
             existing_folder = existing_folders.get(client_folder.id)
 
             if existing_folder:
-                if client_folder.updated_at > existing_folder.updated_at:
+                # Same revision guard as notes, but a mismatch is dropped
+                # silently rather than reported: forking a dig site would
+                # leave two where there was one, which is worse than a lost
+                # rename.
+                if (
+                    client_folder.base_revision is not None
+                    and client_folder.base_revision != existing_folder.revision
+                ):
+                    continue
+                if (
+                    client_folder.base_revision is not None
+                    or client_folder.updated_at > existing_folder.updated_at
+                ):
                     existing_folder.name = client_folder.name
                     existing_folder.color = client_folder.color
                     existing_folder.is_deleted = client_folder.is_deleted
                     existing_folder.updated_at = client_folder.updated_at
+                    existing_folder.revision = existing_folder.revision + 1
             else:
                 if not client_folder.is_deleted:
                     new_folder = Folder(
@@ -283,7 +330,18 @@ class SyncService:
 
             if existing_artifact:
                 # Update if client version is newer
-                if client_artifact.updated_at > existing_artifact.updated_at:
+                # Same revision guard as notes, but a mismatch is dropped
+                # silently rather than reported: forking an artifact would double-count a physical
+                # find on the map.
+                if (
+                    client_artifact.base_revision is not None
+                    and client_artifact.base_revision != existing_artifact.revision
+                ):
+                    continue
+                if (
+                    client_artifact.base_revision is not None
+                    or client_artifact.updated_at > existing_artifact.updated_at
+                ):
                     existing_artifact.note_id = await self._resolve_note_id(
                         user, client_artifact.note_id
                     )
@@ -295,6 +353,7 @@ class SyncService:
                     existing_artifact.is_deleted = client_artifact.is_deleted
                     existing_artifact.updated_at = client_artifact.updated_at
                     existing_artifact.synced_at = sync_time
+                    existing_artifact.revision = existing_artifact.revision + 1
             else:
                 # Create new artifact
                 if not client_artifact.is_deleted:
@@ -370,11 +429,23 @@ class SyncService:
             existing_comment = result.scalar_one_or_none()
 
             if existing_comment:
-                if client_comment.updated_at > existing_comment.updated_at:
+                # Same revision guard as notes, but a mismatch is dropped
+                # silently rather than reported: comments are append-only, so this is
+                # effectively unreachable; kept for uniformity.
+                if (
+                    client_comment.base_revision is not None
+                    and client_comment.base_revision != existing_comment.revision
+                ):
+                    continue
+                if (
+                    client_comment.base_revision is not None
+                    or client_comment.updated_at > existing_comment.updated_at
+                ):
                     existing_comment.body = client_comment.body
                     existing_comment.is_deleted = client_comment.is_deleted
                     existing_comment.updated_at = client_comment.updated_at
                     existing_comment.synced_at = sync_time
+                    existing_comment.revision = existing_comment.revision + 1
             else:
                 if not client_comment.is_deleted:
                     # Skip comments whose parent artifact this user doesn't

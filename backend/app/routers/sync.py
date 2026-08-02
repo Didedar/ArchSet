@@ -30,9 +30,18 @@ async def sync_data(
     2. Server applies changes using "last write wins"
     3. Server returns all changes since client's last sync
 
-    **Conflict Resolution**: If the same item was modified on both
-    client and server, the version with the later `updated_at`
-    timestamp wins.
+    **Conflict Resolution**: A client that sends `base_revision` only wins if
+    that is still the row's current `revision` on the server. A mismatch means
+    someone else wrote first: the server keeps its version and, for notes,
+    names the id in `conflicted_note_ids` so the client can fork its own copy
+    instead of losing it. Folders and artifacts drop the stale write silently.
+
+    Reported per item inside a 200 rather than as an HTTP 409 because this
+    endpoint is a batch -- one lost race must not reject every other row.
+
+    Clients that send no `base_revision` fall back to the previous
+    last-write-wins behaviour, so installs that predate revisions keep
+    working.
 
     **Deleted Items**: Items with `is_deleted: true` will be soft-deleted
     on the server. Clients should hide these but keep them for sync.
@@ -53,7 +62,7 @@ async def sync_data(
     )
 
     # Sync notes
-    synced_notes = await service.sync_notes(
+    synced_notes, conflicted_note_ids = await service.sync_notes(
         user=current_user,
         client_notes=sync_request.notes,
         last_sync_at=sync_request.last_sync_at,
@@ -79,5 +88,6 @@ async def sync_data(
         folders=synced_folders,
         artifacts=synced_artifacts,
         artifact_comments=synced_artifact_comments,
-        sync_timestamp=datetime.utcnow()
+        sync_timestamp=datetime.utcnow(),
+        conflicted_note_ids=conflicted_note_ids,
     )

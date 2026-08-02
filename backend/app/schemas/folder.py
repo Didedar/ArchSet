@@ -32,6 +32,8 @@ class FolderResponse(FolderBase):
     updated_at: datetime
     is_deleted: bool = False
     
+    revision: int = 1
+
     class Config:
         from_attributes = True
 
@@ -43,3 +45,7 @@ class FolderSyncItem(BaseModel):
     color: str = "#E8B731"
     updated_at: datetime
     is_deleted: bool = False
+    # The revision the client based this edit on. None means "I have never
+    # synced this row" or "I am an old client that predates revisions" --
+    # both fall through to the previous last-write-wins behaviour.
+    base_revision: Optional[int] = None

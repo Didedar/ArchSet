@@ -87,7 +87,7 @@ async def test_sync_notes_works_without_background_tasks(
     """
     service = SyncService(db_session)
 
-    result = await service.sync_notes(
+    result, _ = await service.sync_notes(
         user=test_user,
         client_notes=[_note_sync_item(id="no-bg-tasks")],
         last_sync_at=None,
@@ -103,7 +103,7 @@ async def test_sync_notes_processes_multiple_items_in_one_call(
 ):
     service = SyncService(db_session)
 
-    result = await service.sync_notes(
+    result, _ = await service.sync_notes(
         user=test_user,
         client_notes=[_note_sync_item(id="a"), _note_sync_item(id="b"), _note_sync_item(id="c")],
         last_sync_at=None,
@@ -365,3 +365,174 @@ async def test_sync_artifact_comments_skips_orphans_without_raising(
     )
 
     assert result == []
+
+
+class TestRevisionGuard:
+    """Optimistic concurrency: a write is accepted only if the client edited
+    from the revision the server currently holds.
+
+    The point is to stop a device with a fast clock -- or one that has been
+    offline for a week -- from silently overwriting an edit it never saw.
+    Timestamps cannot express that; a server-assigned counter can.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_first_write_stamps_revision_1(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        service = SyncService(db_session)
+        await service.sync_notes(
+            user=test_user,
+            client_notes=[_note_sync_item(id="n1")],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        note = await db_session.get(Note, "n1")
+        assert note.revision == 1
+
+    @pytest.mark.asyncio
+    async def test_a_write_from_the_current_revision_is_accepted_and_bumps_it(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        service = SyncService(db_session)
+        await service.sync_notes(
+            user=test_user,
+            client_notes=[_note_sync_item(id="n1", title="Layer 2")],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        await service.sync_notes(
+            user=test_user,
+            client_notes=[
+                _note_sync_item(
+                    id="n1",
+                    title="Layer 2 revised",
+                    updated_at=datetime.utcnow() + timedelta(hours=1),
+                    base_revision=1,
+                )
+            ],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        note = await db_session.get(Note, "n1")
+        assert note.title == "Layer 2 revised"
+        assert note.revision == 2
+
+    @pytest.mark.asyncio
+    async def test_a_stale_base_revision_is_rejected_even_with_a_newer_clock(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """The case the whole feature exists for.
+
+        Device B has been in the field, edited from revision 1, and has a
+        later wall clock than device A's accepted edit. Last-write-wins would
+        hand it the win; the revision guard must not.
+        """
+        service = SyncService(db_session)
+        await service.sync_notes(
+            user=test_user,
+            client_notes=[_note_sync_item(id="n1", title="Layer 2")],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        # Device A: accepted, revision -> 2.
+        await service.sync_notes(
+            user=test_user,
+            client_notes=[
+                _note_sync_item(
+                    id="n1",
+                    title="From device A",
+                    updated_at=datetime.utcnow() + timedelta(hours=1),
+                    base_revision=1,
+                )
+            ],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        # Device B: still thinks the note is at revision 1, and its clock is
+        # even further ahead.
+        _, conflicted = await service.sync_notes(
+            user=test_user,
+            client_notes=[
+                _note_sync_item(
+                    id="n1",
+                    title="From device B",
+                    updated_at=datetime.utcnow() + timedelta(hours=2),
+                    base_revision=1,
+                )
+            ],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        note = await db_session.get(Note, "n1")
+        assert note.title == "From device A", "the stale write must not land"
+        assert note.revision == 2, "a rejected write must not bump the revision"
+        assert conflicted == ["n1"]
+
+    @pytest.mark.asyncio
+    async def test_a_client_that_sends_no_base_revision_keeps_the_old_behaviour(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """Backward compatibility: installs that predate revisions must keep
+        working, on plain last-write-wins."""
+        service = SyncService(db_session)
+        await service.sync_notes(
+            user=test_user,
+            client_notes=[_note_sync_item(id="n1", title="Original")],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        _, conflicted = await service.sync_notes(
+            user=test_user,
+            client_notes=[
+                _note_sync_item(
+                    id="n1",
+                    title="Newer, no base_revision",
+                    updated_at=datetime.utcnow() + timedelta(hours=1),
+                )
+            ],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        note = await db_session.get(Note, "n1")
+        assert note.title == "Newer, no base_revision"
+        assert conflicted == []
+
+    @pytest.mark.asyncio
+    async def test_a_stale_folder_write_is_dropped_without_being_reported(
+        self, db_session: AsyncSession, test_user: User
+    ):
+        """Folders resolve last-write-wins rather than forking: two dig sites
+        where there was one would be worse than a lost rename."""
+        service = SyncService(db_session)
+        await service.sync_folders(
+            user=test_user,
+            client_folders=[_folder_sync_item(id="f1", name="Trench 3")],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        await service.sync_folders(
+            user=test_user,
+            client_folders=[
+                _folder_sync_item(
+                    id="f1",
+                    name="Stale rename",
+                    updated_at=datetime.utcnow() + timedelta(hours=2),
+                    base_revision=99,
+                )
+            ],
+            last_sync_at=None,
+        )
+        await db_session.flush()
+
+        folder = await db_session.get(Folder, "f1")
+        assert folder.name == "Trench 3"
