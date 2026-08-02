@@ -11,6 +11,7 @@ from sqlalchemy import select, or_
 from ..models.note import Note
 from ..models.folder import Folder
 from ..models.user import User
+from ..utils.access import accessible_folder_ids
 from ..models.artifact import Artifact, ArtifactComment
 from ..schemas.note import NoteSyncItem, NoteResponse
 from ..schemas.folder import FolderSyncItem, FolderResponse
@@ -31,6 +32,25 @@ class SyncService:
     def __init__(self, db: AsyncSession):
         self.db = db
     
+
+    async def _reachable(self, user: User):
+        """The access rule, resolved once per sync call.
+
+        Returns `(folder_ids, note_predicate, artifact_predicate)`. Every query
+        below uses these instead of restating "owner or member" -- see
+        app/utils/access.py for why that matters.
+        """
+        folder_ids = await accessible_folder_ids(self.db, user)
+        # An unfiled note (folder_id IS NULL) has no dig site to be shared
+        # through, so it matches only the authorship arm. That is deliberate:
+        # spec section 1 keeps unfiled notes private.
+        note_pred = or_(Note.user_id == user.id, Note.folder_id.in_(folder_ids))
+        artifact_pred = or_(
+            Artifact.user_id == user.id,
+            Artifact.note_id.in_(select(Note.id).where(note_pred)),
+        )
+        return folder_ids, note_pred, artifact_pred
+
     async def sync_notes(
         self,
         user: User,
@@ -55,6 +75,7 @@ class SyncService:
         sync_time = datetime.utcnow()
         notes_to_index = []
         conflicted_ids: List[str] = []
+        folder_ids, note_pred, _ = await self._reachable(user)
         
         # Prefetch every note the client sent in a single query instead of
         # issuing one SELECT per item.
@@ -62,10 +83,7 @@ class SyncService:
         existing_notes = {}
         if client_note_ids:
             result = await self.db.execute(
-                select(Note).where(
-                    Note.id.in_(client_note_ids),
-                    Note.user_id == user.id
-                )
+                select(Note).where(Note.id.in_(client_note_ids), note_pred)
             )
             existing_notes = {note.id: note for note in result.scalars().all()}
 
@@ -156,7 +174,7 @@ class SyncService:
                     )
         
         # Get server notes that changed since last sync
-        query = select(Note).where(Note.user_id == user.id)
+        query = select(Note).where(note_pred)
         
         if last_sync_at:
             # Get notes updated after last sync
@@ -178,9 +196,7 @@ class SyncService:
             missing = [cid for cid in conflicted_ids if cid not in already]
             if missing:
                 extra = await self.db.execute(
-                    select(Note).where(
-                        Note.id.in_(missing), Note.user_id == user.id
-                    )
+                    select(Note).where(Note.id.in_(missing), note_pred)
                 )
                 server_notes.extend(extra.scalars().all())
 
@@ -208,6 +224,7 @@ class SyncService:
         Returns:
             List of folders that changed on server since last sync
         """
+        folder_ids, _, _ = await self._reachable(user)
         sync_time = datetime.utcnow()
         
         # Prefetch every folder the client sent in a single query instead of
@@ -218,7 +235,7 @@ class SyncService:
             result = await self.db.execute(
                 select(Folder).where(
                     Folder.id.in_(client_folder_ids),
-                    Folder.user_id == user.id
+                    Folder.id.in_(folder_ids),
                 )
             )
             existing_folders = {folder.id: folder for folder in result.scalars().all()}
@@ -263,8 +280,13 @@ class SyncService:
 
         await self.db.flush()
         
+        # Re-resolve: the set above was computed before this request's own
+        # new folders existed, so a folder the client just created would be
+        # missing from its own sync response.
+        folder_ids = await accessible_folder_ids(self.db, user)
+
         # Get server folders that changed
-        query = select(Folder).where(Folder.user_id == user.id)
+        query = select(Folder).where(Folder.id.in_(folder_ids))
         
         if last_sync_at:
             query = query.where(Folder.updated_at > last_sync_at)
@@ -288,11 +310,9 @@ class SyncService:
         if note_id is None:
             return None
 
+        _, note_pred, _ = await self._reachable(user)
         result = await self.db.execute(
-            select(Note.id).where(
-                Note.id == note_id,
-                Note.user_id == user.id
-            )
+            select(Note.id).where(Note.id == note_id, note_pred)
         )
         return result.scalar_one_or_none()
 
@@ -316,14 +336,14 @@ class SyncService:
         Returns:
             List of artifacts that changed on server since last sync
         """
+        folder_ids, note_pred, artifact_pred = await self._reachable(user)
         sync_time = datetime.utcnow()
 
         # Process client artifacts
         for client_artifact in client_artifacts:
             result = await self.db.execute(
                 select(Artifact).where(
-                    Artifact.id == client_artifact.id,
-                    Artifact.user_id == user.id
+                    Artifact.id == client_artifact.id, artifact_pred
                 )
             )
             existing_artifact = result.scalar_one_or_none()
@@ -377,7 +397,7 @@ class SyncService:
         await self.db.flush()
 
         # Get server artifacts that changed since last sync
-        query = select(Artifact).where(Artifact.user_id == user.id)
+        query = select(Artifact).where(artifact_pred)
 
         if last_sync_at:
             query = query.where(
@@ -416,6 +436,7 @@ class SyncService:
         Returns:
             List of artifact comments that changed on server since last sync
         """
+        folder_ids, note_pred, artifact_pred = await self._reachable(user)
         sync_time = datetime.utcnow()
 
         # Process client comments
@@ -423,7 +444,12 @@ class SyncService:
             result = await self.db.execute(
                 select(ArtifactComment).where(
                     ArtifactComment.id == client_comment.id,
-                    ArtifactComment.user_id == user.id
+                    or_(
+                        ArtifactComment.user_id == user.id,
+                        ArtifactComment.artifact_id.in_(
+                            select(Artifact.id).where(artifact_pred)
+                        ),
+                    ),
                 )
             )
             existing_comment = result.scalar_one_or_none()
@@ -453,7 +479,7 @@ class SyncService:
                     artifact_result = await self.db.execute(
                         select(Artifact.id).where(
                             Artifact.id == client_comment.artifact_id,
-                            Artifact.user_id == user.id
+                            artifact_pred,
                         )
                     )
                     if artifact_result.scalar_one_or_none() is None:
@@ -474,7 +500,14 @@ class SyncService:
         await self.db.flush()
 
         # Get server comments that changed since last sync
-        query = select(ArtifactComment).where(ArtifactComment.user_id == user.id)
+        query = select(ArtifactComment).where(
+            or_(
+                ArtifactComment.user_id == user.id,
+                ArtifactComment.artifact_id.in_(
+                    select(Artifact.id).where(artifact_pred)
+                ),
+            )
+        )
 
         if last_sync_at:
             query = query.where(

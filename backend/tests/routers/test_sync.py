@@ -261,3 +261,148 @@ async def test_sync_with_another_users_note_id_raises_instead_of_leaking(
             },
             headers=auth_headers,
         )
+
+
+class TestSharedFolderAccess:
+    """The cross-account leak, in the shape sharing gives it.
+
+    Before sharing, "can I see this row?" was simply "did I write it?". Now it
+    is "did I write it, OR is it in a dig site I belong to?" -- and the second
+    arm is the one that can be got wrong. These tests pin both directions: a
+    non-member must see nothing, a member must see everything.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_non_member_never_receives_a_shared_folders_contents(
+        self, client: AsyncClient, db_session, test_user, other_user, auth_headers
+    ):
+        from app.models.folder import Folder
+        from app.models.note import Note
+
+        db_session.add(
+            Folder(
+                id="f-theirs",
+                user_id=other_user.id,
+                name="Раскоп 3",
+                color="#E8B731",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                is_deleted=False,
+            )
+        )
+        db_session.add(
+            Note(
+                id="n-theirs",
+                user_id=other_user.id,
+                folder_id="f-theirs",
+                title="Слой 2",
+                content="secret",
+                date=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                is_deleted=False,
+            )
+        )
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/v1/sync",
+            json={"notes": [], "folders": [], "last_sync_at": None},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert [n["id"] for n in body["notes"]] == []
+        assert [f["id"] for f in body["folders"]] == []
+
+    @pytest.mark.asyncio
+    async def test_a_member_does_receive_them(
+        self, client: AsyncClient, db_session, test_user, other_user, auth_headers
+    ):
+        from app.models.folder import Folder
+        from app.models.membership import FolderMember
+        from app.models.note import Note
+
+        db_session.add(
+            Folder(
+                id="f-shared",
+                user_id=other_user.id,
+                name="Раскоп 3",
+                color="#E8B731",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                is_deleted=False,
+            )
+        )
+        db_session.add(
+            Note(
+                id="n-shared",
+                user_id=other_user.id,
+                folder_id="f-shared",
+                title="Слой 2",
+                content="shared",
+                date=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                is_deleted=False,
+            )
+        )
+        db_session.add(
+            FolderMember(folder_id="f-shared", user_id=test_user.id)
+        )
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/v1/sync",
+            json={"notes": [], "folders": [], "last_sync_at": None},
+            headers=auth_headers,
+        )
+
+        body = response.json()
+        assert [n["id"] for n in body["notes"]] == ["n-shared"]
+        assert [f["id"] for f in body["folders"]] == ["f-shared"]
+
+    @pytest.mark.asyncio
+    async def test_an_unfiled_note_is_never_shared(
+        self, client: AsyncClient, db_session, test_user, other_user, auth_headers
+    ):
+        """Spec section 1: a note with no folder is a private draft. There is
+        no dig site to share it through, so membership must not reach it."""
+        from app.models.folder import Folder
+        from app.models.membership import FolderMember
+        from app.models.note import Note
+
+        db_session.add(
+            Folder(
+                id="f-shared",
+                user_id=other_user.id,
+                name="Раскоп 3",
+                color="#E8B731",
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                is_deleted=False,
+            )
+        )
+        db_session.add(
+            Note(
+                id="n-private",
+                user_id=other_user.id,
+                folder_id=None,
+                title="Личный черновик",
+                content="private",
+                date=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                is_deleted=False,
+            )
+        )
+        db_session.add(
+            FolderMember(folder_id="f-shared", user_id=test_user.id)
+        )
+        await db_session.commit()
+
+        response = await client.post(
+            "/api/v1/sync",
+            json={"notes": [], "folders": [], "last_sync_at": None},
+            headers=auth_headers,
+        )
+
+        assert [n["id"] for n in response.json()["notes"]] == []
