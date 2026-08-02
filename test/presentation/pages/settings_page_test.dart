@@ -6,7 +6,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:provider/provider.dart';
+
+import 'package:archset_r2/core/dependencies.dart';
 import 'package:archset_r2/core/localization/app_strings.dart';
+import 'package:archset_r2/data/repository/notes_repository.dart';
+import 'package:archset_r2/presentation/notes/notes_dependencies.dart';
 import 'package:archset_r2/data/services/auth_service.dart' show AuthUser;
 import 'package:archset_r2/data/services/sync_service.dart';
 import 'package:archset_r2/presentation/auth/bloc/auth_bloc.dart';
@@ -36,6 +41,12 @@ class _MockSyncBloc extends MockBloc<SyncEvent, SyncState>
 
 class _MockSessionCubit extends MockCubit<AppSession> implements SessionCubit {}
 
+class _MockNotesRepository extends Mock implements NotesRepository {}
+
+/// Mocked whole rather than constructed: [Dependencies] has ten required
+/// fields and this page reaches for exactly one of them.
+class _FakeDependencies extends Mock implements Dependencies {}
+
 /// Regression coverage for I1: the pre-logout sync in
 /// `SettingsPage._handleSignOut` used to await only `SyncSuccess`/
 /// `SyncFailure`. Offline/unreachable sync mirrors `SyncOffline` on the
@@ -50,6 +61,8 @@ void main() {
   late _MockTranscriptionBloc transcriptionBloc;
   late _MockSyncBloc syncBloc;
   late _MockSessionCubit sessionCubit;
+  late _MockNotesRepository notesRepository;
+  late _FakeDependencies dependencies;
   late StreamController<SyncState> syncStateController;
 
   final user = AuthUser(id: '1', email: 'a@b.com', createdAt: DateTime(2026));
@@ -98,6 +111,16 @@ void main() {
       initialState: SessionAuthenticated(user),
     );
     when(() => sessionCubit.logout()).thenAnswer((_) async {});
+
+    // Nothing pending by default, so the existing sign-out tests below see
+    // the confirm dialog directly, exactly as before this warning existed.
+    notesRepository = _MockNotesRepository();
+    when(() => notesRepository.pendingSyncCount()).thenAnswer((_) async => 0);
+
+    dependencies = _FakeDependencies();
+    when(
+      () => dependencies.notes,
+    ).thenReturn(NotesDependencies(repository: notesRepository));
   });
 
   tearDown(() async {
@@ -116,16 +139,19 @@ void main() {
 
   Future<void> pumpSettingsPage(WidgetTester tester) {
     return tester.pumpWidget(
-      MultiBlocProvider(
-        providers: [
-          BlocProvider<AuthBloc>.value(value: authBloc),
-          BlocProvider<ThemeBloc>.value(value: themeBloc),
-          BlocProvider<LocaleBloc>.value(value: localeBloc),
-          BlocProvider<TranscriptionBloc>.value(value: transcriptionBloc),
-          BlocProvider<SyncBloc>.value(value: syncBloc),
-          BlocProvider<SessionCubit>.value(value: sessionCubit),
-        ],
-        child: const MaterialApp(home: SettingsPage()),
+      Provider<Dependencies>.value(
+        value: dependencies,
+        child: MultiBlocProvider(
+          providers: [
+            BlocProvider<AuthBloc>.value(value: authBloc),
+            BlocProvider<ThemeBloc>.value(value: themeBloc),
+            BlocProvider<LocaleBloc>.value(value: localeBloc),
+            BlocProvider<TranscriptionBloc>.value(value: transcriptionBloc),
+            BlocProvider<SyncBloc>.value(value: syncBloc),
+            BlocProvider<SessionCubit>.value(value: sessionCubit),
+          ],
+          child: const MaterialApp(home: SettingsPage()),
+        ),
       ),
     );
   }
@@ -218,6 +244,72 @@ void main() {
       expect(find.text(s(AppStrings.noAccount)), findsOneWidget);
       expect(find.text(s(AppStrings.signOut)), findsNothing);
       expect(find.text(s(AppStrings.unknown)), findsNothing);
+    });
+
+    testWidgets('signing out with unsynced entries warns before logging out', (
+      tester,
+    ) async {
+      when(
+        () => notesRepository.pendingSyncCount(),
+      ).thenAnswer((_) async => 12);
+      givenSession(SessionAuthenticated(user));
+      await pumpSettingsPage(tester);
+
+      final signOut = find.text(s(AppStrings.signOut));
+      await tester.ensureVisible(signOut);
+      await tester.pumpAndSettle();
+      await tester.tap(signOut);
+      await tester.pumpAndSettle();
+
+      expect(find.text(s(AppStrings.unsyncedWarningTitle)), findsOneWidget);
+      // The warning precedes the normal confirm dialog, and cannot itself
+      // log anyone out.
+      expect(find.text(s(AppStrings.signOutConfirmMessage)), findsNothing);
+      verifyNever(() => sessionCubit.logout());
+    });
+
+    testWidgets('declining the unsynced warning does not sign out', (
+      tester,
+    ) async {
+      when(() => notesRepository.pendingSyncCount()).thenAnswer((_) async => 3);
+      givenSession(SessionAuthenticated(user));
+      await pumpSettingsPage(tester);
+
+      final signOut = find.text(s(AppStrings.signOut));
+      await tester.ensureVisible(signOut);
+      await tester.pumpAndSettle();
+      await tester.tap(signOut);
+      await tester.pumpAndSettle();
+
+      // Cancel is the dialog's first TextButton.
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(TextButton),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      verifyNever(() => sessionCubit.logout());
+    });
+
+    testWidgets('with nothing pending, sign-out goes straight to confirm', (
+      tester,
+    ) async {
+      givenSession(SessionAuthenticated(user));
+      await pumpSettingsPage(tester);
+
+      final signOut = find.text(s(AppStrings.signOut));
+      await tester.ensureVisible(signOut);
+      await tester.pumpAndSettle();
+      await tester.tap(signOut);
+      await tester.pumpAndSettle();
+
+      expect(find.text(s(AppStrings.unsyncedWarningTitle)), findsNothing);
+      expect(find.text(s(AppStrings.signOutConfirmMessage)), findsOneWidget);
     });
 
     testWidgets('the guest card opens the sign-in page', (tester) async {
