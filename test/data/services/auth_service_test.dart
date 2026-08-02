@@ -363,4 +363,20 @@ void main() {
       );
     });
   });
+
+  group('cached identity', () {
+    test('login persists createdAt alongside id and email', () async {
+      final slug = AuthStorageKeys.originSlug(_prodBaseUrl);
+      final client = _clientFor(userId: 'u1', userEmail: 'u1@example.com');
+      final service = _service(baseUrl: _prodBaseUrl, client: client);
+      addTearDown(service.dispose);
+
+      await service.login('u1@example.com', 'password');
+
+      expect(
+        storageValues[AuthStorageKeys.userCreatedAt(slug)],
+        '2026-01-01T00:00:00.000Z',
+      );
+    });
+  });
 }

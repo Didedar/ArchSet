@@ -27,6 +27,7 @@ class AuthStorageKeys {
   static const String _refreshTokenStem = 'refresh_token';
   static const String _userIdStem = 'user_id';
   static const String _userEmailStem = 'user_email';
+  static const String _userCreatedAtStem = 'user_created_at';
 
   /// The one account that owns the app right now (absent => guest). NOT
   /// origin-scoped: it identifies the signed-in account regardless of which
@@ -45,6 +46,7 @@ class AuthStorageKeys {
   static String refreshToken(String slug) => '${_refreshTokenStem}_$slug';
   static String userId(String slug) => '${_userIdStem}_$slug';
   static String userEmail(String slug) => '${_userEmailStem}_$slug';
+  static String userCreatedAt(String slug) => '${_userCreatedAtStem}_$slug';
 }
 
 /// User model for authentication
@@ -207,21 +209,7 @@ class AuthService implements AuthRepository {
 
     if (userResponse.statusCode == 200) {
       final user = AuthUser.fromJson(jsonDecode(userResponse.body));
-      _currentUser = user;
-
-      // Store user info, namespaced to this backend's origin.
-      await _storage.write(
-        key: AuthStorageKeys.userId(_originSlug),
-        value: user.id,
-      );
-      await _storage.write(
-        key: AuthStorageKeys.userEmail(_originSlug),
-        value: user.email,
-      );
-      // The one account that owns the app right now. NOT origin-scoped: a
-      // later task reads this to claim guest data on this device.
-      await _storage.write(key: AuthStorageKeys.currentOwnerId, value: user.id);
-
+      await _persistUser(user);
       return user;
     } else {
       throw Exception('Failed to get user info');
@@ -350,6 +338,10 @@ class AuthService implements AuthRepository {
         key: AuthStorageKeys.userEmail(_originSlug),
         value: user.email,
       ),
+      _storage.write(
+        key: AuthStorageKeys.userCreatedAt(_originSlug),
+        value: user.createdAt.toIso8601String(),
+      ),
       _storage.write(key: AuthStorageKeys.currentOwnerId, value: user.id),
     ]);
   }
@@ -364,6 +356,7 @@ class AuthService implements AuthRepository {
       _storage.delete(key: AuthStorageKeys.refreshToken(_originSlug)),
       _storage.delete(key: AuthStorageKeys.userId(_originSlug)),
       _storage.delete(key: AuthStorageKeys.userEmail(_originSlug)),
+      _storage.delete(key: AuthStorageKeys.userCreatedAt(_originSlug)),
       _storage.delete(key: AuthStorageKeys.currentOwnerId),
     ]);
   }
