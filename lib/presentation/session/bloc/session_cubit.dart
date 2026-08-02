@@ -78,6 +78,15 @@ class SessionCubit extends Cubit<AppSession> {
 
   void loginSuccess(AuthUser user) => _emit(SessionAuthenticated(user));
 
+  /// "Use the app without an account", chosen explicitly on the login screen.
+  ///
+  /// Lands on the same state a cold start with no stored user produces, so
+  /// routing sends the user to the offline-first diary instead of holding
+  /// them on [SessionUnauthenticated]'s login screen. Deliberately does not
+  /// touch the repository: there is no session to clear, and a guest has no
+  /// owner -- [_emit] resets the owner holder to null on the way through.
+  void continueAsGuest() => _emit(const SessionGuest());
+
   Future<void> logout() async {
     await _repository.logout();
     _emit(const SessionUnauthenticated());

@@ -26,6 +26,8 @@ class _WelcomePageState extends State<WelcomePage>
   late Animation<Offset> _btn2Slide;
   late Animation<double> _btn3Opacity;
   late Animation<Offset> _btn3Slide;
+  late Animation<double> _guestOpacity;
+  late Animation<Offset> _guestSlide;
 
   @override
   void initState() {
@@ -97,6 +99,21 @@ class _WelcomePageState extends State<WelcomePage>
           ),
         );
 
+    // 5. Гостевой режим
+    _guestOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.75, 1.0, curve: Curves.easeOut),
+      ),
+    );
+    _guestSlide = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: _controller,
+            curve: const Interval(0.75, 1.0, curve: Curves.easeOut),
+          ),
+        );
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 500), () {
         if (mounted) {
@@ -124,114 +141,146 @@ class _WelcomePageState extends State<WelcomePage>
       body: Stack(
         children: [
           SafeArea(
-            child: SingleChildScrollView(
-              child: SizedBox(
-                height:
-                    screenHeight -
-                    MediaQuery.of(context).padding.top -
-                    MediaQuery.of(context).padding.bottom,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      // Эта пружина сверху будет сжиматься, так как мы увеличили отступ ниже
-                      const Spacer(),
+            // minHeight + IntrinsicHeight, not a fixed-height SizedBox: the
+            // box used to pin the column to exactly the screen height, which
+            // made the surrounding SingleChildScrollView dead weight -- the
+            // content could never scroll, it could only overflow. It now
+            // fills the viewport when there is room (so `Spacer` still
+            // absorbs the slack and the spacing below is unchanged) and
+            // scrolls instead of overflowing when there isn't, e.g. a short
+            // screen or a large system font scale.
+            child: LayoutBuilder(
+              builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // Эта пружина сверху будет сжиматься, так как мы увеличили отступ ниже
+                          const Spacer(),
 
-                      // Анимированный Текст
-                      FadeTransition(
-                        opacity: _textOpacity,
-                        child: SlideTransition(
-                          position: _textSlide,
-                          child: Column(
-                            children: [
-                              Text(
-                                AppStrings.tr(locale, AppStrings.welcomeTo),
-                                style: GoogleFonts.inter(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 32,
-                                  height: 1.3,
-                                  color: textColor,
-                                ),
-                                textAlign: TextAlign.center,
+                          // Анимированный Текст
+                          FadeTransition(
+                            opacity: _textOpacity,
+                            child: SlideTransition(
+                              position: _textSlide,
+                              child: Column(
+                                children: [
+                                  Text(
+                                    AppStrings.tr(locale, AppStrings.welcomeTo),
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 32,
+                                      height: 1.3,
+                                      color: textColor,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                  Text(
+                                    AppStrings.tr(locale, AppStrings.archset),
+                                    style: GoogleFonts.poppins(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 42,
+                                      height: 1.1,
+                                      color: textColor,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
                               ),
-                              Text(
-                                AppStrings.tr(locale, AppStrings.archset),
-                                style: GoogleFonts.poppins(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 42,
-                                  height: 1.1,
-                                  color: textColor,
-                                ),
-                                textAlign: TextAlign.center,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
-                      // Было height: 80. Увеличили до 18% высоты экрана.
-                      // Это создаст большую "дырку" посередине, выталкивая текст вверх.
-                      SizedBox(height: screenHeight * 0.18),
-
-                      // Кнопка 1
-                      FadeTransition(
-                        opacity: _btn1Opacity,
-                        child: SlideTransition(
-                          position: _btn1Slide,
-                          child: _buildButton(
-                            context,
-                            text: AppStrings.tr(
-                              locale,
-                              AppStrings.signInGoogle,
                             ),
-                            iconPath: 'assets/images/icon_google.png',
-                            onPressed: () {},
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
 
-                      // Кнопка 2
-                      FadeTransition(
-                        opacity: _btn2Opacity,
-                        child: SlideTransition(
-                          position: _btn2Slide,
-                          child: _buildButton(
-                            context,
-                            text: AppStrings.tr(locale, AppStrings.signInApple),
-                            iconPath: 'assets/images/icon_apple.png',
-                            onPressed: () {},
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                          // --- ИЗМЕНЕНИЕ ЗДЕСЬ ---
+                          // Было height: 80. Увеличили до 18% высоты экрана.
+                          // Это создаст большую "дырку" посередине, выталкивая текст вверх.
+                          SizedBox(height: screenHeight * 0.18),
 
-                      // Кнопка 3
-                      FadeTransition(
-                        opacity: _btn3Opacity,
-                        child: SlideTransition(
-                          position: _btn3Slide,
-                          child: _buildButton(
-                            context,
-                            text: AppStrings.tr(locale, AppStrings.signInEmail),
-                            iconPath: 'assets/images/icon_email.png',
-                            onPressed: () {
-                              Navigator.push(
+                          // Кнопка 1
+                          FadeTransition(
+                            opacity: _btn1Opacity,
+                            child: SlideTransition(
+                              position: _btn1Slide,
+                              child: _buildButton(
                                 context,
-                                CupertinoPageRoute(
-                                  builder: (context) => const SignInEmailPage(),
+                                text: AppStrings.tr(
+                                  locale,
+                                  AppStrings.signInGoogle,
                                 ),
-                              );
-                            },
+                                iconPath: 'assets/images/icon_google.png',
+                                onPressed: () {},
+                              ),
+                            ),
                           ),
-                        ),
-                      ),
+                          const SizedBox(height: 16),
 
-                      // Нижний отступ оставляем как есть (или чуть уменьшаем, если кнопки улетели слишком низко)
-                      SizedBox(height: screenHeight * 0.12),
-                    ],
+                          // Кнопка 2
+                          FadeTransition(
+                            opacity: _btn2Opacity,
+                            child: SlideTransition(
+                              position: _btn2Slide,
+                              child: _buildButton(
+                                context,
+                                text: AppStrings.tr(
+                                  locale,
+                                  AppStrings.signInApple,
+                                ),
+                                iconPath: 'assets/images/icon_apple.png',
+                                onPressed: () {},
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+
+                          // Кнопка 3
+                          FadeTransition(
+                            opacity: _btn3Opacity,
+                            child: SlideTransition(
+                              position: _btn3Slide,
+                              child: _buildButton(
+                                context,
+                                text: AppStrings.tr(
+                                  locale,
+                                  AppStrings.signInEmail,
+                                ),
+                                iconPath: 'assets/images/icon_email.png',
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    CupertinoPageRoute(
+                                      builder: (context) =>
+                                          const SignInEmailPage(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // Гостевой режим -- вход без аккаунта
+                          FadeTransition(
+                            opacity: _guestOpacity,
+                            child: SlideTransition(
+                              position: _guestSlide,
+                              child: GuestModeButton(
+                                label: AppStrings.tr(
+                                  locale,
+                                  AppStrings.continueAsGuest,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          // Нижний отступ оставляем как есть (или чуть уменьшаем, если кнопки улетели слишком низко)
+                          SizedBox(height: screenHeight * 0.09),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),

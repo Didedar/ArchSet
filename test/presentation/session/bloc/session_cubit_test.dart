@@ -61,6 +61,34 @@ void main() {
     );
   });
 
+  group('continueAsGuest', () {
+    blocTest<SessionCubit, AppSession>(
+      'emits SessionGuest so routing leaves the login screen for the diary',
+      build: () => SessionCubit(repository: repository),
+      act: (cubit) => cubit.continueAsGuest(),
+      expect: () => [const SessionGuest()],
+    );
+
+    blocTest<SessionCubit, AppSession>(
+      'is reachable from SessionUnauthenticated -- the state the login '
+      'screen is actually shown in',
+      setUp: () => when(() => repository.logout()).thenAnswer((_) async {}),
+      build: () => SessionCubit(repository: repository),
+      act: (cubit) async {
+        await cubit.logout();
+        cubit.continueAsGuest();
+      },
+      expect: () => [const SessionUnauthenticated(), const SessionGuest()],
+    );
+
+    blocTest<SessionCubit, AppSession>(
+      'does not touch the auth repository -- a guest has no session to clear',
+      build: () => SessionCubit(repository: repository),
+      act: (cubit) => cubit.continueAsGuest(),
+      verify: (_) => verifyNever(() => repository.logout()),
+    );
+  });
+
   group('logout', () {
     blocTest<SessionCubit, AppSession>(
       'emits SessionUnauthenticated and calls repository.logout()',
@@ -165,6 +193,17 @@ void main() {
       act: (cubit) async {
         cubit.loginSuccess(user);
         await cubit.logout();
+      },
+      verify: (_) => expect(holder.value, isNull),
+    );
+
+    blocTest<SessionCubit, AppSession>(
+      'reverts to null on continueAsGuest after being set by loginSuccess -- '
+      'a guest must not inherit the previous account as data owner',
+      build: () => SessionCubit(repository: repository, ownerHolder: holder),
+      act: (cubit) {
+        cubit.loginSuccess(user);
+        cubit.continueAsGuest();
       },
       verify: (_) => expect(holder.value, isNull),
     );
