@@ -126,6 +126,7 @@ void main() {
       expect(storageValues.containsKey('refresh_token'), isFalse);
       expect(storageValues.containsKey('user_id'), isFalse);
       expect(storageValues.containsKey('user_email'), isFalse);
+      expect(storageValues.containsKey('user_created_at'), isFalse);
     });
   });
 
@@ -304,6 +305,8 @@ void main() {
       storageValues[AuthStorageKeys.refreshToken(slug)] = 'dead-refresh';
       storageValues[AuthStorageKeys.userId(slug)] = 'old-id';
       storageValues[AuthStorageKeys.userEmail(slug)] = 'old@example.com';
+      storageValues[AuthStorageKeys.userCreatedAt(slug)] =
+          '2026-01-01T00:00:00.000Z';
       storageValues[AuthStorageKeys.currentOwnerId] = 'old-id';
 
       final client = MockClient((request) async {
@@ -337,6 +340,10 @@ void main() {
         isFalse,
       );
       expect(
+        storageValues.containsKey(AuthStorageKeys.userCreatedAt(slug)),
+        isFalse,
+      );
+      expect(
         storageValues.containsKey(AuthStorageKeys.currentOwnerId),
         isFalse,
       );
@@ -365,7 +372,7 @@ void main() {
   });
 
   group('cached identity', () {
-    test('login persists createdAt alongside id and email', () async {
+    test('login persists createdAt', () async {
       final slug = AuthStorageKeys.originSlug(_prodBaseUrl);
       final client = _clientFor(userId: 'u1', userEmail: 'u1@example.com');
       final service = _service(baseUrl: _prodBaseUrl, client: client);
