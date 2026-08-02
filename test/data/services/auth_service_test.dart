@@ -349,11 +349,13 @@ void main() {
       );
     });
 
-    test('a network error (offline) returns null but preserves the stored '
-        'access token', () async {
+    test('a network error (offline) returns the cached user and preserves the '
+        'stored access token', () async {
       storageValues[AuthStorageKeys.accessToken(slug)] = 'still-good-token';
       storageValues[AuthStorageKeys.userId(slug)] = 'old-id';
       storageValues[AuthStorageKeys.userEmail(slug)] = 'old@example.com';
+      storageValues[AuthStorageKeys.userCreatedAt(slug)] =
+          '2026-01-01T00:00:00.000Z';
 
       final client = MockClient((request) async {
         throw const SocketException('offline');
@@ -363,11 +365,47 @@ void main() {
 
       final user = await service.loadStoredUser();
 
-      expect(user, isNull);
+      // "Couldn't verify" must not collapse into "no user": that is what made
+      // an offline launch look like a guest session with an empty diary.
+      expect(user, isNotNull);
+      expect(user!.id, 'old-id');
+      expect(user.email, 'old@example.com');
       expect(
         storageValues[AuthStorageKeys.accessToken(slug)],
         'still-good-token',
       );
+    });
+
+    test(
+      'a network error with no cached identity still returns null',
+      () async {
+        storageValues[AuthStorageKeys.accessToken(slug)] = 'still-good-token';
+
+        final client = MockClient((request) async {
+          throw const SocketException('offline');
+        });
+        final service = _service(baseUrl: _localBaseUrl, client: client);
+        addTearDown(service.dispose);
+
+        expect(await service.loadStoredUser(), isNull);
+      },
+    );
+
+    test('a session cached before createdAt was stored still loads', () async {
+      storageValues[AuthStorageKeys.accessToken(slug)] = 'still-good-token';
+      storageValues[AuthStorageKeys.userId(slug)] = 'legacy-id';
+      storageValues[AuthStorageKeys.userEmail(slug)] = 'legacy@example.com';
+      // No userCreatedAt key: this device signed in before Task 1 shipped.
+
+      final client = MockClient((request) async {
+        throw const SocketException('offline');
+      });
+      final service = _service(baseUrl: _localBaseUrl, client: client);
+      addTearDown(service.dispose);
+
+      final user = await service.loadStoredUser();
+
+      expect(user?.id, 'legacy-id');
     });
   });
 

@@ -261,14 +261,16 @@ class AuthService implements AuthRepository {
 
   /// Load user from storage (for app startup).
   ///
-  /// Fail-closed: a stored identity is only returned once its token is
-  /// confirmed valid, either directly against `/auth/me` or via a successful
-  /// refresh. If the token is actively rejected (401) and the refresh also
-  /// fails, the session is dead, so the namespaced session is cleared and
-  /// `null` is returned. If the server is merely unreachable (offline, 5xx),
-  /// that's ambiguous — not proof the token is bad — so the token is left
-  /// untouched and `null` is returned; a later online start can still
-  /// recover it. Never touches the local diary.
+  /// Fail-closed only against a server that actually answers. A stored
+  /// identity is returned outright once its token is confirmed valid, either
+  /// directly against `/auth/me` or via a successful refresh. If the token is
+  /// actively rejected (401) and the refresh also fails, the session is dead,
+  /// so the namespaced session is cleared and `null` is returned. If the
+  /// server is merely unreachable (offline, 5xx), that's ambiguous — not
+  /// proof the token is bad — so the token is left untouched and the last
+  /// verified identity is served back from the local cache instead (`null`
+  /// only if nothing was ever cached); a later online start still re-verifies
+  /// it. Never touches the local diary.
   @override
   Future<AuthUser?> loadStoredUser() async {
     final token = await getAccessToken();
@@ -280,7 +282,13 @@ class AuthService implements AuthRepository {
         await _persistUser(user);
         return user;
       case _MeUnreachable():
-        return null; // keep token; unverified, not disproven
+        // "Couldn't verify" is not "verified and rejected". Returning null
+        // here collapsed offline into guest: SessionCubit emitted
+        // SessionGuest, CurrentOwnerHolder went null, and NotesRepository
+        // filtered the user's own rows out -- an empty diary with no signal.
+        // Keep the token AND the identity; the next successful contact
+        // re-verifies, and a real 401 still logs out below.
+        return _cachedUser();
       case _MeRejected():
         break; // try a refresh
     }
@@ -344,6 +352,32 @@ class AuthService implements AuthRepository {
       ),
       _storage.write(key: AuthStorageKeys.currentOwnerId, value: user.id),
     ]);
+  }
+
+  /// The last verified identity for this backend origin, rebuilt from secure
+  /// storage. Only used when the server could not be reached -- never to
+  /// override an answer the server actually gave.
+  Future<AuthUser?> _cachedUser() async {
+    final id = await _storage.read(key: AuthStorageKeys.userId(_originSlug));
+    final email = await _storage.read(
+      key: AuthStorageKeys.userEmail(_originSlug),
+    );
+    if (id == null || email == null) return null;
+
+    // Sessions stored before createdAt was persisted have no value here. The
+    // app never reads createdAt, so epoch is a safe stand-in and is a better
+    // outcome than forcing a field user to re-authenticate with no signal.
+    final rawCreatedAt = await _storage.read(
+      key: AuthStorageKeys.userCreatedAt(_originSlug),
+    );
+    final createdAt = rawCreatedAt == null
+        ? DateTime.fromMillisecondsSinceEpoch(0)
+        : DateTime.tryParse(rawCreatedAt) ??
+              DateTime.fromMillisecondsSinceEpoch(0);
+
+    final user = AuthUser(id: id, email: email, createdAt: createdAt);
+    _currentUser = user;
+    return user;
   }
 
   /// Wipes every key this backend origin owns, plus `currentOwnerId`. Only
