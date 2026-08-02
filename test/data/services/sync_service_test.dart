@@ -146,171 +146,159 @@ void main() {
           );
     }
 
-    Future<Note> readNote(String id) =>
-        (database.select(database.notes)
-          ..where((t) => t.id.equals(id))).getSingle();
+    Future<Note> readNote(String id) => (database.select(
+      database.notes,
+    )..where((t) => t.id.equals(id))).getSingle();
 
-    Future<Folder> readFolder(String id) =>
-        (database.select(database.folders)
-          ..where((t) => t.id.equals(id))).getSingle();
+    Future<Folder> readFolder(String id) => (database.select(
+      database.folders,
+    )..where((t) => t.id.equals(id))).getSingle();
 
-    test(
-      'only pendingSync rows are pushed; pushed rows clear the flag and '
-      'clean rows are left untouched',
-      () async {
-        final dirtyNoteUpdatedAt = DateTime(2026, 2, 1);
-        await insertNote(
-          'dirty-note',
-          pendingSync: true,
-          updatedAt: dirtyNoteUpdatedAt,
-        );
-        await insertNote(
-          'clean-note',
-          pendingSync: false,
-          updatedAt: DateTime(2026, 1, 15),
-        );
-        final dirtyFolderUpdatedAt = DateTime(2026, 2, 2);
-        await insertFolder(
-          'dirty-folder',
-          pendingSync: true,
-          updatedAt: dirtyFolderUpdatedAt,
-        );
-        await insertFolder(
-          'clean-folder',
-          pendingSync: false,
-          updatedAt: DateTime(2026, 1, 16),
-        );
+    test('only pendingSync rows are pushed; pushed rows clear the flag and '
+        'clean rows are left untouched', () async {
+      final dirtyNoteUpdatedAt = DateTime(2026, 2, 1);
+      await insertNote(
+        'dirty-note',
+        pendingSync: true,
+        updatedAt: dirtyNoteUpdatedAt,
+      );
+      await insertNote(
+        'clean-note',
+        pendingSync: false,
+        updatedAt: DateTime(2026, 1, 15),
+      );
+      final dirtyFolderUpdatedAt = DateTime(2026, 2, 2);
+      await insertFolder(
+        'dirty-folder',
+        pendingSync: true,
+        updatedAt: dirtyFolderUpdatedAt,
+      );
+      await insertFolder(
+        'clean-folder',
+        pendingSync: false,
+        updatedAt: DateTime(2026, 1, 16),
+      );
 
-        late Map<String, dynamic> pushedPayload;
-        when(() => apiService.post(any(), any())).thenAnswer((invocation) async {
-          pushedPayload =
-              invocation.positionalArguments[1] as Map<String, dynamic>;
-          return emptyPullResponse();
-        });
-
-        final service = buildService();
-        final result = await service.sync();
-
-        expect(result.status, SyncStatus.success);
-
-        final notesSent = pushedPayload['notes'] as List;
-        final foldersSent = pushedPayload['folders'] as List;
-        expect(notesSent, hasLength(1));
-        expect(notesSent.single['id'], 'dirty-note');
-        expect(foldersSent, hasLength(1));
-        expect(foldersSent.single['id'], 'dirty-folder');
-
-        expect((await readNote('dirty-note')).pendingSync, isFalse);
-        expect((await readFolder('dirty-folder')).pendingSync, isFalse);
-
-        // Rows that were never dirty are not part of the payload and stay
-        // exactly as they were.
-        final cleanNote = await readNote('clean-note');
-        expect(cleanNote.pendingSync, isFalse);
-        expect(cleanNote.updatedAt, DateTime(2026, 1, 15));
-        final cleanFolder = await readFolder('clean-folder');
-        expect(cleanFolder.pendingSync, isFalse);
-        expect(cleanFolder.updatedAt, DateTime(2026, 1, 16));
-      },
-    );
-
-    test(
-      'a row re-edited mid-round-trip (updatedAt changed after being read) '
-      'keeps its pendingSync flag set',
-      () async {
-        await insertNote(
-          'racy-note',
-          pendingSync: true,
-          updatedAt: DateTime(2026, 3, 1),
-        );
-
-        when(() => apiService.post(any(), any())).thenAnswer((_) async {
-          // Simulate the note being edited again while the push is in
-          // flight: bump updatedAt and pendingSync after the server already
-          // has the payload, but before the client clears the flag.
-          await (database.update(database.notes)
-                ..where((t) => t.id.equals('racy-note')))
-              .write(
-                NotesCompanion(
-                  updatedAt: Value(DateTime(2026, 3, 2)),
-                  pendingSync: const Value(true),
-                ),
-              );
-          return emptyPullResponse();
-        });
-
-        final service = buildService();
-        final result = await service.sync();
-
-        expect(result.status, SyncStatus.success);
-        final row = await readNote('racy-note');
-        expect(row.pendingSync, isTrue);
-        expect(row.updatedAt, DateTime(2026, 3, 2));
-      },
-    );
-
-    test(
-      'unreachable server (checkHealth false) returns offline and never '
-      'posts',
-      () async {
-        when(() => apiService.checkHealth()).thenAnswer((_) async => false);
-
-        final service = buildService();
-        final result = await service.sync();
-
-        expect(result.status, SyncStatus.offline);
-        verifyNever(() => apiService.post(any(), any()));
-      },
-    );
-
-    test(
-      'no current_owner_id (guest) returns idle and never posts',
-      () async {
-        storageValues.remove('current_owner_id');
-
-        final service = buildService();
-        final result = await service.sync();
-
-        expect(result.status, SyncStatus.idle);
-        verifyNever(() => apiService.post(any(), any()));
-      },
-    );
-
-    test('a push that fails once then succeeds retries and reports success', () async {
-      var calls = 0;
-      when(() => apiService.post(any(), any())).thenAnswer((_) async {
-        calls++;
-        if (calls == 1) {
-          throw ApiException(500, 'temporary failure');
-        }
+      late Map<String, dynamic> pushedPayload;
+      when(() => apiService.post(any(), any())).thenAnswer((invocation) async {
+        pushedPayload =
+            invocation.positionalArguments[1] as Map<String, dynamic>;
         return emptyPullResponse();
       });
 
-      final service = buildService(); // retryBackoff: [Duration.zero]
+      final service = buildService();
       final result = await service.sync();
 
       expect(result.status, SyncStatus.success);
-      expect(calls, 2);
-      verify(() => apiService.post(any(), any())).called(2);
+
+      final notesSent = pushedPayload['notes'] as List;
+      final foldersSent = pushedPayload['folders'] as List;
+      expect(notesSent, hasLength(1));
+      expect(notesSent.single['id'], 'dirty-note');
+      expect(foldersSent, hasLength(1));
+      expect(foldersSent.single['id'], 'dirty-folder');
+
+      expect((await readNote('dirty-note')).pendingSync, isFalse);
+      expect((await readFolder('dirty-folder')).pendingSync, isFalse);
+
+      // Rows that were never dirty are not part of the payload and stay
+      // exactly as they were.
+      final cleanNote = await readNote('clean-note');
+      expect(cleanNote.pendingSync, isFalse);
+      expect(cleanNote.updatedAt, DateTime(2026, 1, 15));
+      final cleanFolder = await readFolder('clean-folder');
+      expect(cleanFolder.pendingSync, isFalse);
+      expect(cleanFolder.updatedAt, DateTime(2026, 1, 16));
+    });
+
+    test('a row re-edited mid-round-trip (updatedAt changed after being read) '
+        'keeps its pendingSync flag set', () async {
+      await insertNote(
+        'racy-note',
+        pendingSync: true,
+        updatedAt: DateTime(2026, 3, 1),
+      );
+
+      when(() => apiService.post(any(), any())).thenAnswer((_) async {
+        // Simulate the note being edited again while the push is in
+        // flight: bump updatedAt and pendingSync after the server already
+        // has the payload, but before the client clears the flag.
+        await (database.update(
+          database.notes,
+        )..where((t) => t.id.equals('racy-note'))).write(
+          NotesCompanion(
+            updatedAt: Value(DateTime(2026, 3, 2)),
+            pendingSync: const Value(true),
+          ),
+        );
+        return emptyPullResponse();
+      });
+
+      final service = buildService();
+      final result = await service.sync();
+
+      expect(result.status, SyncStatus.success);
+      final row = await readNote('racy-note');
+      expect(row.pendingSync, isTrue);
+      expect(row.updatedAt, DateTime(2026, 3, 2));
+    });
+
+    test('unreachable server (checkHealth false) returns offline and never '
+        'posts', () async {
+      when(() => apiService.checkHealth()).thenAnswer((_) async => false);
+
+      final service = buildService();
+      final result = await service.sync();
+
+      expect(result.status, SyncStatus.offline);
+      verifyNever(() => apiService.post(any(), any()));
+    });
+
+    test('no current_owner_id (guest) returns idle and never posts', () async {
+      storageValues.remove('current_owner_id');
+
+      final service = buildService();
+      final result = await service.sync();
+
+      expect(result.status, SyncStatus.idle);
+      verifyNever(() => apiService.post(any(), any()));
     });
 
     test(
-      'a push that always fails gives up after exhausting the retry '
-      'backoff and reports error',
+      'a push that fails once then succeeds retries and reports success',
       () async {
-        when(
-          () => apiService.post(any(), any()),
-        ).thenThrow(ApiException(500, 'permanent failure'));
+        var calls = 0;
+        when(() => apiService.post(any(), any())).thenAnswer((_) async {
+          calls++;
+          if (calls == 1) {
+            throw ApiException(500, 'temporary failure');
+          }
+          return emptyPullResponse();
+        });
 
-        final service = buildService(
-          retryBackoff: const [Duration.zero, Duration.zero],
-        );
+        final service = buildService(); // retryBackoff: [Duration.zero]
         final result = await service.sync();
 
-        expect(result.status, SyncStatus.error);
-        verify(() => apiService.post(any(), any())).called(3);
+        expect(result.status, SyncStatus.success);
+        expect(calls, 2);
+        verify(() => apiService.post(any(), any())).called(2);
       },
     );
+
+    test('a push that always fails gives up after exhausting the retry '
+        'backoff and reports error', () async {
+      when(
+        () => apiService.post(any(), any()),
+      ).thenThrow(ApiException(500, 'permanent failure'));
+
+      final service = buildService(
+        retryBackoff: const [Duration.zero, Duration.zero],
+      );
+      final result = await service.sync();
+
+      expect(result.status, SyncStatus.error);
+      verify(() => apiService.post(any(), any())).called(3);
+    });
 
     test(
       'regaining connectivity while authenticated triggers a flush sync',
@@ -328,109 +316,100 @@ void main() {
     );
 
     group('C4/C5: safe server apply (LWW guard, null-date fallback)', () {
-      test(
-        'a local note edited mid-round-trip is not clobbered by a stale '
-        'server echo of its pre-edit copy',
-        () async {
-          final t1 = DateTime(2026, 1, 1);
-          final t2 = t1.add(const Duration(minutes: 5));
-          // Locally dirty and newer than the copy the server is about to
-          // echo back.
-          await insertNote('n1', pendingSync: true, updatedAt: t2, date: t1);
+      test('a local note edited mid-round-trip is not clobbered by a stale '
+          'server echo of its pre-edit copy', () async {
+        final t1 = DateTime(2026, 1, 1);
+        final t2 = t1.add(const Duration(minutes: 5));
+        // Locally dirty and newer than the copy the server is about to
+        // echo back.
+        await insertNote('n1', pendingSync: true, updatedAt: t2, date: t1);
 
-          when(() => apiService.post(any(), any())).thenAnswer(
-            (_) async => pullResponseWithNotes([
-              {
-                'id': 'n1',
-                'title': 'Stale Server Title',
-                'content': 'Stale server content',
-                'date': t1.toIso8601String(),
-                'audio_path': null,
-                'folder_id': null,
-                'is_deleted': false,
-                'updated_at': t1.toIso8601String(),
-              },
-            ]),
-          );
+        when(() => apiService.post(any(), any())).thenAnswer(
+          (_) async => pullResponseWithNotes([
+            {
+              'id': 'n1',
+              'title': 'Stale Server Title',
+              'content': 'Stale server content',
+              'date': t1.toIso8601String(),
+              'audio_path': null,
+              'folder_id': null,
+              'is_deleted': false,
+              'updated_at': t1.toIso8601String(),
+            },
+          ]),
+        );
 
-          final service = buildService();
-          final result = await service.sync();
+        final service = buildService();
+        final result = await service.sync();
 
-          expect(result.status, SyncStatus.success);
-          final row = await readNote('n1');
-          expect(row.title, 'Title n1');
-        },
-      );
+        expect(result.status, SyncStatus.success);
+        final row = await readNote('n1');
+        expect(row.title, 'Title n1');
+      });
 
-      test(
-        'a new server note with a null date applies using updated_at as '
-        'fallback instead of crashing',
-        () async {
-          final t = DateTime(2026, 5, 1, 10, 30);
+      test('a new server note with a null date applies using updated_at as '
+          'fallback instead of crashing', () async {
+        final t = DateTime(2026, 5, 1, 10, 30);
 
-          when(() => apiService.post(any(), any())).thenAnswer(
-            (_) async => pullResponseWithNotes([
-              {
-                'id': 'srv',
-                'title': 'Server Note',
-                'content': 'Server content',
-                'date': null,
-                'audio_path': null,
-                'folder_id': null,
-                'is_deleted': false,
-                'updated_at': t.toIso8601String(),
-              },
-            ]),
-          );
+        when(() => apiService.post(any(), any())).thenAnswer(
+          (_) async => pullResponseWithNotes([
+            {
+              'id': 'srv',
+              'title': 'Server Note',
+              'content': 'Server content',
+              'date': null,
+              'audio_path': null,
+              'folder_id': null,
+              'is_deleted': false,
+              'updated_at': t.toIso8601String(),
+            },
+          ]),
+        );
 
-          final service = buildService();
-          final result = await service.sync();
+        final service = buildService();
+        final result = await service.sync();
 
-          expect(result.status, SyncStatus.success);
-          final row = await readNote('srv');
-          expect(row.date, t);
-        },
-      );
+        expect(result.status, SyncStatus.success);
+        final row = await readNote('srv');
+        expect(row.date, t);
+      });
 
-      test(
-        'a note deleted locally after a prior push is not resurrected by '
-        'a stale live echo from the server',
-        () async {
-          final t1 = DateTime(2026, 6, 1);
-          final t2 = t1.add(const Duration(minutes: 5));
-          // Deleted locally (and dirty from that delete) after t1, which is
-          // the copy the server still has and echoes back as live.
-          await insertNote(
-            'n1',
-            pendingSync: true,
-            updatedAt: t2,
-            date: t1,
-            isDeleted: true,
-          );
+      test('a note deleted locally after a prior push is not resurrected by '
+          'a stale live echo from the server', () async {
+        final t1 = DateTime(2026, 6, 1);
+        final t2 = t1.add(const Duration(minutes: 5));
+        // Deleted locally (and dirty from that delete) after t1, which is
+        // the copy the server still has and echoes back as live.
+        await insertNote(
+          'n1',
+          pendingSync: true,
+          updatedAt: t2,
+          date: t1,
+          isDeleted: true,
+        );
 
-          when(() => apiService.post(any(), any())).thenAnswer(
-            (_) async => pullResponseWithNotes([
-              {
-                'id': 'n1',
-                'title': 'Title n1',
-                'content': 'Content n1',
-                'date': t1.toIso8601String(),
-                'audio_path': null,
-                'folder_id': null,
-                'is_deleted': false,
-                'updated_at': t1.toIso8601String(),
-              },
-            ]),
-          );
+        when(() => apiService.post(any(), any())).thenAnswer(
+          (_) async => pullResponseWithNotes([
+            {
+              'id': 'n1',
+              'title': 'Title n1',
+              'content': 'Content n1',
+              'date': t1.toIso8601String(),
+              'audio_path': null,
+              'folder_id': null,
+              'is_deleted': false,
+              'updated_at': t1.toIso8601String(),
+            },
+          ]),
+        );
 
-          final service = buildService();
-          final result = await service.sync();
+        final service = buildService();
+        final result = await service.sync();
 
-          expect(result.status, SyncStatus.success);
-          final row = await readNote('n1');
-          expect(row.isDeleted, isTrue);
-        },
-      );
+        expect(result.status, SyncStatus.success);
+        final row = await readNote('n1');
+        expect(row.isDeleted, isTrue);
+      });
     });
 
     group('owner-scoped sync (cross-account leak fix)', () {
@@ -470,76 +449,169 @@ void main() {
         },
       );
 
-      test(
-        'a note and folder pulled from the server are stamped with the '
-        'current owner id',
-        () async {
-          final t = DateTime(2026, 4, 1);
-          when(() => apiService.post(any(), any())).thenAnswer(
-            (_) async => {
-              'notes': [
-                {
-                  'id': 'srv-note',
-                  'title': 'Server Note',
-                  'content': 'Server content',
-                  'date': t.toIso8601String(),
-                  'audio_path': null,
-                  'folder_id': null,
-                  'is_deleted': false,
-                  'updated_at': t.toIso8601String(),
-                },
-              ],
-              'folders': [
-                {
-                  'id': 'srv-folder',
-                  'name': 'Server Folder',
-                  'color': '#123456',
-                  'is_deleted': false,
-                  'updated_at': t.toIso8601String(),
-                },
-              ],
-              'artifacts': [],
-              'artifact_comments': [],
-              'sync_timestamp': DateTime.now().toIso8601String(),
-            },
-          );
+      test('a note and folder pulled from the server are stamped with the '
+          'current owner id', () async {
+        final t = DateTime(2026, 4, 1);
+        when(() => apiService.post(any(), any())).thenAnswer(
+          (_) async => {
+            'notes': [
+              {
+                'id': 'srv-note',
+                'title': 'Server Note',
+                'content': 'Server content',
+                'date': t.toIso8601String(),
+                'audio_path': null,
+                'folder_id': null,
+                'is_deleted': false,
+                'updated_at': t.toIso8601String(),
+              },
+            ],
+            'folders': [
+              {
+                'id': 'srv-folder',
+                'name': 'Server Folder',
+                'color': '#123456',
+                'is_deleted': false,
+                'updated_at': t.toIso8601String(),
+              },
+            ],
+            'artifacts': [],
+            'artifact_comments': [],
+            'sync_timestamp': DateTime.now().toIso8601String(),
+          },
+        );
 
-          final service = buildService();
-          final result = await service.sync();
+        final service = buildService();
+        final result = await service.sync();
 
-          expect(result.status, SyncStatus.success);
-          expect((await readNote('srv-note')).ownerKey, ownerId);
-          expect((await readFolder('srv-folder')).ownerKey, ownerId);
-        },
-      );
+        expect(result.status, SyncStatus.success);
+        expect((await readNote('srv-note')).ownerKey, ownerId);
+        expect((await readFolder('srv-folder')).ownerKey, ownerId);
+      });
+    });
+
+    /// The whole point of the revision guard: when the server refuses a note
+    /// because someone else wrote to it first, the local edit must survive as
+    /// its own row instead of being overwritten by the server's version.
+    group('conflict handling', () {
+      test('sends the baseRevision each row was edited from', () async {
+        await insertNote('n1', pendingSync: true);
+        await (database.update(database.notes)..where((t) => t.id.equals('n1')))
+            .write(const NotesCompanion(baseRevision: Value(4)));
+
+        Map<String, dynamic>? sent;
+        when(() => apiService.post(any(), any())).thenAnswer((
+          invocation,
+        ) async {
+          sent = invocation.positionalArguments[1] as Map<String, dynamic>;
+          return emptyPullResponse();
+        });
+
+        await buildService().sync();
+
+        expect((sent!['notes'] as List).single['base_revision'], 4);
+      });
+
+      test('stores the revision the server assigned', () async {
+        await insertNote('n1', pendingSync: true);
+        when(() => apiService.post(any(), any())).thenAnswer(
+          (_) async => {
+            ...emptyPullResponse(),
+            'notes': [
+              {
+                'id': 'n1',
+                'title': 'Server copy',
+                'content': '',
+                'date': DateTime(2026, 8, 2).toIso8601String(),
+                'updated_at': DateTime(2026, 8, 3).toIso8601String(),
+                'is_deleted': false,
+                'revision': 7,
+              },
+            ],
+          },
+        );
+
+        await buildService().sync();
+
+        final saved = await (database.select(
+          database.notes,
+        )..where((t) => t.id.equals('n1'))).getSingle();
+        expect(saved.baseRevision, 7);
+      });
+
+      test('forks a refused note and keeps its dirty flag', () async {
+        await insertNote('n1', pendingSync: true);
+        when(() => apiService.post(any(), any())).thenAnswer(
+          (_) async => {
+            ...emptyPullResponse(),
+            'conflicted_note_ids': ['n1'],
+          },
+        );
+
+        await buildService().sync();
+
+        final rows = await database.select(database.notes).get();
+        expect(rows, hasLength(2), reason: 'the original plus the fork');
+
+        final fork = rows.firstWhere((r) => r.id != 'n1');
+        // The fork carries the local edit and still has to reach the server.
+        expect(fork.pendingSync, isTrue);
+        // It has never been to the server, so it uploads as a create rather
+        // than racing again against the revision it just lost to.
+        expect(fork.baseRevision, isNull);
+
+        // The refused row keeps its dirty flag: the server never accepted it,
+        // and clearing it would drop the user's edit silently.
+        final original = rows.firstWhere((r) => r.id == 'n1');
+        expect(original.pendingSync, isTrue);
+      });
+
+      test('a note the server accepted still gets its flag cleared', () async {
+        await insertNote('n1', pendingSync: true);
+        await insertNote('n2', pendingSync: true);
+        when(() => apiService.post(any(), any())).thenAnswer(
+          (_) async => {
+            ...emptyPullResponse(),
+            'conflicted_note_ids': ['n1'],
+          },
+        );
+
+        await buildService().sync();
+
+        final accepted = await (database.select(
+          database.notes,
+        )..where((t) => t.id.equals('n2'))).getSingle();
+        expect(
+          accepted.pendingSync,
+          isFalse,
+          reason: 'only the refused row keeps its flag',
+        );
+      });
     });
   });
 
   group('ApiService.checkHealth', () {
-    test(
-      'probes the root /health path (not under /api/v1) and returns true '
-      'on HTTP 200',
-      () async {
-        Uri? requestedUri;
-        final client = MockClient((request) async {
-          requestedUri = request.url;
-          return http.Response('', 200);
-        });
+    test('probes the root /health path (not under /api/v1) and returns true '
+        'on HTTP 200', () async {
+      Uri? requestedUri;
+      final client = MockClient((request) async {
+        requestedUri = request.url;
+        return http.Response('', 200);
+      });
 
-        final api = ApiService(
-          authService: AuthService(database: FakeAppDatabase()),
-          client: client,
-        );
-        addTearDown(api.dispose);
+      final api = ApiService(
+        authService: AuthService(database: FakeAppDatabase()),
+        client: client,
+      );
+      addTearDown(api.dispose);
 
-        final healthy = await api.checkHealth();
+      final healthy = await api.checkHealth();
 
-        expect(healthy, isTrue);
-        expect(requestedUri, isNotNull);
-        expect(requestedUri!.path, '/health');
-        expect(requestedUri!.toString(), isNot(contains('/api/v1')));
-      },
-    );
+      expect(healthy, isTrue);
+      expect(requestedUri, isNotNull);
+      expect(requestedUri!.path, '/health');
+      expect(requestedUri!.toString(), isNot(contains('/api/v1')));
+    });
 
     test('returns false on a non-200 response', () async {
       final api = ApiService(

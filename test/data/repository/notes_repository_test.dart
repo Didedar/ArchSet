@@ -468,6 +468,90 @@ void main() {
       },
     );
 
+    /// A note the server refused (because someone else wrote to it first) has
+    /// to survive as its own row. Overwriting it with the server's version is
+    /// the one outcome this whole feature exists to prevent.
+    group('forkNote', () {
+      test('keeps both versions under distinct ids', () async {
+        ownerHolder.value = 'me';
+        await repository.insertNote(note('n1', title: 'Раскоп 3'));
+
+        final fork = await repository.forkNote(
+          'n1',
+          at: DateTime(2026, 8, 2, 19, 42),
+        );
+
+        final all = await repository.watchAllNotes().first;
+        expect(all, hasLength(2));
+        expect(fork.id, isNot('n1'));
+        expect(all.map((n) => n.id), contains('n1'));
+      });
+
+      test('copies the local content rather than an empty shell', () async {
+        ownerHolder.value = 'me';
+        await repository.insertNote(
+          note('n1', title: 'Раскоп 3', content: 'Слой 2, керамика'),
+        );
+
+        final fork = await repository.forkNote(
+          'n1',
+          at: DateTime(2026, 8, 2, 19, 42),
+        );
+
+        final saved = await repository.getNoteById(fork.id);
+        expect(saved!.content, 'Слой 2, керамика');
+        expect(saved.title, contains('Раскоп 3'));
+      });
+
+      test(
+        'labels the fork so two near-identical notes are tellable apart',
+        () async {
+          ownerHolder.value = 'me';
+          await repository.insertNote(note('n1', title: 'Раскоп 3'));
+
+          final fork = await repository.forkNote(
+            'n1',
+            at: DateTime(2026, 8, 2, 19, 42),
+          );
+
+          expect(fork.title, contains('19:42'));
+        },
+      );
+
+      test(
+        'marks the fork dirty and unbased so it uploads as a new note',
+        () async {
+          ownerHolder.value = 'me';
+          await repository.insertNote(note('n1'));
+
+          final fork = await repository.forkNote(
+            'n1',
+            at: DateTime(2026, 8, 2, 19, 42),
+          );
+
+          final saved = await repository.getNoteById(fork.id);
+          // Dirty: it is the local edit and still has to reach the server.
+          expect(saved!.pendingSync, isTrue);
+          // Unbased: it has never been to the server, so it uploads as a create
+          // instead of racing against the revision it just lost to.
+          expect(saved.baseRevision, isNull);
+        },
+      );
+
+      test('stamps the fork with the current owner', () async {
+        ownerHolder.value = 'me';
+        await repository.insertNote(note('n1'));
+
+        final fork = await repository.forkNote(
+          'n1',
+          at: DateTime(2026, 8, 2, 19, 42),
+        );
+
+        final saved = await repository.getNoteById(fork.id);
+        expect(saved!.ownerKey, 'me');
+      });
+    });
+
     /// `pendingSyncCount()` drives the "you have unsent work" warning shown
     /// before sign-out. It is the only query in the repository whose result
     /// the user never sees directly -- they only see a dialog appear or not

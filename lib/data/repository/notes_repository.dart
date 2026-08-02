@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 import '../current_owner_holder.dart';
 import '../database/app_database.dart';
 
@@ -328,6 +329,48 @@ class NotesRepository {
       );
 
     return query.watchSingle().map((row) => row.read(count) ?? 0);
+  }
+
+  /// Copies [id]'s current local state into a brand-new note.
+  ///
+  /// Called when the server refuses a write because someone else edited the
+  /// same note first. Without this the server's version would simply
+  /// overwrite the local one and a day of field notes would vanish with no
+  /// trace -- the outcome the revision guard exists to prevent.
+  ///
+  /// [at] is injected rather than read from the clock so the label is
+  /// testable. The fork deliberately has no `baseRevision`: it has never been
+  /// to the server, so it uploads as a create instead of racing again against
+  /// the revision it just lost to.
+  Future<Note> forkNote(String id, {required DateTime at}) async {
+    final original = await getNoteById(id);
+    if (original == null) {
+      throw StateError('cannot fork a note that does not exist: $id');
+    }
+
+    final two = (int n) => n.toString().padLeft(2, '0');
+    final label = '${two(at.hour)}:${two(at.minute)}';
+    final forkId = const Uuid().v4();
+
+    await database
+        .into(database.notes)
+        .insert(
+          NotesCompanion.insert(
+            id: forkId,
+            title: '${original.title} (версия $label)',
+            content: original.content,
+            date: original.date,
+            audioPath: Value(original.audioPath),
+            folderId: Value(original.folderId),
+            updatedAt: Value(at),
+            pendingSync: const Value(true),
+            isDeleted: const Value(false),
+            ownerKey: Value(_owner.value),
+            baseRevision: const Value(null),
+          ),
+        );
+
+    return (await getNoteById(forkId))!;
   }
 
   /// How many of this owner's notes carry local changes the server has not

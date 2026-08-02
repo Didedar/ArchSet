@@ -9,7 +9,9 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:drift/drift.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'api_service.dart';
+import '../current_owner_holder.dart';
 import '../database/app_database.dart';
+import '../repository/notes_repository.dart';
 
 /// Sync status for tracking sync state
 enum SyncStatus { idle, syncing, success, error, offline }
@@ -73,7 +75,11 @@ class SyncService {
        _storage = storage ?? const FlutterSecureStorage(),
        _retryBackoff =
            retryBackoff ??
-           const [Duration(seconds: 1), Duration(seconds: 2), Duration(seconds: 4)] {
+           const [
+             Duration(seconds: 1),
+             Duration(seconds: 2),
+             Duration(seconds: 4),
+           ] {
     _loadLastSyncTime();
   }
 
@@ -216,6 +222,27 @@ class SyncService {
         'last_sync_at': _lastSyncAt?.toIso8601String(),
       });
 
+      // Notes the server refused because someone else wrote to them first.
+      final conflicted =
+          ((response['conflicted_note_ids'] as List?) ?? const [])
+              .cast<String>()
+              .toSet();
+
+      // Fork BEFORE the dirty flags are cleared and BEFORE server changes are
+      // applied: the fork has to copy the local edit while it still IS the
+      // local edit. Reusing NotesRepository.forkNote rather than reimplementing
+      // it here; the owner is already resolved for this sync.
+      if (conflicted.isNotEmpty) {
+        final repository = NotesRepository(
+          _database,
+          ownerHolder: CurrentOwnerHolder(ownerId),
+        );
+        final forkedAt = DateTime.now();
+        for (final id in conflicted) {
+          await repository.forkNote(id, at: forkedAt);
+        }
+      }
+
       // Only clear the dirty flag for exactly the rows just pushed, matched
       // on id AND updatedAt -- a row edited again mid-round-trip has a new
       // updatedAt by the time this runs, so it won't match and stays dirty.
@@ -223,7 +250,13 @@ class SyncService {
       // response happens to echo back the same rows we just pushed, applying
       // it first could stamp a new updatedAt and make the match below miss,
       // leaving a successfully-synced row stuck dirty.
-      await _clearPendingNotes(localNotes);
+      // Conflicted rows were NOT accepted by the server. Clearing their dirty
+      // flag would drop the user's edit silently -- the precise failure this
+      // whole feature exists to prevent -- so they keep it and go up again as
+      // the fork on the next sync.
+      await _clearPendingNotes(
+        localNotes.where((n) => !conflicted.contains(n.id)).toList(),
+      );
       await _clearPendingFolders(localFolders);
 
       // Apply server changes
@@ -271,8 +304,7 @@ class SyncService {
   /// account's push payload.
   Future<List<Note>> _getUnsyncedNotes(String ownerId) async {
     return (_database.select(_database.notes)..where(
-          (tbl) =>
-              tbl.pendingSync.equals(true) & tbl.ownerKey.equals(ownerId),
+          (tbl) => tbl.pendingSync.equals(true) & tbl.ownerKey.equals(ownerId),
         ))
         .get();
   }
@@ -281,8 +313,7 @@ class SyncService {
   /// [ownerId]. See [_getUnsyncedNotes].
   Future<List<Folder>> _getUnsyncedFolders(String ownerId) async {
     return (_database.select(_database.folders)..where(
-          (tbl) =>
-              tbl.pendingSync.equals(true) & tbl.ownerKey.equals(ownerId),
+          (tbl) => tbl.pendingSync.equals(true) & tbl.ownerKey.equals(ownerId),
         ))
         .get();
   }
@@ -299,6 +330,10 @@ class SyncService {
     'updated_at': (note.updatedAt ?? note.date)
         .toIso8601String(), // Use updatedAt, fallback to date
     'is_deleted': note.isDeleted,
+    // The revision this edit was based on. Null means the row has never been
+    // to the server, so it uploads as a create. The server only accepts the
+    // write if this still matches what it holds.
+    'base_revision': note.baseRevision,
   };
 
   /// Push payload shape for a single folder.
@@ -308,6 +343,7 @@ class SyncService {
     'color': folder.color,
     'updated_at': (folder.updatedAt ?? folder.createdAt).toIso8601String(),
     'is_deleted': folder.isDeleted,
+    'base_revision': folder.baseRevision,
   };
 
   /// Clears `pendingSync` for exactly the note rows just pushed, matching on
@@ -440,6 +476,7 @@ class SyncService {
                 noteId: Value(data['note_id'] as String?),
                 updatedAt: Value(updatedAt),
                 isDeleted: const Value(false),
+                baseRevision: Value(data['revision'] as int?),
               ),
             );
       }
@@ -529,11 +566,7 @@ class SyncService {
           _database.folders,
         )..where((f) => f.id.equals(folderId))).getSingleOrNull();
         if (local != null &&
-            _serverLoses(
-              local.updatedAt,
-              local.pendingSync,
-              serverUpdatedAt,
-            )) {
+            _serverLoses(local.updatedAt, local.pendingSync, serverUpdatedAt)) {
           continue;
         }
 
@@ -564,6 +597,7 @@ class SyncService {
                   isDeleted: const Value(false),
                   pendingSync: const Value(false),
                   ownerKey: Value(ownerId),
+                  baseRevision: Value(folderData['revision'] as int?),
                 ),
               );
         }
@@ -580,11 +614,7 @@ class SyncService {
           _database.notes,
         )..where((n) => n.id.equals(noteId))).getSingleOrNull();
         if (local != null &&
-            _serverLoses(
-              local.updatedAt,
-              local.pendingSync,
-              serverUpdatedAt,
-            )) {
+            _serverLoses(local.updatedAt, local.pendingSync, serverUpdatedAt)) {
           continue;
         }
 
@@ -615,6 +645,7 @@ class SyncService {
                   isDeleted: const Value(false),
                   pendingSync: const Value(false),
                   ownerKey: Value(ownerId),
+                  baseRevision: Value(noteData['revision'] as int?),
                 ),
               );
         }
