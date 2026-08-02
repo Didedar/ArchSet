@@ -4,7 +4,7 @@ Note database model for diary entries.
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Boolean, ForeignKey, Text, Index
+from sqlalchemy import String, DateTime, Boolean, ForeignKey, Text, Index, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
 
@@ -57,6 +57,18 @@ class Note(Base):
         DateTime,
         default=datetime.utcnow
     )
+    # Server-assigned optimistic-concurrency counter. Incremented on every
+    # accepted write; clients send back the revision they based their edit on
+    # so a conflict can be detected without trusting device clocks. Two phones
+    # offline in the field for a week drift apart, and comparing timestamps
+    # would silently pick the wrong winner.
+    revision: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        server_default="1",
+        default=1
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow
