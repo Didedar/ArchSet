@@ -118,3 +118,49 @@ backend/
 ├── .env.example
 └── README.md
 ```
+
+## Database migrations
+
+Two mechanisms, deliberately:
+
+- `Base.metadata.create_all()` in `app/database.py` bootstraps a **fresh** or
+  **test** database from the models. It creates missing tables and does nothing
+  to existing ones.
+- **Alembic** owns every change to a database that already exists — adding a
+  column, changing a type, adding a table after the fact. `create_all` cannot do
+  any of that, which is why `scripts/add_indexes.sql` had to exist.
+
+Both read the schema from the same SQLAlchemy models, so they cannot disagree
+about what the schema *should* be. What they differ on is whether they can get
+an existing database there.
+
+### Adopting Alembic on a database that predates it (once, per environment)
+
+```bash
+alembic stamp 0001   # record the baseline as applied WITHOUT running it
+```
+
+Run this against production **before** the first `alembic upgrade head`.
+Skipping it makes Alembic try to `CREATE TABLE users` on a database that
+already has it.
+
+### Applying a migration
+
+```bash
+alembic upgrade head
+```
+
+Run this **before** deploying code that reads the new columns. A missing column
+is a 500 on every request that touches it.
+
+### Creating a migration
+
+```bash
+alembic revision --autogenerate -m "what changed"
+```
+
+Always read the generated file before committing it. Autogenerate does not
+detect renames (it emits drop + add, which loses data) and can miss server
+defaults. After generating, re-run autogenerate against an up-to-date database
+and confirm the new file's `upgrade()` is `pass` — that proves the migration and
+the models agree.
