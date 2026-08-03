@@ -334,6 +334,7 @@ class SyncService {
     // to the server, so it uploads as a create. The server only accepts the
     // write if this still matches what it holds.
     'base_revision': note.baseRevision,
+    'author_id': note.authorId,
   };
 
   /// Push payload shape for a single folder.
@@ -344,6 +345,7 @@ class SyncService {
     'updated_at': (folder.updatedAt ?? folder.createdAt).toIso8601String(),
     'is_deleted': folder.isDeleted,
     'base_revision': folder.baseRevision,
+    'author_id': folder.authorId,
   };
 
   /// Clears `pendingSync` for exactly the note rows just pushed, matching on
@@ -477,6 +479,7 @@ class SyncService {
                 updatedAt: Value(updatedAt),
                 isDeleted: const Value(false),
                 baseRevision: Value(data['revision'] as int?),
+                authorId: Value(data['author_id'] as String?),
               ),
             );
       }
@@ -598,6 +601,7 @@ class SyncService {
                   pendingSync: const Value(false),
                   ownerKey: Value(ownerId),
                   baseRevision: Value(folderData['revision'] as int?),
+                  authorId: Value(folderData['author_id'] as String?),
                 ),
               );
         }
@@ -646,6 +650,10 @@ class SyncService {
                   pendingSync: const Value(false),
                   ownerKey: Value(ownerId),
                   baseRevision: Value(noteData['revision'] as int?),
+                  // Who wrote it, kept separate from ownerKey above:
+                  // this row belongs to THIS device's replica for
+                  // this account, whoever authored it.
+                  authorId: Value(noteData['author_id'] as String?),
                 ),
               );
         }

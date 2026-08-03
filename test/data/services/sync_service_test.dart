@@ -10,6 +10,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:archset_r2/data/database/app_database.dart';
+import 'package:archset_r2/data/current_owner_holder.dart';
+import 'package:archset_r2/data/repository/notes_repository.dart';
 import 'package:archset_r2/data/services/api_service.dart';
 import 'package:archset_r2/data/services/auth_service.dart';
 import 'package:archset_r2/data/services/sync_service.dart';
@@ -539,6 +541,80 @@ void main() {
         )..where((t) => t.id.equals('n1'))).getSingle();
         expect(saved.baseRevision, 7);
       });
+
+      test('carries authorship in both directions', () async {
+        await insertNote('n1', pendingSync: true);
+        await (database.update(database.notes)..where((t) => t.id.equals('n1')))
+            .write(const NotesCompanion(authorId: Value(ownerId)));
+
+        Map<String, dynamic>? sent;
+        when(() => apiService.post(any(), any())).thenAnswer((
+          invocation,
+        ) async {
+          sent = invocation.positionalArguments[1] as Map<String, dynamic>;
+          return {
+            ...emptyPullResponse(),
+            'notes': [
+              {
+                'id': 'n-theirs',
+                'title': 'Слой 3',
+                'content': '',
+                'date': DateTime(2026, 8, 2).toIso8601String(),
+                'updated_at': DateTime(2026, 8, 3).toIso8601String(),
+                'is_deleted': false,
+                'author_id': 'maria',
+              },
+            ],
+          };
+        });
+
+        await buildService().sync();
+
+        expect((sent!['notes'] as List).single['author_id'], ownerId);
+
+        final theirs = await (database.select(
+          database.notes,
+        )..where((t) => t.id.equals('n-theirs'))).getSingle();
+        // Authored by a colleague, but stored in THIS account's replica.
+        // Conflating the two is what would let her rows show up under a
+        // different account on the same phone.
+        expect(theirs.authorId, 'maria');
+        expect(theirs.ownerKey, ownerId);
+      });
+
+      test(
+        "a colleague's note stays invisible to a different local account",
+        () async {
+          when(() => apiService.post(any(), any())).thenAnswer(
+            (_) async => {
+              ...emptyPullResponse(),
+              'notes': [
+                {
+                  'id': 'n-theirs',
+                  'title': 'Слой 3',
+                  'content': '',
+                  'date': DateTime(2026, 8, 2).toIso8601String(),
+                  'updated_at': DateTime(2026, 8, 3).toIso8601String(),
+                  'is_deleted': false,
+                  'author_id': 'maria',
+                },
+              ],
+            },
+          );
+
+          await buildService().sync();
+
+          // A second account on the same device must not see it. This is the
+          // leak test: sharing widened what arrives locally, and ownerKey is the
+          // only thing keeping accounts apart on one phone.
+          final otherAccount = NotesRepository(
+            database,
+            ownerHolder: CurrentOwnerHolder('someone-else'),
+          );
+          final visible = await otherAccount.watchAllNotes().first;
+          expect(visible.map((n) => n.id), isNot(contains('n-theirs')));
+        },
+      );
 
       test('forks a refused note and keeps its dirty flag', () async {
         await insertNote('n1', pendingSync: true);
