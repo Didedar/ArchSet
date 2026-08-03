@@ -127,6 +127,22 @@ class AppStrings {
   static const String unsyncedWarningTitle = 'unsynced_warning_title';
   static const String unsyncedWarningBody = 'unsynced_warning_body';
 
+  // Shared dig sites
+  static const String sharedDigSite = 'shared_dig_site';
+  static const String members = 'members';
+  static const String inviteMember = 'invite_member';
+  static const String inviteByEmail = 'invite_by_email';
+  static const String removeMember = 'remove_member';
+  static const String noMembersYet = 'no_members_yet';
+  static const String authorLabel = 'author_label';
+  static const String inviteUnknownEmail = 'invite_unknown_email';
+  static const String inviteNotOwner = 'invite_not_owner';
+  static const String inviteOffline = 'invite_offline';
+  static const String inviteFailed = 'invite_failed';
+  static const String sharingNeedsAccount = 'sharing_needs_account';
+  static const String conflictBanner = 'conflict_banner';
+  static const String folderNoLongerShared = 'folder_no_longer_shared';
+
   /// Every key declared above. Used by the locale-parity test to assert no
   /// language is missing a translation (`tr` would silently fall back to
   /// English, which reads as a bug rather than a missing string).
@@ -247,6 +263,20 @@ class AppStrings {
     signedIn,
     unsyncedWarningTitle,
     unsyncedWarningBody,
+    sharedDigSite,
+    members,
+    inviteMember,
+    inviteByEmail,
+    removeMember,
+    noMembersYet,
+    authorLabel,
+    inviteUnknownEmail,
+    inviteNotOwner,
+    inviteOffline,
+    inviteFailed,
+    sharingNeedsAccount,
+    conflictBanner,
+    folderNoLongerShared,
   ];
 
   /// Language codes with a translation table. `en` is the fallback in [tr].
@@ -386,6 +416,21 @@ class AppStrings {
           'Some entries have not reached the server yet. If you sign out now '
           'they stay on this device, and your colleagues will only see them '
           'after you sign in to this account again.',
+      sharedDigSite: 'Shared',
+      members: 'Members',
+      inviteMember: 'Invite',
+      inviteByEmail: 'Colleague\'s email',
+      removeMember: 'Remove',
+      noMembersYet: 'Not shared with anyone yet',
+      authorLabel: 'author',
+      inviteUnknownEmail: 'No account uses that email address.',
+      inviteNotOwner: 'Only the owner of a dig site can invite others.',
+      inviteOffline: 'Inviting someone needs a connection. Try again in camp.',
+      inviteFailed: 'Could not send the invitation.',
+      sharingNeedsAccount: 'Sharing a dig site requires an account.',
+      conflictBanner:
+          'A colleague edited this entry too. This is your version.',
+      folderNoLongerShared: 'This dig site is no longer shared with you.',
     },
     'ru': {
       settings: 'Настройки',
@@ -519,6 +564,20 @@ class AppStrings {
           'Часть записей ещё не отправлена на сервер. Если выйти сейчас, они '
           'останутся на этом устройстве, и коллеги увидят их только после '
           'того, как вы снова войдёте в этот аккаунт.',
+      sharedDigSite: 'Общий',
+      members: 'Участники',
+      inviteMember: 'Пригласить',
+      inviteByEmail: 'Почта коллеги',
+      removeMember: 'Исключить',
+      noMembersYet: 'Пока ни с кем не поделились',
+      authorLabel: 'автор',
+      inviteUnknownEmail: 'Аккаунта с такой почтой нет.',
+      inviteNotOwner: 'Приглашать может только владелец раскопа.',
+      inviteOffline: 'Для приглашения нужна сеть. Попробуйте в лагере.',
+      inviteFailed: 'Не удалось отправить приглашение.',
+      sharingNeedsAccount: 'Для совместной работы нужен аккаунт.',
+      conflictBanner: 'Коллега тоже правил эту запись. Это ваша версия.',
+      folderNoLongerShared: 'Этот раскоп больше не общий для вас.',
     },
     'kk': {
       settings: 'Баптаулар',
@@ -651,6 +710,21 @@ class AppStrings {
           'Кейбір жазбалар серверге әлі жіберілмеген. Қазір шықсаңыз, олар '
           'осы құрылғыда қалады, ал әріптестеріңіз оларды сіз осы аккаунтқа '
           'қайта кіргеннен кейін ғана көреді.',
+      sharedDigSite: 'Ортақ',
+      members: 'Қатысушылар',
+      inviteMember: 'Шақыру',
+      inviteByEmail: 'Әріптестің поштасы',
+      removeMember: 'Шығару',
+      noMembersYet: 'Әзірге ешкіммен бөліскен жоқсыз',
+      authorLabel: 'авторы',
+      inviteUnknownEmail: 'Мұндай поштасы бар аккаунт жоқ.',
+      inviteNotOwner: 'Тек қазба иесі ғана шақыра алады.',
+      inviteOffline: 'Шақыру үшін желі қажет. Лагерьде қайталап көріңіз.',
+      inviteFailed: 'Шақыруды жіберу мүмкін болмады.',
+      sharingNeedsAccount: 'Бірлескен жұмыс үшін аккаунт қажет.',
+      conflictBanner:
+          'Әріптесіңіз де осы жазбаны өңдеген. Бұл сіздің нұсқаңыз.',
+      folderNoLongerShared: 'Бұл қазба енді сізбен ортақ емес.',
     },
     'zh': {
       settings: '设置',
@@ -774,6 +848,20 @@ class AppStrings {
       unsyncedWarningBody:
           '部分记录尚未上传到服务器。如果现在退出登录，它们将保留在本设备上，'
           '同事只有在您重新登录此账号后才能看到。',
+      sharedDigSite: '共享',
+      members: '成员',
+      inviteMember: '邀请',
+      inviteByEmail: '同事的邮箱',
+      removeMember: '移除',
+      noMembersYet: '尚未与任何人共享',
+      authorLabel: '作者',
+      inviteUnknownEmail: '没有使用该邮箱的账号。',
+      inviteNotOwner: '只有发掘点的所有者才能邀请他人。',
+      inviteOffline: '邀请需要网络连接。请回到营地后重试。',
+      inviteFailed: '邀请发送失败。',
+      sharingNeedsAccount: '共享发掘点需要账号。',
+      conflictBanner: '同事也编辑了这条记录。这是您的版本。',
+      folderNoLongerShared: '该发掘点已不再与您共享。',
     },
   };
 

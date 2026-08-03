@@ -135,15 +135,32 @@ class _FolderCardState extends State<FolderCard>
                           mainAxisAlignment: MainAxisAlignment.center,
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              widget.folder.name,
-                              style: GoogleFonts.inter(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 15,
-                                color: Colors.white,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    widget.folder.name,
+                                    style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 15,
+                                      color: Colors.white,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                // Display only: the server decides who may
+                                // actually read this, so a stale flag shows a
+                                // badge and never grants anything.
+                                if (widget.folder.isShared) ...[
+                                  const SizedBox(width: 6),
+                                  Icon(
+                                    Icons.group_outlined,
+                                    size: 14,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                  ),
+                                ],
+                              ],
                             ),
                             Text(
                               '${widget.noteCount} ${widget.noteCount == 1 ? 'note' : 'notes'}',

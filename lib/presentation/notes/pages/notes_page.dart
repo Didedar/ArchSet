@@ -10,6 +10,7 @@ import '../../artifacts/pages/artifacts_map_page.dart';
 import '../../editor/pages/diary_edit_page.dart';
 import '../../locale/bloc/locale_bloc.dart';
 import '../../pages/settings_page.dart';
+import '../../session/bloc/session_cubit.dart';
 import '../../widgets/note_card.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/loading_skeleton.dart';
@@ -419,6 +420,14 @@ class _NotesPageState extends State<NotesPage>
                                   index: index,
                                   onTap: action,
                                   folderName: folderName,
+                                  currentOwnerId:
+                                      context.read<SessionCubit>().state
+                                          is SessionAuthenticated
+                                      ? (context.read<SessionCubit>().state
+                                                as SessionAuthenticated)
+                                            .user
+                                            .id
+                                      : null,
                                 );
                               },
                               openBuilder: (context, action) {

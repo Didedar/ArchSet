@@ -14,6 +14,11 @@ class NoteCard extends StatefulWidget {
   final int index;
   final String? folderName;
 
+  /// The account viewing this card. A note whose `authorId` differs was
+  /// written by a colleague in a shared dig site, and saying so is what stops
+  /// two people's entries reading as one person's.
+  final String? currentOwnerId;
+
   const NoteCard({
     super.key,
     required this.note,
@@ -21,6 +26,7 @@ class NoteCard extends StatefulWidget {
     this.onLongPress,
     required this.index,
     this.folderName,
+    this.currentOwnerId,
   });
 
   @override
@@ -194,6 +200,23 @@ class _NoteCardState extends State<NoteCard>
                         ),
                       ),
                     ),
+                    if (widget.note.authorId != null &&
+                        widget.note.authorId != widget.currentOwnerId) ...[
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          '${AppStrings.tr(locale, AppStrings.authorLabel)}: '
+                          '${widget.note.authorId}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 10,
+                            color: textColor.withValues(alpha: 0.6),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(width: 8),
                     Icon(Icons.chevron_right, color: textColor, size: 16),
                   ],

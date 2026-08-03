@@ -547,6 +547,30 @@ class SettingsPage extends StatelessWidget {
               height: 1.4,
             ),
           ),
+          const SizedBox(height: 12),
+          // Sharing is visible but locked rather than hidden: a guest should
+          // know the feature exists and what it costs them. Membership needs
+          // a user id, and a guest has none -- this is not an implementation
+          // limit but what sharing means.
+          Row(
+            children: [
+              Icon(
+                Icons.group_outlined,
+                size: 18,
+                color: textColor.withOpacity(0.4),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  AppStrings.tr(locale, AppStrings.sharingNeedsAccount),
+                  style: GoogleFonts.inter(
+                    color: textColor.withOpacity(0.5),
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
