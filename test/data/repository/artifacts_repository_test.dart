@@ -308,4 +308,53 @@ void main() {
       expect(await repository.watchUnlocatedCount().first, 0);
     });
   });
+
+  /// The map opened from inside an entry shows only what was photographed in
+  /// that entry -- a whole-dig map is the wrong answer when you are standing
+  /// in one trench asking "what did I find here?".
+  group('scoped to a single note', () {
+    test('returns only that note\'s finds', () async {
+      await insertNote('n1');
+      await insertNote('n2');
+      await insertArtifact('a1', noteId: 'n1');
+      await insertArtifact('a2', noteId: 'n2');
+      await insertArtifact('a-loose', noteId: null);
+
+      final artifacts = await repository
+          .watchLocatedArtifacts(noteId: 'n1')
+          .first;
+
+      expect(artifacts.map((a) => a.id), ['a1']);
+    });
+
+    test('without a noteId it still returns everything', () async {
+      await insertNote('n1');
+      await insertArtifact('a1', noteId: 'n1');
+      await insertArtifact('a-loose', noteId: null);
+
+      final artifacts = await repository.watchLocatedArtifacts().first;
+
+      expect(artifacts.map((a) => a.id), containsAll(['a1', 'a-loose']));
+    });
+
+    test('a deleted note scoped to itself yields nothing', () async {
+      await insertNote('n1', isDeleted: true);
+      await insertArtifact('a1', noteId: 'n1');
+
+      expect(
+        await repository.watchLocatedArtifacts(noteId: 'n1').first,
+        isEmpty,
+      );
+    });
+
+    test('the unlocated count can be scoped too', () async {
+      await insertNote('n1');
+      await insertNote('n2');
+      await insertArtifact('a1', noteId: 'n1', latitude: null);
+      await insertArtifact('a2', noteId: 'n2', latitude: null);
+
+      expect(await repository.watchUnlocatedCount(noteId: 'n1').first, 1);
+      expect(await repository.watchUnlocatedCount().first, 2);
+    });
+  });
 }

@@ -121,4 +121,42 @@ void main() {
     expect(artifactsController.hasListener, isFalse);
     expect(unlocatedController.hasListener, isFalse);
   });
+
+  /// The map opened from inside an entry must ask the repository for that
+  /// entry's finds, not filter a whole-dig result afterwards -- otherwise
+  /// every pin in the dig is loaded to show two.
+  group('scoped to one note', () {
+    test('passes the noteId straight through to the repository', () async {
+      when(
+        () => repository.watchLocatedArtifacts(noteId: any(named: 'noteId')),
+      ).thenAnswer((_) => Stream.value(const []));
+      when(
+        () => repository.watchUnlocatedCount(noteId: any(named: 'noteId')),
+      ).thenAnswer((_) => Stream.value(0));
+
+      final bloc = ArtifactsMapBloc(repository: repository, noteId: 'n1')
+        ..add(const ArtifactsMapSubscriptionRequested());
+      addTearDown(bloc.close);
+      await Future<void>.delayed(Duration.zero);
+
+      verify(() => repository.watchLocatedArtifacts(noteId: 'n1')).called(1);
+      verify(() => repository.watchUnlocatedCount(noteId: 'n1')).called(1);
+    });
+
+    test('asks for everything when no note is given', () async {
+      when(
+        () => repository.watchLocatedArtifacts(noteId: any(named: 'noteId')),
+      ).thenAnswer((_) => Stream.value(const []));
+      when(
+        () => repository.watchUnlocatedCount(noteId: any(named: 'noteId')),
+      ).thenAnswer((_) => Stream.value(0));
+
+      final bloc = ArtifactsMapBloc(repository: repository)
+        ..add(const ArtifactsMapSubscriptionRequested());
+      addTearDown(bloc.close);
+      await Future<void>.delayed(Duration.zero);
+
+      verify(() => repository.watchLocatedArtifacts(noteId: null)).called(1);
+    });
+  });
 }

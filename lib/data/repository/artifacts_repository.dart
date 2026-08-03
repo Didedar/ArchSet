@@ -18,6 +18,16 @@ class ArtifactsRepository {
   /// Artifacts that can be placed on the map, newest first.
   ///
 
+  /// Restricts a query to one entry's finds, or to everything when [noteId]
+  /// is null.
+  ///
+  /// Null means "no scope", never "photos with no entry": the map opened from
+  /// the notes list shows the whole dig, and a caller that wants only loose
+  /// photos would be asking a different question.
+  Expression<bool> _scopedToNote(String? noteId) => noteId == null
+      ? const Constant(true)
+      : database.imageMetadata.noteId.equals(noteId);
+
   /// True when an artifact's parent entry is still alive.
   ///
   /// A photographed find only exists as part of the entry it was photographed
@@ -35,7 +45,7 @@ class ArtifactsRepository {
 
   /// Joins note titles and comment counts in SQL so the map doesn't issue a
   /// query per pin.
-  Stream<List<models.Artifact>> watchLocatedArtifacts() {
+  Stream<List<models.Artifact>> watchLocatedArtifacts({String? noteId}) {
     final commentCount = database.artifactComments.id.count();
 
     final query =
@@ -56,6 +66,7 @@ class ArtifactsRepository {
           ..where(
             database.imageMetadata.isDeleted.equals(false) &
                 _parentNoteAlive &
+                _scopedToNote(noteId) &
                 database.imageMetadata.latitude.isNotNull() &
                 database.imageMetadata.longitude.isNotNull(),
           )
@@ -83,7 +94,7 @@ class ArtifactsRepository {
 
   /// How many photos exist that the map cannot show because they have no GPS
   /// fix (permission denied, or an indoor timeout).
-  Stream<int> watchUnlocatedCount() {
+  Stream<int> watchUnlocatedCount({String? noteId}) {
     final count = database.imageMetadata.id.count();
     // Joined purely to reach `_parentNoteAlive`; the count itself is over
     // image_metadata, and the join is one-to-one on a primary key so it
@@ -99,6 +110,7 @@ class ArtifactsRepository {
           ..where(
             database.imageMetadata.isDeleted.equals(false) &
                 _parentNoteAlive &
+                _scopedToNote(noteId) &
                 (database.imageMetadata.latitude.isNull() |
                     database.imageMetadata.longitude.isNull()),
           );
@@ -107,7 +119,7 @@ class ArtifactsRepository {
   }
 
   /// Photos without a GPS fix, newest first.
-  Stream<List<models.Artifact>> watchUnlocatedArtifacts() {
+  Stream<List<models.Artifact>> watchUnlocatedArtifacts({String? noteId}) {
     final query =
         database.select(database.imageMetadata).join([
             leftOuterJoin(
@@ -118,6 +130,7 @@ class ArtifactsRepository {
           ..where(
             database.imageMetadata.isDeleted.equals(false) &
                 _parentNoteAlive &
+                _scopedToNote(noteId) &
                 (database.imageMetadata.latitude.isNull() |
                     database.imageMetadata.longitude.isNull()),
           )

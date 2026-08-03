@@ -16,24 +16,32 @@ import '../widgets/unlocated_artifacts_sheet.dart';
 
 /// Fullscreen Mapbox map of every geotagged artifact photographed in a note.
 class ArtifactsMapPage extends StatelessWidget {
-  const ArtifactsMapPage({super.key});
+  const ArtifactsMapPage({super.key, this.noteId, this.title});
+
+  /// Show only the finds photographed in this entry. Null is the whole dig.
+  final String? noteId;
+
+  /// Heading for the pill. Defaults to the whole-dig title; an entry-scoped
+  /// map passes its own so the screen says which trench you are looking at.
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
     final repository = context.di.artifacts.repository;
     return BlocProvider(
       create: (_) =>
-          ArtifactsMapBloc(repository: repository)
+          ArtifactsMapBloc(repository: repository, noteId: noteId)
             ..add(const ArtifactsMapSubscriptionRequested()),
-      child: _ArtifactsMapView(repository: repository),
+      child: _ArtifactsMapView(repository: repository, title: title),
     );
   }
 }
 
 class _ArtifactsMapView extends StatefulWidget {
-  const _ArtifactsMapView({required this.repository});
+  const _ArtifactsMapView({required this.repository, this.title});
 
   final ArtifactsRepository repository;
+  final String? title;
 
   @override
   State<_ArtifactsMapView> createState() => _ArtifactsMapViewState();
@@ -253,10 +261,9 @@ class _ArtifactsMapViewState extends State<_ArtifactsMapView> {
                         const SizedBox(width: 12),
                         Flexible(
                           child: _TitlePill(
-                            label: AppStrings.tr(
-                              locale,
-                              AppStrings.artifactsMap,
-                            ),
+                            label:
+                                widget.title ??
+                                AppStrings.tr(locale, AppStrings.artifactsMap),
                           ),
                         ),
                       ],

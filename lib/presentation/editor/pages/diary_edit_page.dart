@@ -9,6 +9,7 @@ import '../../../core/di/app_scope.dart';
 import '../../../core/localization/app_strings.dart';
 import '../../../data/database/app_database.dart';
 import '../../audio/bloc/audio_bloc.dart';
+import '../../artifacts/pages/artifacts_map_page.dart';
 import '../../locale/bloc/locale_bloc.dart';
 import '../../transcription/bloc/transcription_bloc.dart';
 import '../../widgets/audio_player_widget.dart';
@@ -648,6 +649,11 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
                           AppStrings.tr(locale, AppStrings.audioRecording),
                           onTap: _toggleRecording,
                         ),
+                        _buildMenuItem(
+                          Icons.map_outlined,
+                          AppStrings.tr(locale, AppStrings.artifactsMap),
+                          onTap: _openNoteMap,
+                        ),
                         const SizedBox(height: 5),
                         // Separator
                         Container(
@@ -675,6 +681,26 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
     );
 
     Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  /// The finds photographed in *this* entry, on a map of their own.
+  ///
+  /// Scoped rather than reusing the whole-dig map: standing in one trench, the
+  /// question is "what did I find here?", and every other pin is noise.
+  void _openNoteMap() {
+    final locale = context.read<LocaleBloc>().state.locale;
+    final title = _titleController.text.trim();
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => ArtifactsMapPage(
+          noteId: _noteId,
+          title: title.isEmpty
+              ? AppStrings.tr(locale, AppStrings.untitled)
+              : title,
+        ),
+      ),
+    );
   }
 
   Widget _buildMenuItem(IconData icon, String text, {VoidCallback? onTap}) {

@@ -13,7 +13,7 @@ part 'artifacts_map_state.dart';
 /// photos that have no GPS fix, so the map can say so instead of silently
 /// dropping them.
 class ArtifactsMapBloc extends Bloc<ArtifactsMapEvent, ArtifactsMapState> {
-  ArtifactsMapBloc({required ArtifactsRepository repository})
+  ArtifactsMapBloc({required ArtifactsRepository repository, this.noteId})
     : _repository = repository,
       super(const ArtifactsMapInitial()) {
     on<ArtifactsMapSubscriptionRequested>(
@@ -28,6 +28,10 @@ class ArtifactsMapBloc extends Bloc<ArtifactsMapEvent, ArtifactsMapState> {
     on<_ArtifactsFailed>(_onFailed, transformer: sequential());
   }
 
+  /// When set, the map shows only finds photographed in this entry. Null is
+  /// the whole dig.
+  final String? noteId;
+
   final ArtifactsRepository _repository;
   StreamSubscription<List<Artifact>>? _artifactsSub;
   StreamSubscription<int>? _unlocatedSub;
@@ -40,14 +44,18 @@ class ArtifactsMapBloc extends Bloc<ArtifactsMapEvent, ArtifactsMapState> {
     await _artifactsSub?.cancel();
     await _unlocatedSub?.cancel();
 
-    _artifactsSub = _repository.watchLocatedArtifacts().listen(
-      (artifacts) => add(_ArtifactsUpdated(artifacts)),
-      onError: (Object error) => add(_ArtifactsFailed(error.toString())),
-    );
-    _unlocatedSub = _repository.watchUnlocatedCount().listen(
-      (count) => add(_UnlocatedCountUpdated(count)),
-      onError: (Object error) => add(_ArtifactsFailed(error.toString())),
-    );
+    _artifactsSub = _repository
+        .watchLocatedArtifacts(noteId: noteId)
+        .listen(
+          (artifacts) => add(_ArtifactsUpdated(artifacts)),
+          onError: (Object error) => add(_ArtifactsFailed(error.toString())),
+        );
+    _unlocatedSub = _repository
+        .watchUnlocatedCount(noteId: noteId)
+        .listen(
+          (count) => add(_UnlocatedCountUpdated(count)),
+          onError: (Object error) => add(_ArtifactsFailed(error.toString())),
+        );
   }
 
   void _onArtifactsUpdated(
