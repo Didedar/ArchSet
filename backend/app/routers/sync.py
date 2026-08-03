@@ -10,6 +10,7 @@ from ..database import get_db
 from ..models.user import User
 from ..schemas.note import SyncRequest, SyncResponse
 from ..services.sync_service import SyncService
+from ..utils.access import accessible_folder_ids
 from ..utils.security import get_current_user
 
 router = APIRouter(prefix="/sync", tags=["Synchronization"])
@@ -52,6 +53,7 @@ async def sync_data(
     don't send artifacts behave exactly as before.
     """
     service = SyncService(db)
+    accessible = await accessible_folder_ids(db, current_user)
 
     # Sync folders -- before notes, so note.folder_id can resolve (a note's
     # folder_id FK must reference a folder row that already exists).
@@ -90,4 +92,5 @@ async def sync_data(
         artifact_comments=synced_artifact_comments,
         sync_timestamp=datetime.utcnow(),
         conflicted_note_ids=conflicted_note_ids,
+        accessible_folder_ids=sorted(accessible),
     )

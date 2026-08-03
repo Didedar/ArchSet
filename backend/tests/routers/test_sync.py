@@ -406,3 +406,46 @@ class TestSharedFolderAccess:
         )
 
         assert [n["id"] for n in response.json()["notes"]] == []
+
+
+@pytest.mark.asyncio
+async def test_sync_reports_every_accessible_folder_not_only_changed_ones(
+    client: AsyncClient, db_session, test_user, other_user, auth_headers
+):
+    """The client uses this to tell "unchanged" from "no longer mine".
+
+    An incremental pull omits both, so without the full set it would detach
+    notes from a perfectly good dig site every time nothing had happened in it.
+    """
+    from app.models.folder import Folder
+    from app.models.membership import FolderMember
+
+    for fid, owner in (("f-mine", test_user), ("f-shared", other_user)):
+        db_session.add(
+            Folder(
+                id=fid,
+                user_id=owner.id,
+                name="Раскоп",
+                color="#E8B731",
+                created_at=datetime(2020, 1, 1),
+                updated_at=datetime(2020, 1, 1),
+                is_deleted=False,
+            )
+        )
+    db_session.add(FolderMember(folder_id="f-shared", user_id=test_user.id))
+    await db_session.commit()
+
+    # last_sync_at far in the future: nothing counts as changed.
+    response = await client.post(
+        "/api/v1/sync",
+        json={
+            "notes": [],
+            "folders": [],
+            "last_sync_at": datetime(2030, 1, 1).isoformat(),
+        },
+        headers=auth_headers,
+    )
+
+    body = response.json()
+    assert body["folders"] == [], "nothing changed, so nothing is returned"
+    assert body["accessible_folder_ids"] == ["f-mine", "f-shared"]

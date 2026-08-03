@@ -665,6 +665,83 @@ void main() {
         );
       });
     });
+
+    /// Losing access to a dig site must not strand what you wrote in it.
+    /// Server-side the rows survive; this is what the person actually sees.
+    group('losing access to a shared folder', () {
+      test(
+        'detaches notes from a folder that is no longer reachable',
+        () async {
+          await insertFolder('f1', pendingSync: false);
+          await insertNote('n1', pendingSync: false);
+          await (database.update(database.notes)
+                ..where((t) => t.id.equals('n1')))
+              .write(const NotesCompanion(folderId: Value('f1')));
+
+          // Access was revoked while she was in the field: f1 is simply absent
+          // from the set the server now reports.
+          when(() => apiService.post(any(), any())).thenAnswer(
+            (_) async => {
+              ...emptyPullResponse(),
+              'accessible_folder_ids': <String>[],
+            },
+          );
+
+          await buildService().sync();
+
+          final note = await (database.select(
+            database.notes,
+          )..where((t) => t.id.equals('n1'))).getSingle();
+          // Detached, never deleted: an admin action by someone else must not
+          // destroy her writing.
+          expect(note.folderId, isNull);
+          expect(note.isDeleted, isFalse);
+          expect(note.title, isNotEmpty);
+        },
+      );
+
+      test('leaves notes alone when the folder is still reachable', () async {
+        await insertFolder('f1', pendingSync: false);
+        await insertNote('n1', pendingSync: false);
+        await (database.update(database.notes)..where((t) => t.id.equals('n1')))
+            .write(const NotesCompanion(folderId: Value('f1')));
+
+        when(() => apiService.post(any(), any())).thenAnswer(
+          (_) async => {
+            ...emptyPullResponse(),
+            'accessible_folder_ids': ['f1'],
+          },
+        );
+
+        await buildService().sync();
+
+        final note = await (database.select(
+          database.notes,
+        )..where((t) => t.id.equals('n1'))).getSingle();
+        expect(note.folderId, 'f1');
+      });
+
+      test('does not detach anything when the sync failed', () async {
+        await insertFolder('f1', pendingSync: false);
+        await insertNote('n1', pendingSync: false);
+        await (database.update(database.notes)..where((t) => t.id.equals('n1')))
+            .write(const NotesCompanion(folderId: Value('f1')));
+
+        // A failed sync reports no folders either. Detaching on that would
+        // dismantle a working setup every time signal dropped -- far worse
+        // than the bug being fixed.
+        when(
+          () => apiService.post(any(), any()),
+        ).thenThrow(Exception('network down'));
+
+        await buildService().sync();
+
+        final note = await (database.select(
+          database.notes,
+        )..where((t) => t.id.equals('n1'))).getSingle();
+        expect(note.folderId, 'f1');
+      });
+    });
   });
 
   group('ApiService.checkHealth', () {

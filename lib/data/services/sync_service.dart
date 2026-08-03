@@ -268,6 +268,10 @@ class SyncService {
       await _applyServerChanges(serverNotes, serverFolders, ownerId);
       await _applyServerArtifactChanges(serverArtifacts, serverComments);
 
+      // Only reached on a successful pull -- the catch below owns every
+      // failure path, so a dropped connection can never trigger detachment.
+      await _detachNotesFromUnreachableFolders(response, ownerId);
+
       // Update last sync timestamp
       final newSyncTime = DateTime.parse(response['sync_timestamp'] as String);
       await _saveLastSyncTime(newSyncTime);
@@ -296,6 +300,37 @@ class SyncService {
       _resultController.add(result);
       return result;
     }
+  }
+
+  /// Detaches notes from dig sites this account can no longer reach.
+  ///
+  /// A folder stops being reachable when its owner revokes access or deletes
+  /// it. The notes stay: they are this person's own writing, and an admin
+  /// action by somebody else must never destroy it. They simply stop belonging
+  /// to a dig site and show up among the personal notes.
+  ///
+  /// Driven by the server's full `accessible_folder_ids`, not by which folders
+  /// happened to arrive. An incremental pull returns only what changed, so
+  /// "absent from this response" also describes a folder nobody touched --
+  /// detaching on that would dismantle a working setup on every quiet sync.
+  ///
+  /// Older servers omit the field entirely; that is indistinguishable from
+  /// "you may reach nothing", so absence means do nothing.
+  Future<void> _detachNotesFromUnreachableFolders(
+    Map<String, dynamic> response,
+    String ownerId,
+  ) async {
+    final raw = response['accessible_folder_ids'] as List?;
+    if (raw == null) return;
+    final reachable = raw.cast<String>().toSet();
+
+    await (_database.update(_database.notes)..where(
+          (t) =>
+              t.ownerKey.equals(ownerId) &
+              t.folderId.isNotNull() &
+              t.folderId.isNotIn(reachable),
+        ))
+        .write(const NotesCompanion(folderId: Value(null)));
   }
 
   /// Get local notes with a pending (unsynced) local change, owned by

@@ -89,6 +89,12 @@ class SyncResponse(BaseModel):
     # reject every other row in the request.
     conflicted_note_ids: List[str] = []
 
+    # Every folder this user can currently reach, in full -- not just the ones
+    # that changed. The client needs the complete set to tell "unchanged" from
+    # "no longer mine": an incremental pull omits both, and detaching notes on
+    # that basis would dismantle a working setup every time nothing happened.
+    accessible_folder_ids: List[str] = []
+
 
 # Avoid circular import
 from .folder import FolderSyncItem, FolderResponse
