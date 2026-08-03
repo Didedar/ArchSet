@@ -33,6 +33,42 @@ class SyncService:
         self.db = db
     
 
+
+    async def _unreachable_ids(self, model, client_ids, reachable_ids):
+        """Ids the client sent that exist on the server but this user may not
+        touch -- typically a dig site whose access was revoked while they were
+        offline, still sitting in their local copy.
+
+        These must be skipped, not created. The prefetch cannot see them, so
+        without this they fall into the "new row" branch and the INSERT hits
+        the primary key: a 500 that fails the WHOLE batch, every sync, until
+        the stale row is manually cleared. One revoked folder would silently
+        stop the person's own unrelated work from ever syncing again.
+        """
+        if not client_ids:
+            return set()
+        result = await self.db.execute(
+            select(model.id).where(model.id.in_(client_ids))
+        )
+        return {row for row in result.scalars().all()} - set(reachable_ids)
+
+
+    @staticmethod
+    def _permitted_folder(folder_id, folder_ids):
+        """The folder a note may actually be filed into.
+
+        A client names its own `folder_id`, and nothing stops it naming a dig
+        site it was never invited to -- which would deposit its text in
+        someone else's site with no membership at all. An unreachable folder
+        degrades to None (a private, unfiled note) rather than being honoured
+        or rejected outright: the same shape as `_resolve_note_id`, which
+        turns a dangling artifact reference into an unattached artifact
+        instead of failing the whole sync.
+        """
+        if folder_id is None or folder_id in folder_ids:
+            return folder_id
+        return None
+
     async def _reachable(self, user: User):
         """The access rule, resolved once per sync call.
 
@@ -87,8 +123,14 @@ class SyncService:
             )
             existing_notes = {note.id: note for note in result.scalars().all()}
 
+        skip_ids = await self._unreachable_ids(
+            Note, client_note_ids, existing_notes.keys()
+        )
+
         # Process client notes
         for client_note in client_notes:
+            if client_note.id in skip_ids:
+                continue
             # Check if note exists
             existing_note = existing_notes.get(client_note.id)
 
@@ -112,7 +154,9 @@ class SyncService:
                 ):
                     existing_note.title = client_note.title
                     existing_note.content = client_note.content
-                    existing_note.folder_id = client_note.folder_id
+                    existing_note.folder_id = self._permitted_folder(
+                        client_note.folder_id, folder_ids
+                    )
                     existing_note.audio_path = client_note.audio_path
                     existing_note.date = client_note.date
                     existing_note.is_deleted = client_note.is_deleted
@@ -145,7 +189,9 @@ class SyncService:
                         user_id=user.id,
                         title=client_note.title,
                         content=client_note.content,
-                        folder_id=client_note.folder_id,
+                        folder_id=self._permitted_folder(
+                            client_note.folder_id, folder_ids
+                        ),
                         audio_path=client_note.audio_path,
                         date=client_note.date,
                         is_deleted=client_note.is_deleted,
@@ -240,8 +286,14 @@ class SyncService:
             )
             existing_folders = {folder.id: folder for folder in result.scalars().all()}
 
+        skip_folder_ids = await self._unreachable_ids(
+            Folder, client_folder_ids, existing_folders.keys()
+        )
+
         # Process client folders
         for client_folder in client_folders:
+            if client_folder.id in skip_folder_ids:
+                continue
             existing_folder = existing_folders.get(client_folder.id)
 
             if existing_folder:

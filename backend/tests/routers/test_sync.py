@@ -229,22 +229,22 @@ async def test_sync_persists_a_folder_and_its_note_in_one_payload(
 
 
 @pytest.mark.asyncio
-async def test_sync_with_another_users_note_id_raises_instead_of_leaking(
+async def test_sync_with_another_users_note_id_is_skipped_not_crashed(
     client: AsyncClient, auth_headers: dict, other_auth_headers: dict
 ):
-    """Documents current (buggy) behavior, not desired behavior.
+    """A note id the caller may not touch is ignored, and the sync succeeds.
 
-    sync_service.sync_notes looks up an existing note scoped to
-    `Note.id == client_note.id AND Note.user_id == current_user.id`. When a
-    sync payload reuses another user's note ID, that scoped lookup finds
-    nothing, so the code falls into the "create new" branch and tries to
-    INSERT a row whose primary key already exists (owned by someone else) --
-    raising sqlalchemy.exc.IntegrityError instead of the other user's data
-    ever actually being read or overwritten. Not a data leak, but an
-    unhandled-crash robustness gap: flagged for a follow-up fix (e.g. skip
-    silently, like the other conflict-resolution paths in this function, or
-    a scoped existence check across all users) rather than fixed here, since
-    it's a behavior change beyond this test suite's scope.
+    This test previously pinned the opposite -- an unhandled IntegrityError --
+    and its own docstring called that "current (buggy) behavior", suggesting
+    "skip silently" as the follow-up. Sharing turned that robustness gap into
+    a real failure: after access to a dig site is revoked, the ex-member's
+    device still holds copies of notes owned by someone else, so every
+    subsequent sync hit the primary key and 500'd. One revoked folder
+    permanently stopped that person's own unrelated work from syncing.
+
+    The security property is unchanged -- the row is not read, not
+    overwritten, not returned. Only the failure mode is: skipped instead of
+    fatal.
     """
     create = await client.post(
         "/api/v1/notes", json={"title": "Other user's note"}, headers=other_auth_headers
@@ -252,15 +252,21 @@ async def test_sync_with_another_users_note_id_raises_instead_of_leaking(
     note_id = create.json()["id"]
     updated_at = datetime.fromisoformat(create.json()["updated_at"]) + timedelta(hours=1)
 
-    with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
-        await client.post(
-            "/api/v1/sync",
-            json={
-                "notes": [_note_item(note_id, title="Hijacked", updated_at=updated_at)],
-                "folders": [],
-            },
-            headers=auth_headers,
-        )
+    response = await client.post(
+        "/api/v1/sync",
+        json={
+            "notes": [_note_item(note_id, title="Hijacked", updated_at=updated_at)],
+            "folders": [],
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, "a stale id must not fail the batch"
+    assert [n["id"] for n in response.json()["notes"]] == []
+
+    # And the owner's note is untouched.
+    theirs = await client.get(f"/api/v1/notes/{note_id}", headers=other_auth_headers)
+    assert theirs.json()["title"] == "Other user's note"
 
 
 class TestSharedFolderAccess:
