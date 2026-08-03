@@ -38,19 +38,19 @@ void main() {
   });
 
   EditorBloc buildBloc() => EditorBloc(
-        notesRepository: notesRepository,
-        geminiService: geminiService,
-        apiService: apiService,
-      );
+    notesRepository: notesRepository,
+    geminiService: geminiService,
+    apiService: apiService,
+  );
 
   group('save', () {
     blocTest<EditorBloc, EditorState>(
       'persists a new note with non-empty content',
       setUp: () {
-        when(() => notesRepository.getNoteById(any()))
-            .thenAnswer((_) async => null);
-        when(() => notesRepository.insertNote(any()))
-            .thenAnswer((_) async {});
+        when(
+          () => notesRepository.getNoteById(any()),
+        ).thenAnswer((_) async => null);
+        when(() => notesRepository.insertNote(any())).thenAnswer((_) async {});
       },
       build: buildBloc,
       act: (bloc) => bloc.add(
@@ -63,14 +63,12 @@ void main() {
           audioPath: '/tmp/a.m4a',
         ),
       ),
-      expect: () => [
-        const EditorSaveInProgress(),
-        const EditorSaveSuccess(),
-      ],
+      expect: () => [const EditorSaveInProgress(), const EditorSaveSuccess()],
       verify: (_) {
         verifyNever(() => notesRepository.updateNote(any()));
-        final captured =
-            verify(() => notesRepository.insertNote(captureAny())).captured;
+        final captured = verify(
+          () => notesRepository.insertNote(captureAny()),
+        ).captured;
         final note = captured.single as Note;
         expect(note.id, 'n1');
         expect(note.title, 'Title');
@@ -94,8 +92,7 @@ void main() {
             pendingSync: false,
           ),
         );
-        when(() => notesRepository.updateNote(any()))
-            .thenAnswer((_) async {});
+        when(() => notesRepository.updateNote(any())).thenAnswer((_) async {});
       },
       build: buildBloc,
       act: (bloc) => bloc.add(
@@ -108,14 +105,12 @@ void main() {
           audioPath: null,
         ),
       ),
-      expect: () => [
-        const EditorSaveInProgress(),
-        const EditorSaveSuccess(),
-      ],
+      expect: () => [const EditorSaveInProgress(), const EditorSaveSuccess()],
       verify: (_) {
         verifyNever(() => notesRepository.insertNote(any()));
-        final captured =
-            verify(() => notesRepository.updateNote(captureAny())).captured;
+        final captured = verify(
+          () => notesRepository.updateNote(captureAny()),
+        ).captured;
         final note = captured.single as Note;
         expect(note.id, 'n1');
         expect(note.title, 'New title');
@@ -128,10 +123,10 @@ void main() {
     blocTest<EditorBloc, EditorState>(
       'persists an audio-only note (empty title and text)',
       setUp: () {
-        when(() => notesRepository.getNoteById(any()))
-            .thenAnswer((_) async => null);
-        when(() => notesRepository.insertNote(any()))
-            .thenAnswer((_) async {});
+        when(
+          () => notesRepository.getNoteById(any()),
+        ).thenAnswer((_) async => null);
+        when(() => notesRepository.insertNote(any())).thenAnswer((_) async {});
       },
       build: buildBloc,
       act: (bloc) => bloc.add(
@@ -144,13 +139,11 @@ void main() {
           audioPath: '/tmp/audio-only.m4a',
         ),
       ),
-      expect: () => [
-        const EditorSaveInProgress(),
-        const EditorSaveSuccess(),
-      ],
+      expect: () => [const EditorSaveInProgress(), const EditorSaveSuccess()],
       verify: (_) {
-        final captured =
-            verify(() => notesRepository.insertNote(captureAny())).captured;
+        final captured = verify(
+          () => notesRepository.insertNote(captureAny()),
+        ).captured;
         final note = captured.single as Note;
         expect(note.id, 'n2');
         expect(note.audioPath, '/tmp/audio-only.m4a');
@@ -170,10 +163,7 @@ void main() {
           audioPath: null,
         ),
       ),
-      expect: () => [
-        const EditorSaveInProgress(),
-        const EditorSaveSuccess(),
-      ],
+      expect: () => [const EditorSaveInProgress(), const EditorSaveSuccess()],
       verify: (_) {
         verifyNever(() => notesRepository.getNoteById(any()));
         verifyNever(() => notesRepository.insertNote(any()));
@@ -183,8 +173,9 @@ void main() {
 
     blocTest<EditorBloc, EditorState>(
       'emits EditorSaveFailure when the repository throws',
-      setUp: () => when(() => notesRepository.getNoteById(any()))
-          .thenThrow(Exception('db locked')),
+      setUp: () => when(
+        () => notesRepository.getNoteById(any()),
+      ).thenThrow(Exception('db locked')),
       build: buildBloc,
       act: (bloc) => bloc.add(
         const EditorSaveRequested(
@@ -212,8 +203,9 @@ void main() {
       'hard-deletes locally when the backend confirms deletion',
       setUp: () {
         when(() => apiService.delete(any())).thenAnswer((_) async {});
-        when(() => notesRepository.hardDeleteNote(any()))
-            .thenAnswer((_) async {});
+        when(
+          () => notesRepository.hardDeleteNote(any()),
+        ).thenAnswer((_) async {});
       },
       build: buildBloc,
       act: (bloc) => bloc.add(const EditorDeleteRequested('n1')),
@@ -231,8 +223,7 @@ void main() {
     blocTest<EditorBloc, EditorState>(
       'falls back to a local soft delete when the backend call fails',
       setUp: () {
-        when(() => apiService.delete(any()))
-            .thenThrow(Exception('offline'));
+        when(() => apiService.delete(any())).thenThrow(Exception('offline'));
         when(() => notesRepository.deleteNote(any())).thenAnswer((_) async {});
       },
       build: buildBloc,
@@ -251,8 +242,9 @@ void main() {
   group('AI rewrite', () {
     blocTest<EditorBloc, EditorState>(
       'emits the rewritten text on success',
-      setUp: () => when(() => geminiService.rewriteForArchaeology(any()))
-          .thenAnswer((_) async => 'rewritten'),
+      setUp: () => when(
+        () => geminiService.rewriteForArchaeology(any()),
+      ).thenAnswer((_) async => 'rewritten'),
       build: buildBloc,
       act: (bloc) => bloc.add(const EditorAiRewriteRequested('original')),
       expect: () => [
@@ -263,8 +255,9 @@ void main() {
 
     blocTest<EditorBloc, EditorState>(
       'emits a silent-message failure when the service returns nothing',
-      setUp: () => when(() => geminiService.rewriteForArchaeology(any()))
-          .thenAnswer((_) async => null),
+      setUp: () => when(
+        () => geminiService.rewriteForArchaeology(any()),
+      ).thenAnswer((_) async => null),
       build: buildBloc,
       act: (bloc) => bloc.add(const EditorAiRewriteRequested('original')),
       expect: () => [
@@ -275,8 +268,9 @@ void main() {
 
     blocTest<EditorBloc, EditorState>(
       'emits a failure carrying the exception message on error',
-      setUp: () => when(() => geminiService.rewriteForArchaeology(any()))
-          .thenThrow(Exception('network down')),
+      setUp: () => when(
+        () => geminiService.rewriteForArchaeology(any()),
+      ).thenThrow(Exception('network down')),
       build: buildBloc,
       act: (bloc) => bloc.add(const EditorAiRewriteRequested('original')),
       expect: () => [
@@ -293,8 +287,9 @@ void main() {
   group('image scan', () {
     blocTest<EditorBloc, EditorState>(
       'emits extracted text on success',
-      setUp: () => when(() => geminiService.extractTextFromImage(any()))
-          .thenAnswer((_) async => 'scanned text'),
+      setUp: () => when(
+        () => geminiService.extractTextFromImage(any()),
+      ).thenAnswer((_) async => 'scanned text'),
       build: buildBloc,
       act: (bloc) => bloc.add(const EditorImageScanRequested('/tmp/img.png')),
       expect: () => [
@@ -305,8 +300,9 @@ void main() {
 
     blocTest<EditorBloc, EditorState>(
       'emits a user-visible failure when nothing was extracted',
-      setUp: () => when(() => geminiService.extractTextFromImage(any()))
-          .thenAnswer((_) async => null),
+      setUp: () => when(
+        () => geminiService.extractTextFromImage(any()),
+      ).thenAnswer((_) async => null),
       build: buildBloc,
       act: (bloc) => bloc.add(const EditorImageScanRequested('/tmp/img.png')),
       expect: () => [
@@ -317,14 +313,12 @@ void main() {
 
     blocTest<EditorBloc, EditorState>(
       'emits a silent failure (no message) on exception',
-      setUp: () => when(() => geminiService.extractTextFromImage(any()))
-          .thenThrow(Exception('boom')),
+      setUp: () => when(
+        () => geminiService.extractTextFromImage(any()),
+      ).thenThrow(Exception('boom')),
       build: buildBloc,
       act: (bloc) => bloc.add(const EditorImageScanRequested('/tmp/img.png')),
-      expect: () => [
-        const EditorScanInProgress(),
-        const EditorScanFailure(),
-      ],
+      expect: () => [const EditorScanInProgress(), const EditorScanFailure()],
     );
   });
 

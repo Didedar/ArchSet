@@ -110,6 +110,32 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _authorIdMeta = const VerificationMeta(
+    'authorId',
+  );
+  @override
+  late final GeneratedColumn<String> authorId = GeneratedColumn<String>(
+    'author_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isSharedMeta = const VerificationMeta(
+    'isShared',
+  );
+  @override
+  late final GeneratedColumn<bool> isShared = GeneratedColumn<bool>(
+    'is_shared',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_shared" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -121,6 +147,8 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
     pendingSync,
     ownerKey,
     baseRevision,
+    authorId,
+    isShared,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -197,6 +225,18 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         ),
       );
     }
+    if (data.containsKey('author_id')) {
+      context.handle(
+        _authorIdMeta,
+        authorId.isAcceptableOrUnknown(data['author_id']!, _authorIdMeta),
+      );
+    }
+    if (data.containsKey('is_shared')) {
+      context.handle(
+        _isSharedMeta,
+        isShared.isAcceptableOrUnknown(data['is_shared']!, _isSharedMeta),
+      );
+    }
     return context;
   }
 
@@ -242,6 +282,14 @@ class $FoldersTable extends Folders with TableInfo<$FoldersTable, Folder> {
         DriftSqlType.int,
         data['${effectivePrefix}base_revision'],
       ),
+      authorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}author_id'],
+      ),
+      isShared: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_shared'],
+      )!,
     );
   }
 
@@ -265,6 +313,16 @@ class Folder extends DataClass implements Insertable<Folder> {
   /// row has never been to the server. Written by the sync layer, not by the
   /// repository.
   final int? baseRevision;
+
+  /// Who wrote this row. Distinct from [ownerKey], which says whose local
+  /// replica it is -- in a shared dig site those differ, and conflating them
+  /// is exactly what would let one account's rows render as another's.
+  final String? authorId;
+
+  /// True when this folder has members beyond its owner. Display only: the
+  /// server stays the authority on who may actually read it, so a stale
+  /// `true` here shows a badge, never grants access.
+  final bool isShared;
   const Folder({
     required this.id,
     required this.name,
@@ -275,6 +333,8 @@ class Folder extends DataClass implements Insertable<Folder> {
     required this.pendingSync,
     this.ownerKey,
     this.baseRevision,
+    this.authorId,
+    required this.isShared,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -294,6 +354,10 @@ class Folder extends DataClass implements Insertable<Folder> {
     if (!nullToAbsent || baseRevision != null) {
       map['base_revision'] = Variable<int>(baseRevision);
     }
+    if (!nullToAbsent || authorId != null) {
+      map['author_id'] = Variable<String>(authorId);
+    }
+    map['is_shared'] = Variable<bool>(isShared);
     return map;
   }
 
@@ -314,6 +378,10 @@ class Folder extends DataClass implements Insertable<Folder> {
       baseRevision: baseRevision == null && nullToAbsent
           ? const Value.absent()
           : Value(baseRevision),
+      authorId: authorId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authorId),
+      isShared: Value(isShared),
     );
   }
 
@@ -332,6 +400,8 @@ class Folder extends DataClass implements Insertable<Folder> {
       pendingSync: serializer.fromJson<bool>(json['pendingSync']),
       ownerKey: serializer.fromJson<String?>(json['ownerKey']),
       baseRevision: serializer.fromJson<int?>(json['baseRevision']),
+      authorId: serializer.fromJson<String?>(json['authorId']),
+      isShared: serializer.fromJson<bool>(json['isShared']),
     );
   }
   @override
@@ -347,6 +417,8 @@ class Folder extends DataClass implements Insertable<Folder> {
       'pendingSync': serializer.toJson<bool>(pendingSync),
       'ownerKey': serializer.toJson<String?>(ownerKey),
       'baseRevision': serializer.toJson<int?>(baseRevision),
+      'authorId': serializer.toJson<String?>(authorId),
+      'isShared': serializer.toJson<bool>(isShared),
     };
   }
 
@@ -360,6 +432,8 @@ class Folder extends DataClass implements Insertable<Folder> {
     bool? pendingSync,
     Value<String?> ownerKey = const Value.absent(),
     Value<int?> baseRevision = const Value.absent(),
+    Value<String?> authorId = const Value.absent(),
+    bool? isShared,
   }) => Folder(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -370,6 +444,8 @@ class Folder extends DataClass implements Insertable<Folder> {
     pendingSync: pendingSync ?? this.pendingSync,
     ownerKey: ownerKey.present ? ownerKey.value : this.ownerKey,
     baseRevision: baseRevision.present ? baseRevision.value : this.baseRevision,
+    authorId: authorId.present ? authorId.value : this.authorId,
+    isShared: isShared ?? this.isShared,
   );
   Folder copyWithCompanion(FoldersCompanion data) {
     return Folder(
@@ -386,6 +462,8 @@ class Folder extends DataClass implements Insertable<Folder> {
       baseRevision: data.baseRevision.present
           ? data.baseRevision.value
           : this.baseRevision,
+      authorId: data.authorId.present ? data.authorId.value : this.authorId,
+      isShared: data.isShared.present ? data.isShared.value : this.isShared,
     );
   }
 
@@ -400,7 +478,9 @@ class Folder extends DataClass implements Insertable<Folder> {
           ..write('isDeleted: $isDeleted, ')
           ..write('pendingSync: $pendingSync, ')
           ..write('ownerKey: $ownerKey, ')
-          ..write('baseRevision: $baseRevision')
+          ..write('baseRevision: $baseRevision, ')
+          ..write('authorId: $authorId, ')
+          ..write('isShared: $isShared')
           ..write(')'))
         .toString();
   }
@@ -416,6 +496,8 @@ class Folder extends DataClass implements Insertable<Folder> {
     pendingSync,
     ownerKey,
     baseRevision,
+    authorId,
+    isShared,
   );
   @override
   bool operator ==(Object other) =>
@@ -429,7 +511,9 @@ class Folder extends DataClass implements Insertable<Folder> {
           other.isDeleted == this.isDeleted &&
           other.pendingSync == this.pendingSync &&
           other.ownerKey == this.ownerKey &&
-          other.baseRevision == this.baseRevision);
+          other.baseRevision == this.baseRevision &&
+          other.authorId == this.authorId &&
+          other.isShared == this.isShared);
 }
 
 class FoldersCompanion extends UpdateCompanion<Folder> {
@@ -442,6 +526,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
   final Value<bool> pendingSync;
   final Value<String?> ownerKey;
   final Value<int?> baseRevision;
+  final Value<String?> authorId;
+  final Value<bool> isShared;
   final Value<int> rowid;
   const FoldersCompanion({
     this.id = const Value.absent(),
@@ -453,6 +539,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     this.pendingSync = const Value.absent(),
     this.ownerKey = const Value.absent(),
     this.baseRevision = const Value.absent(),
+    this.authorId = const Value.absent(),
+    this.isShared = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   FoldersCompanion.insert({
@@ -465,6 +553,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     this.pendingSync = const Value.absent(),
     this.ownerKey = const Value.absent(),
     this.baseRevision = const Value.absent(),
+    this.authorId = const Value.absent(),
+    this.isShared = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        name = Value(name),
@@ -479,6 +569,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Expression<bool>? pendingSync,
     Expression<String>? ownerKey,
     Expression<int>? baseRevision,
+    Expression<String>? authorId,
+    Expression<bool>? isShared,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -491,6 +583,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       if (pendingSync != null) 'pending_sync': pendingSync,
       if (ownerKey != null) 'owner_key': ownerKey,
       if (baseRevision != null) 'base_revision': baseRevision,
+      if (authorId != null) 'author_id': authorId,
+      if (isShared != null) 'is_shared': isShared,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -505,6 +599,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     Value<bool>? pendingSync,
     Value<String?>? ownerKey,
     Value<int?>? baseRevision,
+    Value<String?>? authorId,
+    Value<bool>? isShared,
     Value<int>? rowid,
   }) {
     return FoldersCompanion(
@@ -517,6 +613,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
       pendingSync: pendingSync ?? this.pendingSync,
       ownerKey: ownerKey ?? this.ownerKey,
       baseRevision: baseRevision ?? this.baseRevision,
+      authorId: authorId ?? this.authorId,
+      isShared: isShared ?? this.isShared,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -551,6 +649,12 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
     if (baseRevision.present) {
       map['base_revision'] = Variable<int>(baseRevision.value);
     }
+    if (authorId.present) {
+      map['author_id'] = Variable<String>(authorId.value);
+    }
+    if (isShared.present) {
+      map['is_shared'] = Variable<bool>(isShared.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -569,6 +673,8 @@ class FoldersCompanion extends UpdateCompanion<Folder> {
           ..write('pendingSync: $pendingSync, ')
           ..write('ownerKey: $ownerKey, ')
           ..write('baseRevision: $baseRevision, ')
+          ..write('authorId: $authorId, ')
+          ..write('isShared: $isShared, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -703,6 +809,17 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _authorIdMeta = const VerificationMeta(
+    'authorId',
+  );
+  @override
+  late final GeneratedColumn<String> authorId = GeneratedColumn<String>(
+    'author_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -716,6 +833,7 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
     pendingSync,
     ownerKey,
     baseRevision,
+    authorId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -806,6 +924,12 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         ),
       );
     }
+    if (data.containsKey('author_id')) {
+      context.handle(
+        _authorIdMeta,
+        authorId.isAcceptableOrUnknown(data['author_id']!, _authorIdMeta),
+      );
+    }
     return context;
   }
 
@@ -859,6 +983,10 @@ class $NotesTable extends Notes with TableInfo<$NotesTable, Note> {
         DriftSqlType.int,
         data['${effectivePrefix}base_revision'],
       ),
+      authorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}author_id'],
+      ),
     );
   }
 
@@ -884,6 +1012,11 @@ class Note extends DataClass implements Insertable<Note> {
   /// row has never been to the server. Written by the sync layer, not by the
   /// repository.
   final int? baseRevision;
+
+  /// Who wrote this row. Distinct from [ownerKey], which says whose local
+  /// replica it is -- in a shared dig site those differ, and conflating them
+  /// is exactly what would let one account's rows render as another's.
+  final String? authorId;
   const Note({
     required this.id,
     required this.title,
@@ -896,6 +1029,7 @@ class Note extends DataClass implements Insertable<Note> {
     required this.pendingSync,
     this.ownerKey,
     this.baseRevision,
+    this.authorId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -920,6 +1054,9 @@ class Note extends DataClass implements Insertable<Note> {
     }
     if (!nullToAbsent || baseRevision != null) {
       map['base_revision'] = Variable<int>(baseRevision);
+    }
+    if (!nullToAbsent || authorId != null) {
+      map['author_id'] = Variable<String>(authorId);
     }
     return map;
   }
@@ -947,6 +1084,9 @@ class Note extends DataClass implements Insertable<Note> {
       baseRevision: baseRevision == null && nullToAbsent
           ? const Value.absent()
           : Value(baseRevision),
+      authorId: authorId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authorId),
     );
   }
 
@@ -967,6 +1107,7 @@ class Note extends DataClass implements Insertable<Note> {
       pendingSync: serializer.fromJson<bool>(json['pendingSync']),
       ownerKey: serializer.fromJson<String?>(json['ownerKey']),
       baseRevision: serializer.fromJson<int?>(json['baseRevision']),
+      authorId: serializer.fromJson<String?>(json['authorId']),
     );
   }
   @override
@@ -984,6 +1125,7 @@ class Note extends DataClass implements Insertable<Note> {
       'pendingSync': serializer.toJson<bool>(pendingSync),
       'ownerKey': serializer.toJson<String?>(ownerKey),
       'baseRevision': serializer.toJson<int?>(baseRevision),
+      'authorId': serializer.toJson<String?>(authorId),
     };
   }
 
@@ -999,6 +1141,7 @@ class Note extends DataClass implements Insertable<Note> {
     bool? pendingSync,
     Value<String?> ownerKey = const Value.absent(),
     Value<int?> baseRevision = const Value.absent(),
+    Value<String?> authorId = const Value.absent(),
   }) => Note(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -1011,6 +1154,7 @@ class Note extends DataClass implements Insertable<Note> {
     pendingSync: pendingSync ?? this.pendingSync,
     ownerKey: ownerKey.present ? ownerKey.value : this.ownerKey,
     baseRevision: baseRevision.present ? baseRevision.value : this.baseRevision,
+    authorId: authorId.present ? authorId.value : this.authorId,
   );
   Note copyWithCompanion(NotesCompanion data) {
     return Note(
@@ -1029,6 +1173,7 @@ class Note extends DataClass implements Insertable<Note> {
       baseRevision: data.baseRevision.present
           ? data.baseRevision.value
           : this.baseRevision,
+      authorId: data.authorId.present ? data.authorId.value : this.authorId,
     );
   }
 
@@ -1045,7 +1190,8 @@ class Note extends DataClass implements Insertable<Note> {
           ..write('isDeleted: $isDeleted, ')
           ..write('pendingSync: $pendingSync, ')
           ..write('ownerKey: $ownerKey, ')
-          ..write('baseRevision: $baseRevision')
+          ..write('baseRevision: $baseRevision, ')
+          ..write('authorId: $authorId')
           ..write(')'))
         .toString();
   }
@@ -1063,6 +1209,7 @@ class Note extends DataClass implements Insertable<Note> {
     pendingSync,
     ownerKey,
     baseRevision,
+    authorId,
   );
   @override
   bool operator ==(Object other) =>
@@ -1078,7 +1225,8 @@ class Note extends DataClass implements Insertable<Note> {
           other.isDeleted == this.isDeleted &&
           other.pendingSync == this.pendingSync &&
           other.ownerKey == this.ownerKey &&
-          other.baseRevision == this.baseRevision);
+          other.baseRevision == this.baseRevision &&
+          other.authorId == this.authorId);
 }
 
 class NotesCompanion extends UpdateCompanion<Note> {
@@ -1093,6 +1241,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
   final Value<bool> pendingSync;
   final Value<String?> ownerKey;
   final Value<int?> baseRevision;
+  final Value<String?> authorId;
   final Value<int> rowid;
   const NotesCompanion({
     this.id = const Value.absent(),
@@ -1106,6 +1255,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.pendingSync = const Value.absent(),
     this.ownerKey = const Value.absent(),
     this.baseRevision = const Value.absent(),
+    this.authorId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NotesCompanion.insert({
@@ -1120,6 +1270,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     this.pendingSync = const Value.absent(),
     this.ownerKey = const Value.absent(),
     this.baseRevision = const Value.absent(),
+    this.authorId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -1137,6 +1288,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Expression<bool>? pendingSync,
     Expression<String>? ownerKey,
     Expression<int>? baseRevision,
+    Expression<String>? authorId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1151,6 +1303,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
       if (pendingSync != null) 'pending_sync': pendingSync,
       if (ownerKey != null) 'owner_key': ownerKey,
       if (baseRevision != null) 'base_revision': baseRevision,
+      if (authorId != null) 'author_id': authorId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1167,6 +1320,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
     Value<bool>? pendingSync,
     Value<String?>? ownerKey,
     Value<int?>? baseRevision,
+    Value<String?>? authorId,
     Value<int>? rowid,
   }) {
     return NotesCompanion(
@@ -1181,6 +1335,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
       pendingSync: pendingSync ?? this.pendingSync,
       ownerKey: ownerKey ?? this.ownerKey,
       baseRevision: baseRevision ?? this.baseRevision,
+      authorId: authorId ?? this.authorId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1221,6 +1376,9 @@ class NotesCompanion extends UpdateCompanion<Note> {
     if (baseRevision.present) {
       map['base_revision'] = Variable<int>(baseRevision.value);
     }
+    if (authorId.present) {
+      map['author_id'] = Variable<String>(authorId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1241,6 +1399,7 @@ class NotesCompanion extends UpdateCompanion<Note> {
           ..write('pendingSync: $pendingSync, ')
           ..write('ownerKey: $ownerKey, ')
           ..write('baseRevision: $baseRevision, ')
+          ..write('authorId: $authorId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1363,6 +1522,17 @@ class $ImageMetadataTable extends ImageMetadata
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _authorIdMeta = const VerificationMeta(
+    'authorId',
+  );
+  @override
+  late final GeneratedColumn<String> authorId = GeneratedColumn<String>(
+    'author_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1375,6 +1545,7 @@ class $ImageMetadataTable extends ImageMetadata
     updatedAt,
     isDeleted,
     baseRevision,
+    authorId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1457,6 +1628,12 @@ class $ImageMetadataTable extends ImageMetadata
         ),
       );
     }
+    if (data.containsKey('author_id')) {
+      context.handle(
+        _authorIdMeta,
+        authorId.isAcceptableOrUnknown(data['author_id']!, _authorIdMeta),
+      );
+    }
     return context;
   }
 
@@ -1506,6 +1683,10 @@ class $ImageMetadataTable extends ImageMetadata
         DriftSqlType.int,
         data['${effectivePrefix}base_revision'],
       ),
+      authorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}author_id'],
+      ),
     );
   }
 
@@ -1531,6 +1712,11 @@ class ImageMetadataData extends DataClass
   /// row has never been to the server. Written by the sync layer, not by the
   /// repository.
   final int? baseRevision;
+
+  /// Who wrote this row. Distinct from [ownerKey], which says whose local
+  /// replica it is -- in a shared dig site those differ, and conflating them
+  /// is exactly what would let one account's rows render as another's.
+  final String? authorId;
   const ImageMetadataData({
     required this.id,
     required this.imagePath,
@@ -1542,6 +1728,7 @@ class ImageMetadataData extends DataClass
     this.updatedAt,
     required this.isDeleted,
     this.baseRevision,
+    this.authorId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1567,6 +1754,9 @@ class ImageMetadataData extends DataClass
     map['is_deleted'] = Variable<bool>(isDeleted);
     if (!nullToAbsent || baseRevision != null) {
       map['base_revision'] = Variable<int>(baseRevision);
+    }
+    if (!nullToAbsent || authorId != null) {
+      map['author_id'] = Variable<String>(authorId);
     }
     return map;
   }
@@ -1595,6 +1785,9 @@ class ImageMetadataData extends DataClass
       baseRevision: baseRevision == null && nullToAbsent
           ? const Value.absent()
           : Value(baseRevision),
+      authorId: authorId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authorId),
     );
   }
 
@@ -1614,6 +1807,7 @@ class ImageMetadataData extends DataClass
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       baseRevision: serializer.fromJson<int?>(json['baseRevision']),
+      authorId: serializer.fromJson<String?>(json['authorId']),
     );
   }
   @override
@@ -1630,6 +1824,7 @@ class ImageMetadataData extends DataClass
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'baseRevision': serializer.toJson<int?>(baseRevision),
+      'authorId': serializer.toJson<String?>(authorId),
     };
   }
 
@@ -1644,6 +1839,7 @@ class ImageMetadataData extends DataClass
     Value<DateTime?> updatedAt = const Value.absent(),
     bool? isDeleted,
     Value<int?> baseRevision = const Value.absent(),
+    Value<String?> authorId = const Value.absent(),
   }) => ImageMetadataData(
     id: id ?? this.id,
     imagePath: imagePath ?? this.imagePath,
@@ -1657,6 +1853,7 @@ class ImageMetadataData extends DataClass
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     isDeleted: isDeleted ?? this.isDeleted,
     baseRevision: baseRevision.present ? baseRevision.value : this.baseRevision,
+    authorId: authorId.present ? authorId.value : this.authorId,
   );
   ImageMetadataData copyWithCompanion(ImageMetadataCompanion data) {
     return ImageMetadataData(
@@ -1676,6 +1873,7 @@ class ImageMetadataData extends DataClass
       baseRevision: data.baseRevision.present
           ? data.baseRevision.value
           : this.baseRevision,
+      authorId: data.authorId.present ? data.authorId.value : this.authorId,
     );
   }
 
@@ -1691,7 +1889,8 @@ class ImageMetadataData extends DataClass
           ..write('noteId: $noteId, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
-          ..write('baseRevision: $baseRevision')
+          ..write('baseRevision: $baseRevision, ')
+          ..write('authorId: $authorId')
           ..write(')'))
         .toString();
   }
@@ -1708,6 +1907,7 @@ class ImageMetadataData extends DataClass
     updatedAt,
     isDeleted,
     baseRevision,
+    authorId,
   );
   @override
   bool operator ==(Object other) =>
@@ -1722,7 +1922,8 @@ class ImageMetadataData extends DataClass
           other.noteId == this.noteId &&
           other.updatedAt == this.updatedAt &&
           other.isDeleted == this.isDeleted &&
-          other.baseRevision == this.baseRevision);
+          other.baseRevision == this.baseRevision &&
+          other.authorId == this.authorId);
 }
 
 class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
@@ -1736,6 +1937,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
   final Value<DateTime?> updatedAt;
   final Value<bool> isDeleted;
   final Value<int?> baseRevision;
+  final Value<String?> authorId;
   final Value<int> rowid;
   const ImageMetadataCompanion({
     this.id = const Value.absent(),
@@ -1748,6 +1950,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.baseRevision = const Value.absent(),
+    this.authorId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ImageMetadataCompanion.insert({
@@ -1761,6 +1964,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.baseRevision = const Value.absent(),
+    this.authorId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        imagePath = Value(imagePath),
@@ -1776,6 +1980,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     Expression<DateTime>? updatedAt,
     Expression<bool>? isDeleted,
     Expression<int>? baseRevision,
+    Expression<String>? authorId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1789,6 +1994,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (baseRevision != null) 'base_revision': baseRevision,
+      if (authorId != null) 'author_id': authorId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1804,6 +2010,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     Value<DateTime?>? updatedAt,
     Value<bool>? isDeleted,
     Value<int?>? baseRevision,
+    Value<String?>? authorId,
     Value<int>? rowid,
   }) {
     return ImageMetadataCompanion(
@@ -1817,6 +2024,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
       baseRevision: baseRevision ?? this.baseRevision,
+      authorId: authorId ?? this.authorId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1854,6 +2062,9 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
     if (baseRevision.present) {
       map['base_revision'] = Variable<int>(baseRevision.value);
     }
+    if (authorId.present) {
+      map['author_id'] = Variable<String>(authorId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1873,6 +2084,7 @@ class ImageMetadataCompanion extends UpdateCompanion<ImageMetadataData> {
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('baseRevision: $baseRevision, ')
+          ..write('authorId: $authorId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1962,6 +2174,17 @@ class $ArtifactCommentsTable extends ArtifactComments
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _authorIdMeta = const VerificationMeta(
+    'authorId',
+  );
+  @override
+  late final GeneratedColumn<String> authorId = GeneratedColumn<String>(
+    'author_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1971,6 +2194,7 @@ class $ArtifactCommentsTable extends ArtifactComments
     updatedAt,
     isDeleted,
     baseRevision,
+    authorId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2034,6 +2258,12 @@ class $ArtifactCommentsTable extends ArtifactComments
         ),
       );
     }
+    if (data.containsKey('author_id')) {
+      context.handle(
+        _authorIdMeta,
+        authorId.isAcceptableOrUnknown(data['author_id']!, _authorIdMeta),
+      );
+    }
     return context;
   }
 
@@ -2071,6 +2301,10 @@ class $ArtifactCommentsTable extends ArtifactComments
         DriftSqlType.int,
         data['${effectivePrefix}base_revision'],
       ),
+      authorId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}author_id'],
+      ),
     );
   }
 
@@ -2092,6 +2326,11 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
   /// row has never been to the server. Written by the sync layer, not by the
   /// repository.
   final int? baseRevision;
+
+  /// Who wrote this row. Distinct from [ownerKey], which says whose local
+  /// replica it is -- in a shared dig site those differ, and conflating them
+  /// is exactly what would let one account's rows render as another's.
+  final String? authorId;
   const ArtifactComment({
     required this.id,
     required this.artifactId,
@@ -2100,6 +2339,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
     this.updatedAt,
     required this.isDeleted,
     this.baseRevision,
+    this.authorId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2114,6 +2354,9 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
     map['is_deleted'] = Variable<bool>(isDeleted);
     if (!nullToAbsent || baseRevision != null) {
       map['base_revision'] = Variable<int>(baseRevision);
+    }
+    if (!nullToAbsent || authorId != null) {
+      map['author_id'] = Variable<String>(authorId);
     }
     return map;
   }
@@ -2131,6 +2374,9 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
       baseRevision: baseRevision == null && nullToAbsent
           ? const Value.absent()
           : Value(baseRevision),
+      authorId: authorId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(authorId),
     );
   }
 
@@ -2147,6 +2393,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
       isDeleted: serializer.fromJson<bool>(json['isDeleted']),
       baseRevision: serializer.fromJson<int?>(json['baseRevision']),
+      authorId: serializer.fromJson<String?>(json['authorId']),
     );
   }
   @override
@@ -2160,6 +2407,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
       'isDeleted': serializer.toJson<bool>(isDeleted),
       'baseRevision': serializer.toJson<int?>(baseRevision),
+      'authorId': serializer.toJson<String?>(authorId),
     };
   }
 
@@ -2171,6 +2419,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
     Value<DateTime?> updatedAt = const Value.absent(),
     bool? isDeleted,
     Value<int?> baseRevision = const Value.absent(),
+    Value<String?> authorId = const Value.absent(),
   }) => ArtifactComment(
     id: id ?? this.id,
     artifactId: artifactId ?? this.artifactId,
@@ -2179,6 +2428,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
     isDeleted: isDeleted ?? this.isDeleted,
     baseRevision: baseRevision.present ? baseRevision.value : this.baseRevision,
+    authorId: authorId.present ? authorId.value : this.authorId,
   );
   ArtifactComment copyWithCompanion(ArtifactCommentsCompanion data) {
     return ArtifactComment(
@@ -2193,6 +2443,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
       baseRevision: data.baseRevision.present
           ? data.baseRevision.value
           : this.baseRevision,
+      authorId: data.authorId.present ? data.authorId.value : this.authorId,
     );
   }
 
@@ -2205,7 +2456,8 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
-          ..write('baseRevision: $baseRevision')
+          ..write('baseRevision: $baseRevision, ')
+          ..write('authorId: $authorId')
           ..write(')'))
         .toString();
   }
@@ -2219,6 +2471,7 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
     updatedAt,
     isDeleted,
     baseRevision,
+    authorId,
   );
   @override
   bool operator ==(Object other) =>
@@ -2230,7 +2483,8 @@ class ArtifactComment extends DataClass implements Insertable<ArtifactComment> {
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.isDeleted == this.isDeleted &&
-          other.baseRevision == this.baseRevision);
+          other.baseRevision == this.baseRevision &&
+          other.authorId == this.authorId);
 }
 
 class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
@@ -2241,6 +2495,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
   final Value<DateTime?> updatedAt;
   final Value<bool> isDeleted;
   final Value<int?> baseRevision;
+  final Value<String?> authorId;
   final Value<int> rowid;
   const ArtifactCommentsCompanion({
     this.id = const Value.absent(),
@@ -2250,6 +2505,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.baseRevision = const Value.absent(),
+    this.authorId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ArtifactCommentsCompanion.insert({
@@ -2260,6 +2516,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     this.updatedAt = const Value.absent(),
     this.isDeleted = const Value.absent(),
     this.baseRevision = const Value.absent(),
+    this.authorId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        artifactId = Value(artifactId),
@@ -2273,6 +2530,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     Expression<DateTime>? updatedAt,
     Expression<bool>? isDeleted,
     Expression<int>? baseRevision,
+    Expression<String>? authorId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2283,6 +2541,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
       if (updatedAt != null) 'updated_at': updatedAt,
       if (isDeleted != null) 'is_deleted': isDeleted,
       if (baseRevision != null) 'base_revision': baseRevision,
+      if (authorId != null) 'author_id': authorId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2295,6 +2554,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     Value<DateTime?>? updatedAt,
     Value<bool>? isDeleted,
     Value<int?>? baseRevision,
+    Value<String?>? authorId,
     Value<int>? rowid,
   }) {
     return ArtifactCommentsCompanion(
@@ -2305,6 +2565,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
       updatedAt: updatedAt ?? this.updatedAt,
       isDeleted: isDeleted ?? this.isDeleted,
       baseRevision: baseRevision ?? this.baseRevision,
+      authorId: authorId ?? this.authorId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2333,6 +2594,9 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
     if (baseRevision.present) {
       map['base_revision'] = Variable<int>(baseRevision.value);
     }
+    if (authorId.present) {
+      map['author_id'] = Variable<String>(authorId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2349,6 +2613,7 @@ class ArtifactCommentsCompanion extends UpdateCompanion<ArtifactComment> {
           ..write('updatedAt: $updatedAt, ')
           ..write('isDeleted: $isDeleted, ')
           ..write('baseRevision: $baseRevision, ')
+          ..write('authorId: $authorId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2387,6 +2652,8 @@ typedef $$FoldersTableCreateCompanionBuilder =
       Value<bool> pendingSync,
       Value<String?> ownerKey,
       Value<int?> baseRevision,
+      Value<String?> authorId,
+      Value<bool> isShared,
       Value<int> rowid,
     });
 typedef $$FoldersTableUpdateCompanionBuilder =
@@ -2400,6 +2667,8 @@ typedef $$FoldersTableUpdateCompanionBuilder =
       Value<bool> pendingSync,
       Value<String?> ownerKey,
       Value<int?> baseRevision,
+      Value<String?> authorId,
+      Value<bool> isShared,
       Value<int> rowid,
     });
 
@@ -2454,6 +2723,16 @@ class $$FoldersTableFilterComposer
 
   ColumnFilters<int> get baseRevision => $composableBuilder(
     column: $table.baseRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get authorId => $composableBuilder(
+    column: $table.authorId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isShared => $composableBuilder(
+    column: $table.isShared,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2511,6 +2790,16 @@ class $$FoldersTableOrderingComposer
     column: $table.baseRevision,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get authorId => $composableBuilder(
+    column: $table.authorId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isShared => $composableBuilder(
+    column: $table.isShared,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$FoldersTableAnnotationComposer
@@ -2552,6 +2841,12 @@ class $$FoldersTableAnnotationComposer
     column: $table.baseRevision,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get authorId =>
+      $composableBuilder(column: $table.authorId, builder: (column) => column);
+
+  GeneratedColumn<bool> get isShared =>
+      $composableBuilder(column: $table.isShared, builder: (column) => column);
 }
 
 class $$FoldersTableTableManager
@@ -2591,6 +2886,8 @@ class $$FoldersTableTableManager
                 Value<bool> pendingSync = const Value.absent(),
                 Value<String?> ownerKey = const Value.absent(),
                 Value<int?> baseRevision = const Value.absent(),
+                Value<String?> authorId = const Value.absent(),
+                Value<bool> isShared = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoldersCompanion(
                 id: id,
@@ -2602,6 +2899,8 @@ class $$FoldersTableTableManager
                 pendingSync: pendingSync,
                 ownerKey: ownerKey,
                 baseRevision: baseRevision,
+                authorId: authorId,
+                isShared: isShared,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2615,6 +2914,8 @@ class $$FoldersTableTableManager
                 Value<bool> pendingSync = const Value.absent(),
                 Value<String?> ownerKey = const Value.absent(),
                 Value<int?> baseRevision = const Value.absent(),
+                Value<String?> authorId = const Value.absent(),
+                Value<bool> isShared = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => FoldersCompanion.insert(
                 id: id,
@@ -2626,6 +2927,8 @@ class $$FoldersTableTableManager
                 pendingSync: pendingSync,
                 ownerKey: ownerKey,
                 baseRevision: baseRevision,
+                authorId: authorId,
+                isShared: isShared,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2663,6 +2966,7 @@ typedef $$NotesTableCreateCompanionBuilder =
       Value<bool> pendingSync,
       Value<String?> ownerKey,
       Value<int?> baseRevision,
+      Value<String?> authorId,
       Value<int> rowid,
     });
 typedef $$NotesTableUpdateCompanionBuilder =
@@ -2678,6 +2982,7 @@ typedef $$NotesTableUpdateCompanionBuilder =
       Value<bool> pendingSync,
       Value<String?> ownerKey,
       Value<int?> baseRevision,
+      Value<String?> authorId,
       Value<int> rowid,
     });
 
@@ -2741,6 +3046,11 @@ class $$NotesTableFilterComposer extends Composer<_$AppDatabase, $NotesTable> {
 
   ColumnFilters<int> get baseRevision => $composableBuilder(
     column: $table.baseRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get authorId => $composableBuilder(
+    column: $table.authorId,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -2808,6 +3118,11 @@ class $$NotesTableOrderingComposer
     column: $table.baseRevision,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get authorId => $composableBuilder(
+    column: $table.authorId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NotesTableAnnotationComposer
@@ -2855,6 +3170,9 @@ class $$NotesTableAnnotationComposer
     column: $table.baseRevision,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get authorId =>
+      $composableBuilder(column: $table.authorId, builder: (column) => column);
 }
 
 class $$NotesTableTableManager
@@ -2896,6 +3214,7 @@ class $$NotesTableTableManager
                 Value<bool> pendingSync = const Value.absent(),
                 Value<String?> ownerKey = const Value.absent(),
                 Value<int?> baseRevision = const Value.absent(),
+                Value<String?> authorId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion(
                 id: id,
@@ -2909,6 +3228,7 @@ class $$NotesTableTableManager
                 pendingSync: pendingSync,
                 ownerKey: ownerKey,
                 baseRevision: baseRevision,
+                authorId: authorId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -2924,6 +3244,7 @@ class $$NotesTableTableManager
                 Value<bool> pendingSync = const Value.absent(),
                 Value<String?> ownerKey = const Value.absent(),
                 Value<int?> baseRevision = const Value.absent(),
+                Value<String?> authorId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NotesCompanion.insert(
                 id: id,
@@ -2937,6 +3258,7 @@ class $$NotesTableTableManager
                 pendingSync: pendingSync,
                 ownerKey: ownerKey,
                 baseRevision: baseRevision,
+                authorId: authorId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -2973,6 +3295,7 @@ typedef $$ImageMetadataTableCreateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
       Value<int?> baseRevision,
+      Value<String?> authorId,
       Value<int> rowid,
     });
 typedef $$ImageMetadataTableUpdateCompanionBuilder =
@@ -2987,6 +3310,7 @@ typedef $$ImageMetadataTableUpdateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
       Value<int?> baseRevision,
+      Value<String?> authorId,
       Value<int> rowid,
     });
 
@@ -3046,6 +3370,11 @@ class $$ImageMetadataTableFilterComposer
 
   ColumnFilters<int> get baseRevision => $composableBuilder(
     column: $table.baseRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get authorId => $composableBuilder(
+    column: $table.authorId,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3108,6 +3437,11 @@ class $$ImageMetadataTableOrderingComposer
     column: $table.baseRevision,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get authorId => $composableBuilder(
+    column: $table.authorId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ImageMetadataTableAnnotationComposer
@@ -3154,6 +3488,9 @@ class $$ImageMetadataTableAnnotationComposer
     column: $table.baseRevision,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get authorId =>
+      $composableBuilder(column: $table.authorId, builder: (column) => column);
 }
 
 class $$ImageMetadataTableTableManager
@@ -3201,6 +3538,7 @@ class $$ImageMetadataTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int?> baseRevision = const Value.absent(),
+                Value<String?> authorId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ImageMetadataCompanion(
                 id: id,
@@ -3213,6 +3551,7 @@ class $$ImageMetadataTableTableManager
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
                 baseRevision: baseRevision,
+                authorId: authorId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3227,6 +3566,7 @@ class $$ImageMetadataTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int?> baseRevision = const Value.absent(),
+                Value<String?> authorId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ImageMetadataCompanion.insert(
                 id: id,
@@ -3239,6 +3579,7 @@ class $$ImageMetadataTableTableManager
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
                 baseRevision: baseRevision,
+                authorId: authorId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -3275,6 +3616,7 @@ typedef $$ArtifactCommentsTableCreateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
       Value<int?> baseRevision,
+      Value<String?> authorId,
       Value<int> rowid,
     });
 typedef $$ArtifactCommentsTableUpdateCompanionBuilder =
@@ -3286,6 +3628,7 @@ typedef $$ArtifactCommentsTableUpdateCompanionBuilder =
       Value<DateTime?> updatedAt,
       Value<bool> isDeleted,
       Value<int?> baseRevision,
+      Value<String?> authorId,
       Value<int> rowid,
     });
 
@@ -3330,6 +3673,11 @@ class $$ArtifactCommentsTableFilterComposer
 
   ColumnFilters<int> get baseRevision => $composableBuilder(
     column: $table.baseRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get authorId => $composableBuilder(
+    column: $table.authorId,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3377,6 +3725,11 @@ class $$ArtifactCommentsTableOrderingComposer
     column: $table.baseRevision,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get authorId => $composableBuilder(
+    column: $table.authorId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$ArtifactCommentsTableAnnotationComposer
@@ -3412,6 +3765,9 @@ class $$ArtifactCommentsTableAnnotationComposer
     column: $table.baseRevision,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get authorId =>
+      $composableBuilder(column: $table.authorId, builder: (column) => column);
 }
 
 class $$ArtifactCommentsTableTableManager
@@ -3458,6 +3814,7 @@ class $$ArtifactCommentsTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int?> baseRevision = const Value.absent(),
+                Value<String?> authorId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ArtifactCommentsCompanion(
                 id: id,
@@ -3467,6 +3824,7 @@ class $$ArtifactCommentsTableTableManager
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
                 baseRevision: baseRevision,
+                authorId: authorId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3478,6 +3836,7 @@ class $$ArtifactCommentsTableTableManager
                 Value<DateTime?> updatedAt = const Value.absent(),
                 Value<bool> isDeleted = const Value.absent(),
                 Value<int?> baseRevision = const Value.absent(),
+                Value<String?> authorId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ArtifactCommentsCompanion.insert(
                 id: id,
@@ -3487,6 +3846,7 @@ class $$ArtifactCommentsTableTableManager
                 updatedAt: updatedAt,
                 isDeleted: isDeleted,
                 baseRevision: baseRevision,
+                authorId: authorId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

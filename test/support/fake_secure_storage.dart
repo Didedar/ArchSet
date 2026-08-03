@@ -11,22 +11,22 @@ Map<String, String> installFakeSecureStorage() {
   final values = <String, String>{};
   TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
       .setMockMethodCallHandler(_channel, (call) async {
-    switch (call.method) {
-      case 'read':
-        return values[call.arguments['key']];
-      case 'write':
-        values[call.arguments['key'] as String] =
-            call.arguments['value'] as String;
-        return null;
-      case 'delete':
-        values.remove(call.arguments['key']);
-        return null;
-      case 'deleteAll':
-        values.clear();
-        return null;
-      default:
-        return null;
-    }
-  });
+        switch (call.method) {
+          case 'read':
+            return values[call.arguments['key']];
+          case 'write':
+            values[call.arguments['key'] as String] =
+                call.arguments['value'] as String;
+            return null;
+          case 'delete':
+            values.remove(call.arguments['key']);
+            return null;
+          case 'deleteAll':
+            values.clear();
+            return null;
+          default:
+            return null;
+        }
+      });
   return values;
 }

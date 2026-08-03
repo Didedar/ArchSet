@@ -9,15 +9,17 @@ void main() {
   setUp(installFakeSecureStorage);
 
   test('loadThemeMode defaults to system when nothing is stored', () async {
-    final repository =
-        SecureStorageThemeRepository(storage: const FlutterSecureStorage());
+    final repository = SecureStorageThemeRepository(
+      storage: const FlutterSecureStorage(),
+    );
 
     expect(await repository.loadThemeMode(), ThemeMode.system);
   });
 
   test('saveThemeMode persists a value loadThemeMode later returns', () async {
-    final repository =
-        SecureStorageThemeRepository(storage: const FlutterSecureStorage());
+    final repository = SecureStorageThemeRepository(
+      storage: const FlutterSecureStorage(),
+    );
 
     await repository.saveThemeMode(ThemeMode.dark);
 
@@ -25,8 +27,9 @@ void main() {
   });
 
   test('loadThemeMode reads light mode correctly', () async {
-    final repository =
-        SecureStorageThemeRepository(storage: const FlutterSecureStorage());
+    final repository = SecureStorageThemeRepository(
+      storage: const FlutterSecureStorage(),
+    );
 
     await repository.saveThemeMode(ThemeMode.light);
 

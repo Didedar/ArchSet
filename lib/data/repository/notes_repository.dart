@@ -63,6 +63,7 @@ class NotesRepository {
             pendingSync: const Value(true),
             isDeleted: const Value(false),
             ownerKey: Value(_owner.value),
+            authorId: Value(_owner.value),
           ),
           mode: InsertMode.insertOrReplace,
         );
@@ -84,6 +85,7 @@ class NotesRepository {
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
         ownerKey: Value(_owner.value),
+        authorId: Value(_owner.value),
       ),
     );
   }
@@ -131,6 +133,7 @@ class NotesRepository {
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
         ownerKey: Value(_owner.value),
+        authorId: Value(_owner.value),
       ),
     );
   }
@@ -181,6 +184,7 @@ class NotesRepository {
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
         ownerKey: Value(_owner.value),
+        authorId: Value(_owner.value),
       ),
     );
   }
@@ -248,6 +252,7 @@ class NotesRepository {
             pendingSync: const Value(true),
             isDeleted: const Value(false),
             ownerKey: Value(_owner.value),
+            authorId: Value(_owner.value),
           ),
         );
   }
@@ -263,6 +268,7 @@ class NotesRepository {
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
         ownerKey: Value(_owner.value),
+        authorId: Value(_owner.value),
       ),
     );
   }
@@ -278,6 +284,7 @@ class NotesRepository {
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
         ownerKey: Value(_owner.value),
+        authorId: Value(_owner.value),
       ),
     );
 
@@ -290,6 +297,7 @@ class NotesRepository {
         updatedAt: Value(DateTime.now()),
         pendingSync: const Value(true),
         ownerKey: Value(_owner.value),
+        authorId: Value(_owner.value),
       ),
     );
   }
@@ -348,7 +356,7 @@ class NotesRepository {
       throw StateError('cannot fork a note that does not exist: $id');
     }
 
-    final two = (int n) => n.toString().padLeft(2, '0');
+    String two(int n) => n.toString().padLeft(2, '0');
     final label = '${two(at.hour)}:${two(at.minute)}';
     final forkId = const Uuid().v4();
 
@@ -366,6 +374,7 @@ class NotesRepository {
             pendingSync: const Value(true),
             isDeleted: const Value(false),
             ownerKey: Value(_owner.value),
+            authorId: Value(_owner.value),
             baseRevision: const Value(null),
           ),
         );

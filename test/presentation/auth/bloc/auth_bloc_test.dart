@@ -18,8 +18,8 @@ void main() {
   group('AuthCheckRequested', () {
     blocTest<AuthBloc, AuthState>(
       'emits Authenticated when a stored user exists',
-      setUp: () => when(() => repository.loadStoredUser())
-          .thenAnswer((_) async => user),
+      setUp: () =>
+          when(() => repository.loadStoredUser()).thenAnswer((_) async => user),
       build: () => AuthBloc(repository: repository),
       act: (bloc) => bloc.add(const AuthCheckRequested()),
       expect: () => [const AuthLoading(), AuthAuthenticated(user)],
@@ -27,8 +27,8 @@ void main() {
 
     blocTest<AuthBloc, AuthState>(
       'emits Unauthenticated when no stored user exists',
-      setUp: () => when(() => repository.loadStoredUser())
-          .thenAnswer((_) async => null),
+      setUp: () =>
+          when(() => repository.loadStoredUser()).thenAnswer((_) async => null),
       build: () => AuthBloc(repository: repository),
       act: (bloc) => bloc.add(const AuthCheckRequested()),
       expect: () => [const AuthLoading(), const AuthUnauthenticated()],
@@ -36,8 +36,9 @@ void main() {
 
     blocTest<AuthBloc, AuthState>(
       'emits Unauthenticated (not stuck) when loadStoredUser throws',
-      setUp: () => when(() => repository.loadStoredUser())
-          .thenThrow(Exception('network error')),
+      setUp: () => when(
+        () => repository.loadStoredUser(),
+      ).thenThrow(Exception('network error')),
       build: () => AuthBloc(repository: repository),
       act: (bloc) => bloc.add(const AuthCheckRequested()),
       expect: () => [const AuthLoading(), const AuthUnauthenticated()],
@@ -47,8 +48,9 @@ void main() {
   group('AuthLoginRequested', () {
     blocTest<AuthBloc, AuthState>(
       'emits Authenticated on successful login',
-      setUp: () => when(() => repository.login('a@b.com', 'pw'))
-          .thenAnswer((_) async => user),
+      setUp: () => when(
+        () => repository.login('a@b.com', 'pw'),
+      ).thenAnswer((_) async => user),
       build: () => AuthBloc(repository: repository),
       act: (bloc) => bloc.add(const AuthLoginRequested('a@b.com', 'pw')),
       expect: () => [const AuthLoading(), AuthAuthenticated(user)],
@@ -56,8 +58,9 @@ void main() {
 
     blocTest<AuthBloc, AuthState>(
       'emits Failure with the error message on failed login',
-      setUp: () => when(() => repository.login('a@b.com', 'wrong'))
-          .thenThrow(Exception('Invalid credentials')),
+      setUp: () => when(
+        () => repository.login('a@b.com', 'wrong'),
+      ).thenThrow(Exception('Invalid credentials')),
       build: () => AuthBloc(repository: repository),
       act: (bloc) => bloc.add(const AuthLoginRequested('a@b.com', 'wrong')),
       expect: () => [
@@ -68,12 +71,11 @@ void main() {
 
     blocTest<AuthBloc, AuthState>(
       'drops a second login while one is in flight',
-      setUp: () => when(() => repository.login(any(), any())).thenAnswer(
-        (_) async {
-          await Future<void>.delayed(const Duration(milliseconds: 20));
-          return user;
-        },
-      ),
+      setUp: () =>
+          when(() => repository.login(any(), any())).thenAnswer((_) async {
+            await Future<void>.delayed(const Duration(milliseconds: 20));
+            return user;
+          }),
       build: () => AuthBloc(repository: repository),
       act: (bloc) => bloc
         ..add(const AuthLoginRequested('a@b.com', 'pw'))
@@ -90,10 +92,12 @@ void main() {
     blocTest<AuthBloc, AuthState>(
       'registers then logs in to establish a session, emitting Authenticated',
       setUp: () {
-        when(() => repository.register('a@b.com', 'pw'))
-            .thenAnswer((_) async => user);
-        when(() => repository.login('a@b.com', 'pw'))
-            .thenAnswer((_) async => user);
+        when(
+          () => repository.register('a@b.com', 'pw'),
+        ).thenAnswer((_) async => user);
+        when(
+          () => repository.login('a@b.com', 'pw'),
+        ).thenAnswer((_) async => user);
       },
       build: () => AuthBloc(repository: repository),
       act: (bloc) => bloc.add(const AuthRegisterRequested('a@b.com', 'pw')),

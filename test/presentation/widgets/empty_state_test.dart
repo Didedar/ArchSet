@@ -33,7 +33,10 @@ void main() {
   /// widget draws its text at partial alpha.
   Color composite(Color fg, Color bg) => Color.alphaBlend(fg, bg);
 
-  Future<List<Text>> pumpAndCollect(WidgetTester tester, ThemeData theme) async {
+  Future<List<Text>> pumpAndCollect(
+    WidgetTester tester,
+    ThemeData theme,
+  ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: theme,

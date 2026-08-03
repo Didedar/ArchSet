@@ -25,8 +25,8 @@ void main() {
   group('bootstrap', () {
     blocTest<SessionCubit, AppSession>(
       'emits SessionAuthenticated when a stored user exists',
-      setUp: () => when(() => repository.loadStoredUser())
-          .thenAnswer((_) async => user),
+      setUp: () =>
+          when(() => repository.loadStoredUser()).thenAnswer((_) async => user),
       build: () => SessionCubit(repository: repository),
       act: (cubit) => cubit.bootstrap(),
       expect: () => [SessionAuthenticated(user)],
@@ -34,8 +34,8 @@ void main() {
 
     blocTest<SessionCubit, AppSession>(
       'emits SessionGuest when no stored user exists',
-      setUp: () => when(() => repository.loadStoredUser())
-          .thenAnswer((_) async => null),
+      setUp: () =>
+          when(() => repository.loadStoredUser()).thenAnswer((_) async => null),
       build: () => SessionCubit(repository: repository),
       act: (cubit) => cubit.bootstrap(),
       expect: () => [const SessionGuest()],
@@ -44,8 +44,9 @@ void main() {
     blocTest<SessionCubit, AppSession>(
       'emits SessionGuest (not stuck, not Unauthenticated) when '
       'loadStoredUser throws',
-      setUp: () => when(() => repository.loadStoredUser())
-          .thenThrow(Exception('network error')),
+      setUp: () => when(
+        () => repository.loadStoredUser(),
+      ).thenThrow(Exception('network error')),
       build: () => SessionCubit(repository: repository),
       act: (cubit) => cubit.bootstrap(),
       expect: () => [const SessionGuest()],
@@ -163,8 +164,8 @@ void main() {
 
     blocTest<SessionCubit, AppSession>(
       'becomes user.id when bootstrap resolves an authenticated session',
-      setUp: () => when(() => repository.loadStoredUser())
-          .thenAnswer((_) async => user),
+      setUp: () =>
+          when(() => repository.loadStoredUser()).thenAnswer((_) async => user),
       build: () => SessionCubit(repository: repository, ownerHolder: holder),
       act: (cubit) => cubit.bootstrap(),
       verify: (_) => expect(holder.value, user.id),
@@ -172,8 +173,8 @@ void main() {
 
     blocTest<SessionCubit, AppSession>(
       'stays null when bootstrap resolves a guest session',
-      setUp: () => when(() => repository.loadStoredUser())
-          .thenAnswer((_) async => null),
+      setUp: () =>
+          when(() => repository.loadStoredUser()).thenAnswer((_) async => null),
       build: () => SessionCubit(repository: repository, ownerHolder: holder),
       act: (cubit) => cubit.bootstrap(),
       verify: (_) => expect(holder.value, isNull),

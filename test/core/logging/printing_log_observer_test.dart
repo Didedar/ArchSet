@@ -9,8 +9,9 @@ void main() {
     final printed = <String>[];
 
     runZoned(
-      () => const PrintingLogObserver()
-          .onLog(const LogRecord(LogLevel.info, 'booted')),
+      () => const PrintingLogObserver().onLog(
+        const LogRecord(LogLevel.info, 'booted'),
+      ),
       zoneSpecification: ZoneSpecification(
         print: (self, parent, zone, line) => printed.add(line),
       ),

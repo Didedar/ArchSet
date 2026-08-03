@@ -10,13 +10,13 @@ import 'package:archset_r2/presentation/notes/bloc/notes_bloc.dart';
 class _MockNotesRepository extends Mock implements NotesRepository {}
 
 Note _note(String id) => Note(
-      id: id,
-      title: 'Title $id',
-      content: 'Content $id',
-      date: DateTime(2026, 1, 1),
-      isDeleted: false,
-      pendingSync: false,
-    );
+  id: id,
+  title: 'Title $id',
+  content: 'Content $id',
+  date: DateTime(2026, 1, 1),
+  isDeleted: false,
+  pendingSync: false,
+);
 
 void main() {
   late _MockNotesRepository repository;
@@ -27,10 +27,12 @@ void main() {
     repository = _MockNotesRepository();
     allNotesController = StreamController<List<Note>>.broadcast();
     folderNotesController = StreamController<List<Note>>.broadcast();
-    when(() => repository.watchAllNotes())
-        .thenAnswer((_) => allNotesController.stream);
-    when(() => repository.watchNotesInFolder('folder-1'))
-        .thenAnswer((_) => folderNotesController.stream);
+    when(
+      () => repository.watchAllNotes(),
+    ).thenAnswer((_) => allNotesController.stream);
+    when(
+      () => repository.watchNotesInFolder('folder-1'),
+    ).thenAnswer((_) => folderNotesController.stream);
   });
 
   tearDown(() {
@@ -90,8 +92,8 @@ void main() {
 
   blocTest<NotesBloc, NotesState>(
     'NotesDeleteRequested calls repository.deleteNote',
-    setUp: () => when(() => repository.deleteNote('1'))
-        .thenAnswer((_) async {}),
+    setUp: () =>
+        when(() => repository.deleteNote('1')).thenAnswer((_) async {}),
     build: () => NotesBloc(repository: repository),
     act: (bloc) => bloc.add(const NotesDeleteRequested('1')),
     verify: (_) {
@@ -101,11 +103,11 @@ void main() {
 
   blocTest<NotesBloc, NotesState>(
     'NotesMoveToFolderRequested calls repository.moveNoteToFolder',
-    setUp: () => when(() => repository.moveNoteToFolder('1', 'folder-2'))
-        .thenAnswer((_) async {}),
+    setUp: () => when(
+      () => repository.moveNoteToFolder('1', 'folder-2'),
+    ).thenAnswer((_) async {}),
     build: () => NotesBloc(repository: repository),
-    act: (bloc) =>
-        bloc.add(const NotesMoveToFolderRequested('1', 'folder-2')),
+    act: (bloc) => bloc.add(const NotesMoveToFolderRequested('1', 'folder-2')),
     verify: (_) {
       verify(() => repository.moveNoteToFolder('1', 'folder-2')).called(1);
     },

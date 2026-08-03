@@ -4,17 +4,22 @@ import 'package:archset_r2/core/theme/app_theme.dart';
 import 'package:archset_r2/core/theme/ui_theme.dart';
 
 void main() {
-  Future<ThemeData> pumpAndReadTheme(WidgetTester tester, ThemeData theme) async {
+  Future<ThemeData> pumpAndReadTheme(
+    WidgetTester tester,
+    ThemeData theme,
+  ) async {
     late ThemeData resolved;
-    await tester.pumpWidget(MaterialApp(
-      theme: theme,
-      home: Builder(
-        builder: (context) {
-          resolved = Theme.of(context);
-          return const SizedBox();
-        },
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Builder(
+          builder: (context) {
+            resolved = Theme.of(context);
+            return const SizedBox();
+          },
+        ),
       ),
-    ));
+    );
     return resolved;
   }
 
@@ -38,8 +43,9 @@ void main() {
       expect(theme.appBarTheme.titleTextStyle?.fontWeight, FontWeight.w600);
     });
 
-    testWidgets('registers a UiTheme extension matching the light palette',
-        (tester) async {
+    testWidgets('registers a UiTheme extension matching the light palette', (
+      tester,
+    ) async {
       final theme = await pumpAndReadTheme(tester, AppTheme.lightTheme);
 
       final uiTheme = theme.extension<UiTheme>();
@@ -61,8 +67,9 @@ void main() {
       expect(theme.dialogTheme.backgroundColor, const Color(0xFF2C2C2E));
     });
 
-    testWidgets('registers a UiTheme extension matching the dark palette',
-        (tester) async {
+    testWidgets('registers a UiTheme extension matching the dark palette', (
+      tester,
+    ) async {
       final theme = await pumpAndReadTheme(tester, AppTheme.darkTheme);
 
       final uiTheme = theme.extension<UiTheme>();

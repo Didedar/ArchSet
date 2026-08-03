@@ -43,18 +43,24 @@ void main() {
     playerStateController = StreamController<PlayerState>.broadcast();
     currentIndexController = StreamController<int?>.broadcast();
 
-    when(() => audioService.recordingDurationStream)
-        .thenAnswer((_) => recordingDurationController.stream);
-    when(() => audioService.playbackPositionStream)
-        .thenAnswer((_) => playbackPositionController.stream);
-    when(() => audioService.playbackDurationStream)
-        .thenAnswer((_) => playbackDurationController.stream);
-    when(() => audioService.amplitudeStream)
-        .thenAnswer((_) => amplitudeController.stream);
-    when(() => audioService.playerStateStream)
-        .thenAnswer((_) => playerStateController.stream);
-    when(() => audioService.currentIndexStream)
-        .thenAnswer((_) => currentIndexController.stream);
+    when(
+      () => audioService.recordingDurationStream,
+    ).thenAnswer((_) => recordingDurationController.stream);
+    when(
+      () => audioService.playbackPositionStream,
+    ).thenAnswer((_) => playbackPositionController.stream);
+    when(
+      () => audioService.playbackDurationStream,
+    ).thenAnswer((_) => playbackDurationController.stream);
+    when(
+      () => audioService.amplitudeStream,
+    ).thenAnswer((_) => amplitudeController.stream);
+    when(
+      () => audioService.playerStateStream,
+    ).thenAnswer((_) => playerStateController.stream);
+    when(
+      () => audioService.currentIndexStream,
+    ).thenAnswer((_) => currentIndexController.stream);
     when(() => audioService.amplitudes).thenReturn(const []);
   });
 
@@ -68,16 +74,17 @@ void main() {
   });
 
   AudioBloc buildBloc() => AudioBloc(
-        audioService: audioService,
-        geminiService: geminiService,
-        whisperService: whisperService,
-      );
+    audioService: audioService,
+    geminiService: geminiService,
+    whisperService: whisperService,
+  );
 
   group('recording', () {
     blocTest<AudioBloc, AudioState>(
       'start: emits recording state on success',
-      setUp: () =>
-          when(() => audioService.startRecording()).thenAnswer((_) async => true),
+      setUp: () => when(
+        () => audioService.startRecording(),
+      ).thenAnswer((_) async => true),
       build: buildBloc,
       act: (bloc) => bloc.add(
         const AudioRecordingToggleRequested(
@@ -96,8 +103,9 @@ void main() {
 
     blocTest<AudioBloc, AudioState>(
       'start: emits an error message on failure',
-      setUp: () => when(() => audioService.startRecording())
-          .thenAnswer((_) async => false),
+      setUp: () => when(
+        () => audioService.startRecording(),
+      ).thenAnswer((_) async => false),
       build: buildBloc,
       act: (bloc) => bloc.add(
         const AudioRecordingToggleRequested(
@@ -105,24 +113,22 @@ void main() {
           languageCode: 'en',
         ),
       ),
-      expect: () => [
-        predicate<AudioState>((s) => s.errorMessage != null),
-      ],
+      expect: () => [predicate<AudioState>((s) => s.errorMessage != null)],
     );
 
     blocTest<AudioBloc, AudioState>(
       'stop: creates a segment, saves it, and transcribes via gemini',
       setUp: () {
-        when(() => audioService.stopRecording())
-            .thenAnswer((_) async => '/tmp/rec1.m4a');
-        when(() => audioService.loadPlaylist(any()))
-            .thenAnswer((_) async {});
-        when(() => geminiService.transcribeAudio(any()))
-            .thenAnswer((_) async => 'hello world');
+        when(
+          () => audioService.stopRecording(),
+        ).thenAnswer((_) async => '/tmp/rec1.m4a');
+        when(() => audioService.loadPlaylist(any())).thenAnswer((_) async {});
+        when(
+          () => geminiService.transcribeAudio(any()),
+        ).thenAnswer((_) async => 'hello world');
       },
       build: () {
-        when(() => audioService.startRecording())
-            .thenAnswer((_) async => true);
+        when(() => audioService.startRecording()).thenAnswer((_) async => true);
         return buildBloc();
       },
       act: (bloc) async {
@@ -148,22 +154,31 @@ void main() {
         expect(bloc.state.isTranscribing, isFalse);
         expect(bloc.state.lastTranscription, 'hello world');
         verify(() => geminiService.transcribeAudio('/tmp/rec1.m4a')).called(1);
-        verifyNever(() => whisperService.transcribe(any(), language: any(named: 'language')));
+        verifyNever(
+          () => whisperService.transcribe(
+            any(),
+            language: any(named: 'language'),
+          ),
+        );
       },
     );
 
     blocTest<AudioBloc, AudioState>(
       'stop: transcribes via whisper with the given language when engine is whisper',
       setUp: () {
-        when(() => audioService.stopRecording())
-            .thenAnswer((_) async => '/tmp/rec1.m4a');
+        when(
+          () => audioService.stopRecording(),
+        ).thenAnswer((_) async => '/tmp/rec1.m4a');
         when(() => audioService.loadPlaylist(any())).thenAnswer((_) async {});
-        when(() => whisperService.transcribe(any(), language: any(named: 'language')))
-            .thenAnswer((_) async => 'bonjour');
+        when(
+          () => whisperService.transcribe(
+            any(),
+            language: any(named: 'language'),
+          ),
+        ).thenAnswer((_) async => 'bonjour');
       },
       build: () {
-        when(() => audioService.startRecording())
-            .thenAnswer((_) async => true);
+        when(() => audioService.startRecording()).thenAnswer((_) async => true);
         return buildBloc();
       },
       act: (bloc) async {
@@ -184,18 +199,19 @@ void main() {
       wait: const Duration(milliseconds: 50),
       verify: (bloc) {
         expect(bloc.state.lastTranscription, 'bonjour');
-        verify(() => whisperService.transcribe('/tmp/rec1.m4a', language: 'fr'))
-            .called(1);
+        verify(
+          () => whisperService.transcribe('/tmp/rec1.m4a', language: 'fr'),
+        ).called(1);
       },
     );
 
     blocTest<AudioBloc, AudioState>(
       'stop: emits an error when the service returns no path',
-      setUp: () => when(() => audioService.stopRecording())
-          .thenAnswer((_) async => null),
+      setUp: () => when(
+        () => audioService.stopRecording(),
+      ).thenAnswer((_) async => null),
       build: () {
-        when(() => audioService.startRecording())
-            .thenAnswer((_) async => true);
+        when(() => audioService.startRecording()).thenAnswer((_) async => true);
         return buildBloc();
       },
       act: (bloc) async {
@@ -225,7 +241,8 @@ void main() {
     blocTest<AudioBloc, AudioState>(
       'AudioPlayRequested plays when a path is loaded',
       seed: () => const AudioState(audioPath: '/tmp/a.m4a'),
-      setUp: () => when(() => audioService.playAudio()).thenAnswer((_) async {}),
+      setUp: () =>
+          when(() => audioService.playAudio()).thenAnswer((_) async {}),
       build: buildBloc,
       act: (bloc) => bloc.add(const AudioPlayRequested()),
       expect: () => [
@@ -251,7 +268,8 @@ void main() {
         audioPath: '/tmp/a.m4a',
         playbackState: AudioPlaybackState.playing,
       ),
-      setUp: () => when(() => audioService.pauseAudio()).thenAnswer((_) async {}),
+      setUp: () =>
+          when(() => audioService.pauseAudio()).thenAnswer((_) async {}),
       build: buildBloc,
       act: (bloc) => bloc.add(const AudioPlayPauseToggled()),
       expect: () => [
@@ -268,7 +286,8 @@ void main() {
         audioPath: '/tmp/a.m4a',
         playbackState: AudioPlaybackState.paused,
       ),
-      setUp: () => when(() => audioService.playAudio()).thenAnswer((_) async {}),
+      setUp: () =>
+          when(() => audioService.playAudio()).thenAnswer((_) async {}),
       build: buildBloc,
       act: (bloc) => bloc.add(const AudioPlayPauseToggled()),
       expect: () => [
@@ -281,19 +300,20 @@ void main() {
 
     blocTest<AudioBloc, AudioState>(
       'AudioSeekRequested seeks the service and updates position',
-      setUp: () => when(() => audioService.seekTo(any())).thenAnswer((_) async {}),
+      setUp: () =>
+          when(() => audioService.seekTo(any())).thenAnswer((_) async {}),
       build: buildBloc,
       act: (bloc) => bloc.add(const AudioSeekRequested(Duration(seconds: 5))),
-      expect: () => [
-        const AudioState(playbackPosition: Duration(seconds: 5)),
-      ],
-      verify: (_) =>
-          verify(() => audioService.seekTo(const Duration(seconds: 5))).called(1),
+      expect: () => [const AudioState(playbackPosition: Duration(seconds: 5))],
+      verify: (_) => verify(
+        () => audioService.seekTo(const Duration(seconds: 5)),
+      ).called(1),
     );
 
     blocTest<AudioBloc, AudioState>(
       'AudioSpeedCycleRequested cycles 1.0 -> 1.5',
-      setUp: () => when(() => audioService.setSpeed(any())).thenAnswer((_) async {}),
+      setUp: () =>
+          when(() => audioService.setSpeed(any())).thenAnswer((_) async {}),
       build: buildBloc,
       act: (bloc) => bloc.add(const AudioSpeedCycleRequested()),
       expect: () => [const AudioState(playbackSpeed: 1.5)],
@@ -421,7 +441,8 @@ void main() {
         audioPath: '/tmp/s0.m4a',
         recordingState: AudioRecordingState.recorded,
       ),
-      setUp: () => when(() => audioService.stopAudio()).thenAnswer((_) async {}),
+      setUp: () =>
+          when(() => audioService.stopAudio()).thenAnswer((_) async {}),
       build: buildBloc,
       act: (bloc) => bloc.add(const AudioSegmentDeleted(0)),
       expect: () => [
@@ -437,10 +458,7 @@ void main() {
   group('misc', () {
     blocTest<AudioBloc, AudioState>(
       'AudioLastTranscriptionCleared clears lastTranscription only',
-      seed: () => const AudioState(
-        lastTranscription: 'hi',
-        playbackSpeed: 2.0,
-      ),
+      seed: () => const AudioState(lastTranscription: 'hi', playbackSpeed: 2.0),
       build: buildBloc,
       act: (bloc) => bloc.add(const AudioLastTranscriptionCleared()),
       expect: () => [const AudioState(playbackSpeed: 2.0)],
@@ -449,7 +467,8 @@ void main() {
     blocTest<AudioBloc, AudioState>(
       'AudioReset stops playback and restores initial state',
       seed: () => const AudioState(playbackSpeed: 2.0, audioPath: '/tmp/a.m4a'),
-      setUp: () => when(() => audioService.stopAudio()).thenAnswer((_) async {}),
+      setUp: () =>
+          when(() => audioService.stopAudio()).thenAnswer((_) async {}),
       build: buildBloc,
       act: (bloc) => bloc.add(const AudioReset()),
       expect: () => [const AudioState()],
@@ -466,8 +485,9 @@ void main() {
       'AudioInitRequested with a plain file loads it directly',
       setUp: () {
         when(() => audioService.loadAudio(any())).thenAnswer((_) async {});
-        when(() => audioService.totalDuration)
-            .thenReturn(const Duration(seconds: 42));
+        when(
+          () => audioService.totalDuration,
+        ).thenReturn(const Duration(seconds: 42));
       },
       build: buildBloc,
       act: (bloc) => bloc.add(const AudioInitRequested('/tmp/a.m4a')),
@@ -478,7 +498,8 @@ void main() {
           playbackTotalDuration: Duration(seconds: 42),
         ),
       ],
-      verify: (_) => verify(() => audioService.loadAudio('/tmp/a.m4a')).called(1),
+      verify: (_) =>
+          verify(() => audioService.loadAudio('/tmp/a.m4a')).called(1),
     );
   });
 
@@ -517,7 +538,9 @@ void main() {
         playerStateController.add(PlayerState(true, ProcessingState.ready));
         await Future<void>.delayed(Duration.zero);
       },
-      expect: () => [const AudioState(playbackState: AudioPlaybackState.playing)],
+      expect: () => [
+        const AudioState(playbackState: AudioPlaybackState.playing),
+      ],
     );
 
     blocTest<AudioBloc, AudioState>(
@@ -528,7 +551,9 @@ void main() {
         playerStateController.add(PlayerState(false, ProcessingState.ready));
         await Future<void>.delayed(Duration.zero);
       },
-      expect: () => [const AudioState(playbackState: AudioPlaybackState.paused)],
+      expect: () => [
+        const AudioState(playbackState: AudioPlaybackState.paused),
+      ],
     );
 
     blocTest<AudioBloc, AudioState>(

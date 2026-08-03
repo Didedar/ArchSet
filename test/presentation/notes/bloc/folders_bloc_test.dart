@@ -10,13 +10,14 @@ import 'package:archset_r2/presentation/notes/bloc/folders_bloc.dart';
 class _MockNotesRepository extends Mock implements NotesRepository {}
 
 Folder _folder(String id) => Folder(
-      id: id,
-      name: 'Folder $id',
-      color: '#E8B731',
-      createdAt: DateTime(2026, 1, 1),
-      isDeleted: false,
-      pendingSync: false,
-    );
+  id: id,
+  name: 'Folder $id',
+  color: '#E8B731',
+  createdAt: DateTime(2026, 1, 1),
+  isDeleted: false,
+  pendingSync: false,
+  isShared: false,
+);
 
 void main() {
   late _MockNotesRepository repository;
@@ -31,12 +32,15 @@ void main() {
     foldersController = StreamController<List<Folder>>.broadcast();
     countsController = StreamController<Map<String, int>>.broadcast();
     allNotesCountController = StreamController<int>.broadcast();
-    when(() => repository.watchAllFolders())
-        .thenAnswer((_) => foldersController.stream);
-    when(() => repository.watchFolderNoteCounts())
-        .thenAnswer((_) => countsController.stream);
-    when(() => repository.watchAllNotesCount())
-        .thenAnswer((_) => allNotesCountController.stream);
+    when(
+      () => repository.watchAllFolders(),
+    ).thenAnswer((_) => foldersController.stream);
+    when(
+      () => repository.watchFolderNoteCounts(),
+    ).thenAnswer((_) => countsController.stream);
+    when(
+      () => repository.watchAllNotesCount(),
+    ).thenAnswer((_) => allNotesCountController.stream);
   });
 
   tearDown(() {
@@ -71,8 +75,8 @@ void main() {
 
   blocTest<FoldersBloc, FoldersState>(
     'FoldersCreateRequested calls repository.createFolder',
-    setUp: () => when(() => repository.createFolder(any()))
-        .thenAnswer((_) async {}),
+    setUp: () =>
+        when(() => repository.createFolder(any())).thenAnswer((_) async {}),
     build: () => FoldersBloc(repository: repository),
     act: (bloc) => bloc.add(FoldersCreateRequested(_folder('new'))),
     verify: (_) {
@@ -82,8 +86,8 @@ void main() {
 
   blocTest<FoldersBloc, FoldersState>(
     'FoldersDeleteRequested calls repository.deleteFolder',
-    setUp: () => when(() => repository.deleteFolder('1'))
-        .thenAnswer((_) async {}),
+    setUp: () =>
+        when(() => repository.deleteFolder('1')).thenAnswer((_) async {}),
     build: () => FoldersBloc(repository: repository),
     act: (bloc) => bloc.add(const FoldersDeleteRequested('1')),
     verify: (_) {

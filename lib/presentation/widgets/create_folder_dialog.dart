@@ -71,6 +71,7 @@ class _CreateFolderDialogState extends State<CreateFolderDialog>
       createdAt: DateTime.now(),
       isDeleted: false,
       pendingSync: false,
+      isShared: false,
     );
 
     context.read<FoldersBloc>().add(FoldersCreateRequested(folder));

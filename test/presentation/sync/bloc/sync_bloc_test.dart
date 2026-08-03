@@ -49,10 +49,16 @@ void main() {
     act: (bloc) async {
       bloc.add(const SyncMonitoringStarted());
       await Future<void>.delayed(Duration.zero);
-      resultController.add(SyncResult(status: SyncStatus.success, notesUploaded: 2));
+      resultController.add(
+        SyncResult(status: SyncStatus.success, notesUploaded: 2),
+      );
     },
     expect: () => [
-      isA<SyncSuccess>().having((s) => s.result.notesUploaded, 'notesUploaded', 2),
+      isA<SyncSuccess>().having(
+        (s) => s.result.notesUploaded,
+        'notesUploaded',
+        2,
+      ),
     ],
   );
 
@@ -71,9 +77,9 @@ void main() {
 
   blocTest<SyncBloc, SyncState>(
     'SyncRequested calls sync() on the service',
-    setUp: () => when(() => service.sync()).thenAnswer(
-      (_) async => SyncResult(status: SyncStatus.success),
-    ),
+    setUp: () => when(
+      () => service.sync(),
+    ).thenAnswer((_) async => SyncResult(status: SyncStatus.success)),
     build: () => SyncBloc(service: service),
     act: (bloc) => bloc.add(const SyncRequested()),
     verify: (_) {

@@ -20,9 +20,7 @@ void main() {
     ).thenAnswer((_) async => true),
     build: () => TranscriptionBloc(whisperService: whisperService),
     act: (bloc) => bloc.add(const TranscriptionModelStatusChecked()),
-    expect: () => [
-      const TranscriptionState(isModelDownloaded: true),
-    ],
+    expect: () => [const TranscriptionState(isModelDownloaded: true)],
   );
 
   blocTest<TranscriptionBloc, TranscriptionState>(
@@ -39,9 +37,8 @@ void main() {
     'TranscriptionModelDownloadRequested reports progress then completes',
     setUp: () {
       when(
-        () => whisperService.downloadModel(
-          onProgress: any(named: 'onProgress'),
-        ),
+        () =>
+            whisperService.downloadModel(onProgress: any(named: 'onProgress')),
       ).thenAnswer((invocation) async {
         final onProgress =
             invocation.namedArguments[#onProgress] as void Function(double);
@@ -64,9 +61,7 @@ void main() {
   blocTest<TranscriptionBloc, TranscriptionState>(
     'TranscriptionModelDownloadRequested resets downloading flags on failure',
     setUp: () => when(
-      () => whisperService.downloadModel(
-        onProgress: any(named: 'onProgress'),
-      ),
+      () => whisperService.downloadModel(onProgress: any(named: 'onProgress')),
     ).thenThrow(Exception('network error')),
     build: () => TranscriptionBloc(whisperService: whisperService),
     act: (bloc) => bloc.add(const TranscriptionModelDownloadRequested()),
@@ -81,9 +76,8 @@ void main() {
     'a second download request is dropped while one is in flight',
     setUp: () {
       when(
-        () => whisperService.downloadModel(
-          onProgress: any(named: 'onProgress'),
-        ),
+        () =>
+            whisperService.downloadModel(onProgress: any(named: 'onProgress')),
       ).thenAnswer((_) async {
         await Future<void>.delayed(const Duration(milliseconds: 20));
       });
@@ -97,9 +91,8 @@ void main() {
     wait: const Duration(milliseconds: 50),
     verify: (_) {
       verify(
-        () => whisperService.downloadModel(
-          onProgress: any(named: 'onProgress'),
-        ),
+        () =>
+            whisperService.downloadModel(onProgress: any(named: 'onProgress')),
       ).called(1);
     },
   );

@@ -18,8 +18,9 @@ void main() {
 
   blocTest<ThemeBloc, ThemeState>(
     'emits the persisted mode on ThemeLoadRequested',
-    setUp: () =>
-        when(() => repository.loadThemeMode()).thenAnswer((_) async => ThemeMode.dark),
+    setUp: () => when(
+      () => repository.loadThemeMode(),
+    ).thenAnswer((_) async => ThemeMode.dark),
     build: () => ThemeBloc(repository: repository),
     act: (bloc) => bloc.add(const ThemeLoadRequested()),
     expect: () => [const ThemeState(ThemeMode.dark)],
@@ -27,8 +28,8 @@ void main() {
 
   blocTest<ThemeBloc, ThemeState>(
     'emits and persists the new mode on ThemeModeChanged',
-    setUp: () => when(() => repository.saveThemeMode(any()))
-        .thenAnswer((_) async {}),
+    setUp: () =>
+        when(() => repository.saveThemeMode(any())).thenAnswer((_) async {}),
     build: () => ThemeBloc(repository: repository),
     act: (bloc) => bloc.add(const ThemeModeChanged(true)),
     expect: () => [const ThemeState(ThemeMode.dark)],
@@ -39,8 +40,8 @@ void main() {
 
   blocTest<ThemeBloc, ThemeState>(
     'ThemeModeChanged(false) selects light mode',
-    setUp: () => when(() => repository.saveThemeMode(any()))
-        .thenAnswer((_) async {}),
+    setUp: () =>
+        when(() => repository.saveThemeMode(any())).thenAnswer((_) async {}),
     build: () => ThemeBloc(repository: repository),
     act: (bloc) => bloc.add(const ThemeModeChanged(false)),
     expect: () => [const ThemeState(ThemeMode.light)],

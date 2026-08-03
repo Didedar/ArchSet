@@ -121,68 +121,65 @@ void main() {
   );
 
   group('cross-account leak fix', () {
-    test(
-      "claiming for user-b never sweeps user-a's still-dirty note into the "
-      'push payload -- only the freshly claimed guest note syncs, under '
-      'user-b',
-      () async {
-        // user-a has a locally-dirty (unsynced) note left behind on this
-        // shared device -- e.g. they edited it offline, then signed out
-        // before it ever reached the server.
-        await database
-            .into(database.notes)
-            .insert(
-              NotesCompanion.insert(
-                id: 'user-a-note',
-                title: 'User A secret',
-                content: 'Content A',
-                date: DateTime(2026, 1, 1),
-                ownerKey: const Value('user-a'),
-                pendingSync: const Value(true),
-              ),
-            );
-        // A genuine unclaimed guest note created before user-b signed in.
-        await insertGuestNote('guest-uuid-xyz');
+    test("claiming for user-b never sweeps user-a's still-dirty note into the "
+        'push payload -- only the freshly claimed guest note syncs, under '
+        'user-b', () async {
+      // user-a has a locally-dirty (unsynced) note left behind on this
+      // shared device -- e.g. they edited it offline, then signed out
+      // before it ever reached the server.
+      await database
+          .into(database.notes)
+          .insert(
+            NotesCompanion.insert(
+              id: 'user-a-note',
+              title: 'User A secret',
+              content: 'Content A',
+              date: DateTime(2026, 1, 1),
+              ownerKey: const Value('user-a'),
+              pendingSync: const Value(true),
+            ),
+          );
+      // A genuine unclaimed guest note created before user-b signed in.
+      await insertGuestNote('guest-uuid-xyz');
 
-        // user-b signs in on this device.
-        storageValues['current_owner_id'] = 'user-b';
+      // user-b signs in on this device.
+      storageValues['current_owner_id'] = 'user-b';
 
-        late Map<String, dynamic> capturedPayload;
-        when(() => apiService.post('/sync', any())).thenAnswer((
-          invocation,
-        ) async {
-          capturedPayload =
-              invocation.positionalArguments[1] as Map<String, dynamic>;
-          return emptyPullResponse();
-        });
+      late Map<String, dynamic> capturedPayload;
+      when(() => apiService.post('/sync', any())).thenAnswer((
+        invocation,
+      ) async {
+        capturedPayload =
+            invocation.positionalArguments[1] as Map<String, dynamic>;
+        return emptyPullResponse();
+      });
 
-        await ClaimService(database).claimGuestData('user-b');
+      await ClaimService(database).claimGuestData('user-b');
 
-        final sync = SyncService(
-          apiService: apiService,
-          database: database,
-          connectivity: connectivity,
-        );
-        final result = await sync.sync();
+      final sync = SyncService(
+        apiService: apiService,
+        database: database,
+        connectivity: connectivity,
+      );
+      final result = await sync.sync();
 
-        expect(result.status, SyncStatus.success);
+      expect(result.status, SyncStatus.success);
 
-        final sentIds = (capturedPayload['notes'] as List)
-            .map((n) => (n as Map)['id'])
-            .toList();
-        expect(sentIds, isNot(contains('user-a-note')));
-        expect(sentIds, contains('guest-uuid-xyz'));
+      final sentIds = (capturedPayload['notes'] as List)
+          .map((n) => (n as Map)['id'])
+          .toList();
+      expect(sentIds, isNot(contains('user-a-note')));
+      expect(sentIds, contains('guest-uuid-xyz'));
 
-        final userANote = await (database.select(
-          database.notes,
-        )..where((t) => t.id.equals('user-a-note'))).getSingle();
-        expect(userANote.ownerKey, 'user-a');
+      final userANote = await (database.select(
+        database.notes,
+      )..where((t) => t.id.equals('user-a-note'))).getSingle();
+      expect(userANote.ownerKey, 'user-a');
 
-        final claimedGuestNote = await (database.select(
-          database.notes,
-        )..where((t) => t.id.equals('guest-uuid-xyz'))).getSingle();
-        expect(claimedGuestNote.ownerKey, 'user-b');
-      },
-    );
+      final claimedGuestNote = await (database.select(
+        database.notes,
+      )..where((t) => t.id.equals('guest-uuid-xyz'))).getSingle();
+      expect(claimedGuestNote.ownerKey, 'user-b');
+    });
   });
 }

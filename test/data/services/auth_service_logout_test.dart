@@ -33,70 +33,58 @@ void main() {
 
   tearDown(() => database.close());
 
-  test(
-    'logout clears the namespaced session and currentOwnerId but leaves the '
-    'local diary untouched',
-    () async {
-      final slug = AuthStorageKeys.originSlug(_baseUrl);
-      final client = MockClient((request) async => http.Response('', 204));
-      final service = AuthService(
-        database: database,
-        storage: const FlutterSecureStorage(),
-        baseUrl: _baseUrl,
-        client: client,
-      );
-      addTearDown(service.dispose);
+  test('logout clears the namespaced session and currentOwnerId but leaves the '
+      'local diary untouched', () async {
+    final slug = AuthStorageKeys.originSlug(_baseUrl);
+    final client = MockClient((request) async => http.Response('', 204));
+    final service = AuthService(
+      database: database,
+      storage: const FlutterSecureStorage(),
+      baseUrl: _baseUrl,
+      client: client,
+    );
+    addTearDown(service.dispose);
 
-      // Seed a local note...
-      await database
-          .into(database.notes)
-          .insert(
-            NotesCompanion.insert(
-              id: 'n1',
-              title: 'Trench A',
-              content: 'context 42',
-              date: DateTime(2026, 1, 1),
-            ),
-          );
+    // Seed a local note...
+    await database
+        .into(database.notes)
+        .insert(
+          NotesCompanion.insert(
+            id: 'n1',
+            title: 'Trench A',
+            content: 'context 42',
+            date: DateTime(2026, 1, 1),
+          ),
+        );
 
-      // ...and a live namespaced session.
-      storageValues[AuthStorageKeys.accessToken(slug)] = 'access-token';
-      storageValues[AuthStorageKeys.refreshToken(slug)] = 'refresh-token';
-      storageValues[AuthStorageKeys.userId(slug)] = 'user-1';
-      storageValues[AuthStorageKeys.userEmail(slug)] = 'a@example.com';
-      storageValues[AuthStorageKeys.userCreatedAt(slug)] =
-          '2026-01-01T00:00:00.000Z';
-      storageValues[AuthStorageKeys.currentOwnerId] = 'user-1';
+    // ...and a live namespaced session.
+    storageValues[AuthStorageKeys.accessToken(slug)] = 'access-token';
+    storageValues[AuthStorageKeys.refreshToken(slug)] = 'refresh-token';
+    storageValues[AuthStorageKeys.userId(slug)] = 'user-1';
+    storageValues[AuthStorageKeys.userEmail(slug)] = 'a@example.com';
+    storageValues[AuthStorageKeys.userCreatedAt(slug)] =
+        '2026-01-01T00:00:00.000Z';
+    storageValues[AuthStorageKeys.currentOwnerId] = 'user-1';
 
-      await service.logout();
+    await service.logout();
 
-      expect(
-        storageValues.containsKey(AuthStorageKeys.accessToken(slug)),
-        isFalse,
-      );
-      expect(
-        storageValues.containsKey(AuthStorageKeys.refreshToken(slug)),
-        isFalse,
-      );
-      expect(
-        storageValues.containsKey(AuthStorageKeys.userId(slug)),
-        isFalse,
-      );
-      expect(
-        storageValues.containsKey(AuthStorageKeys.userEmail(slug)),
-        isFalse,
-      );
-      expect(
-        storageValues.containsKey(AuthStorageKeys.userCreatedAt(slug)),
-        isFalse,
-      );
-      expect(
-        storageValues.containsKey(AuthStorageKeys.currentOwnerId),
-        isFalse,
-      );
+    expect(
+      storageValues.containsKey(AuthStorageKeys.accessToken(slug)),
+      isFalse,
+    );
+    expect(
+      storageValues.containsKey(AuthStorageKeys.refreshToken(slug)),
+      isFalse,
+    );
+    expect(storageValues.containsKey(AuthStorageKeys.userId(slug)), isFalse);
+    expect(storageValues.containsKey(AuthStorageKeys.userEmail(slug)), isFalse);
+    expect(
+      storageValues.containsKey(AuthStorageKeys.userCreatedAt(slug)),
+      isFalse,
+    );
+    expect(storageValues.containsKey(AuthStorageKeys.currentOwnerId), isFalse);
 
-      final notes = await database.select(database.notes).get();
-      expect(notes.map((n) => n.id), ['n1']);
-    },
-  );
+    final notes = await database.select(database.notes).get();
+    expect(notes.map((n) => n.id), ['n1']);
+  });
 }

@@ -9,15 +9,17 @@ void main() {
   setUp(installFakeSecureStorage);
 
   test('loadLocale defaults to English when nothing is stored', () async {
-    final repository =
-        SecureStorageLocaleRepository(storage: const FlutterSecureStorage());
+    final repository = SecureStorageLocaleRepository(
+      storage: const FlutterSecureStorage(),
+    );
 
     expect(await repository.loadLocale(), const Locale('en'));
   });
 
   test('saveLocale persists a value loadLocale later returns', () async {
-    final repository =
-        SecureStorageLocaleRepository(storage: const FlutterSecureStorage());
+    final repository = SecureStorageLocaleRepository(
+      storage: const FlutterSecureStorage(),
+    );
 
     await repository.saveLocale('ru');
 

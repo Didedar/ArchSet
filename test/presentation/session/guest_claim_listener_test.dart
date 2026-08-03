@@ -101,22 +101,19 @@ void main() {
     );
   }
 
-  testWidgets(
-    'claims guest data for the account and requests a sync when the '
-    'session transitions to SessionAuthenticated',
-    (tester) async {
-      await pumpListener(tester);
+  testWidgets('claims guest data for the account and requests a sync when the '
+      'session transitions to SessionAuthenticated', (tester) async {
+    await pumpListener(tester);
 
-      sessionController.add(SessionAuthenticated(user));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 20));
+    sessionController.add(SessionAuthenticated(user));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
 
-      final note = await readNote('offline-note');
-      expect(note.ownerKey, 'user-1');
-      expect(note.pendingSync, isTrue);
-      verify(() => syncService.sync()).called(1);
-    },
-  );
+    final note = await readNote('offline-note');
+    expect(note.ownerKey, 'user-1');
+    expect(note.pendingSync, isTrue);
+    verify(() => syncService.sync()).called(1);
+  });
 
   testWidgets(
     'a transition to SessionUnauthenticated is ignored: no claim, no sync '

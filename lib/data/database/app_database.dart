@@ -20,6 +20,16 @@ class Folders extends Table {
   /// repository.
   IntColumn get baseRevision => integer().nullable()();
 
+  /// Who wrote this row. Distinct from [ownerKey], which says whose local
+  /// replica it is -- in a shared dig site those differ, and conflating them
+  /// is exactly what would let one account's rows render as another's.
+  TextColumn get authorId => text().nullable()();
+
+  /// True when this folder has members beyond its owner. Display only: the
+  /// server stays the authority on who may actually read it, so a stale
+  /// `true` here shows a badge, never grants access.
+  BoolColumn get isShared => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -42,6 +52,11 @@ class Notes extends Table {
   /// row has never been to the server. Written by the sync layer, not by the
   /// repository.
   IntColumn get baseRevision => integer().nullable()();
+
+  /// Who wrote this row. Distinct from [ownerKey], which says whose local
+  /// replica it is -- in a shared dig site those differ, and conflating them
+  /// is exactly what would let one account's rows render as another's.
+  TextColumn get authorId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -70,6 +85,11 @@ class ImageMetadata extends Table {
   /// repository.
   IntColumn get baseRevision => integer().nullable()();
 
+  /// Who wrote this row. Distinct from [ownerKey], which says whose local
+  /// replica it is -- in a shared dig site those differ, and conflating them
+  /// is exactly what would let one account's rows render as another's.
+  TextColumn get authorId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -88,6 +108,11 @@ class ArtifactComments extends Table {
   /// repository.
   IntColumn get baseRevision => integer().nullable()();
 
+  /// Who wrote this row. Distinct from [ownerKey], which says whose local
+  /// replica it is -- in a shared dig site those differ, and conflating them
+  /// is exactly what would let one account's rows render as another's.
+  TextColumn get authorId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -104,7 +129,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   /// Indexes covering every filter/sort the repository actually issues.
   ///
@@ -220,6 +245,26 @@ class AppDatabase extends _$AppDatabase {
         }
         if (from >= 8) {
           await m.addColumn(artifactComments, artifactComments.baseRevision);
+        }
+      }
+      if (from < 11) {
+        // authorId records who wrote a row, kept distinct from ownerKey
+        // (whose replica it is). They are equal until a folder is shared,
+        // and only then does the difference carry information.
+        //
+        // Same createTable guards as v10, for the same reason: a table
+        // created earlier in this upgrade run already has the current
+        // schema, so adding the column again fails as a duplicate.
+        await m.addColumn(notes, notes.authorId);
+        if (from >= 2) {
+          await m.addColumn(folders, folders.authorId);
+          await m.addColumn(folders, folders.isShared);
+        }
+        if (from >= 6) {
+          await m.addColumn(imageMetadata, imageMetadata.authorId);
+        }
+        if (from >= 8) {
+          await m.addColumn(artifactComments, artifactComments.authorId);
         }
       }
     },

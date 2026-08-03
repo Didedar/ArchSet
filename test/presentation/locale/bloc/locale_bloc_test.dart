@@ -16,8 +16,9 @@ void main() {
 
   blocTest<LocaleBloc, LocaleState>(
     'emits the persisted locale on LocaleLoadRequested',
-    setUp: () => when(() => repository.loadLocale())
-        .thenAnswer((_) async => const Locale('ru')),
+    setUp: () => when(
+      () => repository.loadLocale(),
+    ).thenAnswer((_) async => const Locale('ru')),
     build: () => LocaleBloc(repository: repository),
     act: (bloc) => bloc.add(const LocaleLoadRequested()),
     expect: () => [const LocaleState(Locale('ru'))],

@@ -137,6 +137,7 @@ void main() {
               id: id,
               name: 'Folder $id',
               color: '#E8B731',
+              isShared: false,
               createdAt: DateTime(2026, 1, 1),
               updatedAt: updatedAt,
               isDeleted: false,

@@ -20,18 +20,22 @@ void main() {
     expect(light.lerp(dark, 1).colors, dark.colors);
   });
 
-  testWidgets('UiTheme.of falls back to light when no extension is registered',
-      (tester) async {
-    late BuildContext capturedContext;
-    await tester.pumpWidget(MaterialApp(
-      home: Builder(
-        builder: (context) {
-          capturedContext = context;
-          return const SizedBox();
-        },
-      ),
-    ));
+  testWidgets(
+    'UiTheme.of falls back to light when no extension is registered',
+    (tester) async {
+      late BuildContext capturedContext;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              capturedContext = context;
+              return const SizedBox();
+            },
+          ),
+        ),
+      );
 
-    expect(UiTheme.of(capturedContext).colors, const UiColors.light());
-  });
+      expect(UiTheme.of(capturedContext).colors, const UiColors.light());
+    },
+  );
 }

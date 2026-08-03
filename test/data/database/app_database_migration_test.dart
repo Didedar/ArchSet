@@ -156,7 +156,7 @@ void main() {
     return db;
   }
 
-  test('upgrades a v6 database to v10 and keeps existing photos', () async {
+  test('upgrades a v6 database to v11 and keeps existing photos', () async {
     final raw = buildV6Database();
     // A photo captured before the upgrade: has coordinates, no note link.
     raw.execute(
@@ -171,7 +171,7 @@ void main() {
     // Any query forces the migration to run.
     final rows = await database.select(database.imageMetadata).get();
 
-    expect(database.schemaVersion, 10);
+    expect(database.schemaVersion, 11);
     expect(rows.single.id, 'legacy');
     expect(rows.single.latitude, 12.5);
     // New columns take their defaults rather than dropping the row.
@@ -181,7 +181,7 @@ void main() {
   });
 
   test(
-    'upgrades a v8 database to v10, adding sync columns with safe defaults',
+    'upgrades a v8 database to v11, adding sync columns with safe defaults',
     () async {
       final raw = buildV8Database();
       raw.execute(
@@ -198,7 +198,7 @@ void main() {
       final notes = await database.select(database.notes).get();
       final folders = await database.select(database.folders).get();
 
-      expect(database.schemaVersion, 10);
+      expect(database.schemaVersion, 11);
       expect(notes.single.pendingSync, isFalse);
       expect(notes.single.ownerKey, isNull);
       expect(folders.single.pendingSync, isFalse);
@@ -206,7 +206,66 @@ void main() {
     },
   );
 
-  test('upgrades a v9 database to v10, adding baseRevision without losing '
+  /// The schema exactly as it shipped at version 10: v9 plus `base_revision`
+  /// on the four synced tables, and before authorship/sharing.
+  Database buildV10Database() {
+    final db = sqlite3.openInMemory();
+    db.execute('''
+      CREATE TABLE folders (
+        id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT '#E8B731',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        pending_sync INTEGER NOT NULL DEFAULT 0,
+        owner_key TEXT NULL,
+        base_revision INTEGER NULL,
+        PRIMARY KEY (id)
+      );
+      CREATE TABLE notes (
+        id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        date INTEGER NOT NULL,
+        audio_path TEXT NULL,
+        folder_id TEXT NULL,
+        updated_at INTEGER NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        pending_sync INTEGER NOT NULL DEFAULT 0,
+        owner_key TEXT NULL,
+        base_revision INTEGER NULL,
+        PRIMARY KEY (id)
+      );
+      CREATE TABLE image_metadata (
+        id TEXT NOT NULL,
+        image_path TEXT NOT NULL,
+        latitude REAL NULL,
+        longitude REAL NULL,
+        analysis_result TEXT NULL,
+        captured_at INTEGER NOT NULL,
+        note_id TEXT NULL,
+        updated_at INTEGER NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        base_revision INTEGER NULL,
+        PRIMARY KEY (id)
+      );
+      CREATE TABLE artifact_comments (
+        id TEXT NOT NULL,
+        artifact_id TEXT NOT NULL,
+        body TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NULL,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        base_revision INTEGER NULL,
+        PRIMARY KEY (id)
+      );
+    ''');
+    db.userVersion = 10;
+    return db;
+  }
+
+  test('upgrades a v9 database to v11, adding baseRevision without losing '
       'rows', () async {
     final raw = buildV9Database();
     raw.execute(
@@ -234,7 +293,7 @@ void main() {
     final artifacts = await database.select(database.imageMetadata).get();
     final comments = await database.select(database.artifactComments).get();
 
-    expect(database.schemaVersion, 10);
+    expect(database.schemaVersion, 11);
 
     // Null, not zero: a row that has never been to the server has no revision
     // to have been based on, and zero would look like a real one.
@@ -253,6 +312,44 @@ void main() {
     expect(artifacts.single.imagePath, '/photos/a.jpg');
     expect(comments.single.body, 'Керамика');
   });
+
+  test(
+    'upgrades a v10 database to v11, adding authorship and sharing',
+    () async {
+      final raw = buildV10Database();
+      raw.execute(
+        "INSERT INTO folders (id, name, color, created_at, is_deleted, "
+        "pending_sync, owner_key) "
+        "VALUES ('f-legacy','Раскоп 3','#E8B731',1767225600,0,1,'ivan')",
+      );
+      raw.execute(
+        "INSERT INTO notes (id, title, content, date, is_deleted, pending_sync, "
+        "owner_key) VALUES ('n-legacy','Слой 2','C',1767225600,0,1,'ivan')",
+      );
+      final database = AppDatabase.forTesting(NativeDatabase.opened(raw));
+      addTearDown(database.close);
+
+      final notes = await database.select(database.notes).get();
+      final folders = await database.select(database.folders).get();
+
+      expect(database.schemaVersion, 11);
+
+      // Null, not the owner: rows that predate authorship have no recorded
+      // author, and inventing one would claim knowledge the database never had.
+      expect(notes.single.authorId, isNull);
+      expect(folders.single.authorId, isNull);
+
+      // Nothing is shared until the server says so.
+      expect(folders.single.isShared, isFalse);
+
+      // Existing state must survive untouched -- especially the dirty flags a
+      // pending sync depends on.
+      expect(notes.single.title, 'Слой 2');
+      expect(notes.single.pendingSync, isTrue);
+      expect(notes.single.ownerKey, 'ivan');
+      expect(folders.single.name, 'Раскоп 3');
+    },
+  );
 
   test('the migrated v9 notes table accepts the new sync columns', () async {
     final database = AppDatabase.forTesting(
@@ -317,7 +414,7 @@ void main() {
     expect(comments.single.body, 'found near the hearth');
   });
 
-  test('a fresh database is created directly at v10', () async {
+  test('a fresh database is created directly at v11', () async {
     final database = AppDatabase.forTesting(NativeDatabase.memory());
     addTearDown(database.close);
 

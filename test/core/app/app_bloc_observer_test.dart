@@ -46,22 +46,26 @@ void main() {
     );
   });
 
-  test('logs bloc errors at error level with the error and stack trace',
-      () async {
-    final logger = Logger();
-    final observer = _RecordingObserver();
-    logger.addObserver(observer);
-    final appObserver = AppBlocObserver(logger);
-    final bloc = _FakeBloc();
-    final stackTrace = StackTrace.current;
+  test(
+    'logs bloc errors at error level with the error and stack trace',
+    () async {
+      final logger = Logger();
+      final observer = _RecordingObserver();
+      logger.addObserver(observer);
+      final appObserver = AppBlocObserver(logger);
+      final bloc = _FakeBloc();
+      final stackTrace = StackTrace.current;
 
-    appObserver.onError(bloc, Exception('boom'), stackTrace);
+      appObserver.onError(bloc, Exception('boom'), stackTrace);
 
-    final record = observer.records.singleWhere((r) => r.level == LogLevel.error);
-    expect(record.message, contains('_FakeBloc'));
-    expect(record.error, isException);
-    expect(record.stackTrace, stackTrace);
+      final record = observer.records.singleWhere(
+        (r) => r.level == LogLevel.error,
+      );
+      expect(record.message, contains('_FakeBloc'));
+      expect(record.error, isException);
+      expect(record.stackTrace, stackTrace);
 
-    await bloc.close();
-  });
+      await bloc.close();
+    },
+  );
 }

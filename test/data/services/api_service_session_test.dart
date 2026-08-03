@@ -61,31 +61,25 @@ void main() {
       isA<ApiException>().having((e) => e.statusCode, 'statusCode', 401);
 
   group('unrecoverable 401 -> session-lost signal', () {
-    test(
-      '401 whose refresh also fails rethrows the 401 and fires '
-      'onSessionExpired exactly once',
-      () async {
-        final auth = authService(unauthorizedClient());
-        addTearDown(auth.dispose);
-        var expiredCount = 0;
-        final sub = auth.onSessionExpired.listen((_) => expiredCount++);
-        addTearDown(sub.cancel);
+    test('401 whose refresh also fails rethrows the 401 and fires '
+        'onSessionExpired exactly once', () async {
+      final auth = authService(unauthorizedClient());
+      addTearDown(auth.dispose);
+      var expiredCount = 0;
+      final sub = auth.onSessionExpired.listen((_) => expiredCount++);
+      addTearDown(sub.cancel);
 
-        final api = ApiService(
-          authService: auth,
-          client: unauthorizedClient(),
-        );
-        addTearDown(api.dispose);
+      final api = ApiService(authService: auth, client: unauthorizedClient());
+      addTearDown(api.dispose);
 
-        await expectLater(
-          api.get('/notes'),
-          throwsA(isUnauthorizedApiException()),
-        );
+      await expectLater(
+        api.get('/notes'),
+        throwsA(isUnauthorizedApiException()),
+      );
 
-        await Future.delayed(const Duration(milliseconds: 10));
-        expect(expiredCount, 1);
-      },
-    );
+      await Future.delayed(const Duration(milliseconds: 10));
+      expect(expiredCount, 1);
+    });
 
     test(
       '401 that a refresh fixes succeeds and fires onSessionExpired 0 times',
@@ -137,34 +131,28 @@ void main() {
       },
     );
 
-    test(
-      'a requireAuth:false 401 throws but never attempts a refresh or fires '
-      'onSessionExpired',
-      () async {
-        final auth = authService(
-          MockClient((request) async {
-            fail('unexpected refresh call: ${request.method} ${request.url}');
-          }),
-        );
-        addTearDown(auth.dispose);
-        var expiredCount = 0;
-        final sub = auth.onSessionExpired.listen((_) => expiredCount++);
-        addTearDown(sub.cancel);
+    test('a requireAuth:false 401 throws but never attempts a refresh or fires '
+        'onSessionExpired', () async {
+      final auth = authService(
+        MockClient((request) async {
+          fail('unexpected refresh call: ${request.method} ${request.url}');
+        }),
+      );
+      addTearDown(auth.dispose);
+      var expiredCount = 0;
+      final sub = auth.onSessionExpired.listen((_) => expiredCount++);
+      addTearDown(sub.cancel);
 
-        final api = ApiService(
-          authService: auth,
-          client: unauthorizedClient(),
-        );
-        addTearDown(api.dispose);
+      final api = ApiService(authService: auth, client: unauthorizedClient());
+      addTearDown(api.dispose);
 
-        await expectLater(
-          api.get('/public-notes', requireAuth: false),
-          throwsA(isUnauthorizedApiException()),
-        );
+      await expectLater(
+        api.get('/public-notes', requireAuth: false),
+        throwsA(isUnauthorizedApiException()),
+      );
 
-        await Future.delayed(const Duration(milliseconds: 10));
-        expect(expiredCount, 0);
-      },
-    );
+      await Future.delayed(const Duration(milliseconds: 10));
+      expect(expiredCount, 0);
+    });
   });
 }

@@ -63,6 +63,7 @@ void main() {
       createdAt: DateTime(2026, 1, 1),
       isDeleted: false,
       pendingSync: false,
+      isShared: false,
     );
   }
 
@@ -467,6 +468,30 @@ void main() {
         expect(counts['f1'], 1);
       },
     );
+
+    test('every write records who wrote it', () async {
+      ownerHolder.value = 'ivan';
+      await repository.insertNote(note('n1'));
+
+      final saved = await readNote('n1');
+      // Equal to ownerKey today; they diverge only once a folder is shared,
+      // and that is exactly when the distinction starts carrying information.
+      expect(saved.authorId, 'ivan');
+      expect(saved.ownerKey, 'ivan');
+    });
+
+    test('a fork records the person who forked it as author', () async {
+      ownerHolder.value = 'maria';
+      await repository.insertNote(note('n1'));
+
+      final fork = await repository.forkNote(
+        'n1',
+        at: DateTime(2026, 8, 2, 19, 42),
+      );
+
+      final saved = await repository.getNoteById(fork.id);
+      expect(saved!.authorId, 'maria');
+    });
 
     /// A note the server refused (because someone else wrote to it first) has
     /// to survive as its own row. Overwriting it with the server's version is
