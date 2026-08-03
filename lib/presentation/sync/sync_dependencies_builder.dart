@@ -1,4 +1,5 @@
 import '../../data/services/api_service.dart';
+import '../../data/services/members_service.dart';
 import '../../data/services/sync_service.dart';
 import '../auth/auth_dependencies.dart';
 import '../core_deps/core_dependencies.dart';
@@ -9,6 +10,7 @@ abstract class SyncDependenciesBuilder {
     final apiService = ApiService(authService: auth.repository);
     return SyncDependencies(
       service: SyncService(apiService: apiService, database: core.database),
+      members: MembersService(apiService),
     );
   }
 }

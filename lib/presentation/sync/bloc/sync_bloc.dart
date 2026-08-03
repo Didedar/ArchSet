@@ -13,8 +13,8 @@ part 'sync_state.dart';
 /// just mirrors it into states the UI can consume.
 class SyncBloc extends Bloc<SyncEvent, SyncState> {
   SyncBloc({required SyncService service})
-      : _service = service,
-        super(const SyncIdle()) {
+    : _service = service,
+      super(const SyncIdle()) {
     on<SyncMonitoringStarted>(_onMonitoringStarted, transformer: restartable());
     on<SyncRequested>(_onSyncRequested, transformer: droppable());
     on<_SyncStatusReceived>(

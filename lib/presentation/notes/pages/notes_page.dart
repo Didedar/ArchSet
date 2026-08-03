@@ -10,6 +10,8 @@ import '../../artifacts/pages/artifacts_map_page.dart';
 import '../../editor/pages/diary_edit_page.dart';
 import '../../locale/bloc/locale_bloc.dart';
 import '../../pages/settings_page.dart';
+import '../../../core/di/app_scope.dart';
+import '../../members/members_page.dart';
 import '../../session/bloc/session_cubit.dart';
 import '../../widgets/note_card.dart';
 import '../../widgets/empty_state.dart';
@@ -535,6 +537,40 @@ class _NotesPageState extends State<NotesPage>
     );
   }
 
+  /// Opens the roster for [folder].
+  ///
+  /// A guest is told why this cannot work rather than being shown an empty
+  /// screen: membership is keyed on a user id, and a guest has none.
+  void _openMembers(Folder folder) {
+    final locale = context.read<LocaleBloc>().state.locale;
+    final session = context.read<SessionCubit>().state;
+
+    if (session is! SessionAuthenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.tr(locale, AppStrings.sharingNeedsAccount)),
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => MembersPage(
+          folderId: folder.id,
+          folderName: folder.name,
+          // authorId is who created the folder; the server is the real
+          // authority and refuses a non-owner anyway, so this only decides
+          // whether to offer buttons that would be refused.
+          isOwner:
+              folder.authorId == null || folder.authorId == session.user.id,
+          service: context.di.sync.members,
+        ),
+      ),
+    );
+  }
+
   void _showFolderOptions(Folder folder) {
     final locale = context.read<LocaleBloc>().state.locale;
     showModalBottomSheet(
@@ -555,6 +591,22 @@ class _NotesPageState extends State<NotesPage>
                 color: Colors.white24,
                 borderRadius: BorderRadius.circular(2),
               ),
+            ),
+            ListTile(
+              leading: Icon(
+                Icons.group_outlined,
+                color: Theme.of(context).iconTheme.color,
+              ),
+              title: Text(
+                AppStrings.tr(locale, AppStrings.members),
+                style: GoogleFonts.inter(
+                  color: Theme.of(context).colorScheme.onSurface,
+                ),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _openMembers(folder);
+              },
             ),
             ListTile(
               leading: Icon(

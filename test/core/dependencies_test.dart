@@ -6,6 +6,7 @@ import 'package:archset_r2/data/repository/secure_storage_locale_repository.dart
 import 'package:archset_r2/data/repository/secure_storage_theme_repository.dart';
 import 'package:archset_r2/data/services/auth_service.dart';
 import 'package:archset_r2/data/services/api_service.dart';
+import 'package:archset_r2/data/services/members_service.dart';
 import 'package:archset_r2/data/services/sync_service.dart';
 import 'package:archset_r2/data/repository/notes_repository.dart';
 import 'package:archset_r2/domain/services/audio_service.dart';
@@ -46,6 +47,7 @@ void main() {
     final authService = AuthService(database: database);
     final auth = AuthDependencies(repository: authService);
     final sync = SyncDependencies(
+      members: MembersService(ApiService(authService: authService)),
       service: SyncService(
         apiService: ApiService(authService: authService),
         database: database,

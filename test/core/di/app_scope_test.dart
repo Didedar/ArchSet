@@ -9,6 +9,7 @@ import 'package:archset_r2/core/logging/logger.dart';
 import 'package:archset_r2/data/services/api_service.dart';
 import 'package:archset_r2/data/services/auth_service.dart';
 import 'package:archset_r2/data/services/backend_gemini_service.dart';
+import 'package:archset_r2/data/services/members_service.dart';
 import 'package:archset_r2/data/services/sync_service.dart';
 import 'package:archset_r2/data/services/whisper_service.dart';
 import 'package:archset_r2/domain/repositories/locale_repository.dart';
@@ -126,7 +127,10 @@ void main() {
       theme: ThemeDependencies(repository: themeRepository),
       locale: LocaleDependencies(repository: localeRepository),
       auth: AuthDependencies(repository: authService),
-      sync: SyncDependencies(service: syncService),
+      sync: SyncDependencies(
+        service: syncService,
+        members: MembersService(ApiService(authService: authService)),
+      ),
       notes: NotesDependencies(repository: NotesRepository(database)),
       transcription: TranscriptionDependencies(whisperService: whisperService),
       audio: AudioDependencies(
