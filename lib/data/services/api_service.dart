@@ -7,7 +7,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 
 import 'auth_service.dart';
@@ -17,56 +16,93 @@ class ApiConfig {
   static String _baseUrl =
       'https://archset-backend-production.up.railway.app'; // Production URL
 
-  /// Resolves the base URL to talk to.
+  static const String productionUrl =
+      'https://archset-backend-production.up.railway.app';
+
+  /// A dev backend named explicitly at build time, e.g.
+  /// `--dart-define=DEV_API_URL=http://192.168.1.42:8000`. Wins over the
+  /// guesses below when it answers.
+  static const String devApiUrl = String.fromEnvironment('DEV_API_URL');
+
+  /// The machine running the backend, as seen from the phone over Wi-Fi:
+  /// `--dart-define=DEV_API_HOST=192.168.1.42`. `scripts/dev.sh` fills this in
+  /// automatically, which is what removes the manual step.
+  static const String devApiHost = String.fromEnvironment('DEV_API_HOST');
+
+  /// Picks the first backend that actually answers.
   ///
-  /// Release builds always target production, so this returns immediately and
-  /// never touches the network — the local-server fallback below is purely a
-  /// development affordance. Probing it in release added a DNS+TCP+TLS round
-  /// trip (up to the 3s timeout on a bad network) before the first frame.
-  static Future<void> init() async {
-    if (kReleaseMode) return;
-
-    const String productionUrl =
-        'https://archset-backend-production.up.railway.app';
-    String fallbackUrl = 'http://127.0.0.1:8000';
-
-    if (Platform.isAndroid) {
-      // Use Mac's current local IP for physical device testing
-      fallbackUrl = 'http://192.168.0.106:8000';
-    } else if (Platform.isIOS) {
-      final deviceInfo = DeviceInfoPlugin();
-      final iosInfo = await deviceInfo.iosInfo;
-
-      if (iosInfo.isPhysicalDevice) {
-        // Physical iOS device - use Mac's current local IP
-        fallbackUrl = 'http://192.168.0.106:8000';
-      } else {
-        // iOS Simulator - use localhost
-        fallbackUrl = 'http://127.0.0.1:8000';
+  /// Production is checked first; if it is unreachable or unhealthy, each dev
+  /// [candidates] entry is tried in order. Falls back to production when
+  /// nothing responds, because the app is offline-first and will retry --
+  /// leaving it pointed at a laptop address that is not there would strand it.
+  ///
+  /// Sequential rather than concurrent on purpose: order expresses preference,
+  /// and a race would hand the answer to whichever host was quickest rather
+  /// than to the one meant to win.
+  @visibleForTesting
+  static Future<String> resolveBaseUrl({
+    required http.Client client,
+    required List<String> candidates,
+  }) async {
+    Future<bool> healthy(String origin) async {
+      try {
+        final response = await client
+            .get(Uri.parse('$origin/health'))
+            .timeout(const Duration(seconds: 3));
+        return response.statusCode == 200;
+      } catch (_) {
+        return false;
       }
     }
 
-    try {
-      // Check if production is reachable
-      final response = await http
-          .get(Uri.parse('$productionUrl/health'))
-          .timeout(const Duration(seconds: 3));
+    if (await healthy(productionUrl)) return productionUrl;
 
-      if (response.statusCode == 200) {
-        _baseUrl = productionUrl;
-        debugPrint('🌍 Connected to Production API: $_baseUrl');
-      } else {
-        _baseUrl = fallbackUrl;
-        debugPrint(
-          '⚠️ Production API returned ${response.statusCode}, falling back to local: $_baseUrl',
-        );
-      }
-    } catch (e) {
-      // Fallback if network fails, times out, etc.
-      _baseUrl = fallbackUrl;
-      debugPrint(
-        '🔌 Production API unreachable, falling back to local: $_baseUrl',
+    for (final candidate in candidates) {
+      if (candidate.isEmpty) continue;
+      if (await healthy(candidate)) return candidate;
+    }
+
+    return productionUrl;
+  }
+
+  /// Dev backends to try, most specific first.
+  ///
+  /// `127.0.0.1` only reaches the developer's machine while an
+  /// `adb reverse tcp:8000 tcp:8000` tunnel is alive -- and that tunnel dies
+  /// on every cable unplug, phone reboot and adb restart, with nothing
+  /// re-creating it. The Wi-Fi address is what makes the same build keep
+  /// working once it does. `10.0.2.2` is the Android emulator's alias for its
+  /// host.
+  static List<String> devCandidates() => [
+    devApiUrl,
+    'http://127.0.0.1:8000',
+    if (devApiHost.isNotEmpty) 'http://$devApiHost:8000',
+    if (Platform.isAndroid) 'http://10.0.2.2:8000',
+  ];
+
+  /// Resolves the base URL to talk to.
+  ///
+  /// Release builds always target production, so this returns immediately and
+  /// never touches the network -- the local-server fallback is purely a
+  /// development affordance. Probing it in release added a DNS+TCP+TLS round
+  /// trip (up to the timeout on a bad network) before the first frame.
+  static Future<void> init() async {
+    if (kReleaseMode) return;
+
+    final client = http.Client();
+    try {
+      _baseUrl = await resolveBaseUrl(
+        client: client,
+        candidates: devCandidates(),
       );
+    } finally {
+      client.close();
+    }
+
+    if (_baseUrl == productionUrl) {
+      debugPrint('🌍 API: production ($_baseUrl)');
+    } else {
+      debugPrint('🔌 API: local dev backend ($_baseUrl)');
     }
   }
 

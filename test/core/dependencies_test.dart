@@ -44,7 +44,7 @@ void main() {
     final locale = LocaleDependencies(
       repository: SecureStorageLocaleRepository(storage: storage),
     );
-    final authService = AuthService(database: database);
+    final authService = AuthService();
     final auth = AuthDependencies(repository: authService);
     final sync = SyncDependencies(
       members: MembersService(ApiService(authService: authService)),

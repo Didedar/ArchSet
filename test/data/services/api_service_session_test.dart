@@ -7,7 +7,6 @@ import 'package:http/testing.dart';
 import 'package:archset_r2/data/services/api_service.dart';
 import 'package:archset_r2/data/services/auth_service.dart';
 
-import '../../support/fake_app_database.dart';
 import '../../support/fake_secure_storage.dart';
 
 /// B6 funnels a 401 that survives a failed token refresh through a single
@@ -40,7 +39,6 @@ void main() {
 
   AuthService authService(MockClient refreshClient) {
     return AuthService(
-      database: FakeAppDatabase(),
       storage: const FlutterSecureStorage(),
       baseUrl: _baseUrl,
       client: refreshClient,

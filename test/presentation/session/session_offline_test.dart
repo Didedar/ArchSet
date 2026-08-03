@@ -44,7 +44,6 @@ void main() {
 
   /// A backend that is simply not there, the way it is not there in a trench.
   AuthService offlineService() => AuthService(
-    database: database,
     storage: const FlutterSecureStorage(),
     baseUrl: localBaseUrl,
     client: MockClient((request) async {
@@ -143,7 +142,6 @@ void main() {
 
     // Server is reachable and says the token is dead; the refresh dies too.
     final service = AuthService(
-      database: database,
       storage: const FlutterSecureStorage(),
       baseUrl: localBaseUrl,
       client: MockClient((request) async => http.Response('{}', 401)),

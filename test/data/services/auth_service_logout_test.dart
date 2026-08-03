@@ -38,7 +38,6 @@ void main() {
     final slug = AuthStorageKeys.originSlug(_baseUrl);
     final client = MockClient((request) async => http.Response('', 204));
     final service = AuthService(
-      database: database,
       storage: const FlutterSecureStorage(),
       baseUrl: _baseUrl,
       client: client,

@@ -10,7 +10,6 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'api_service.dart';
 import '../../domain/repositories/auth_repository.dart';
-import '../database/app_database.dart';
 
 /// Storage keys for tokens.
 ///
@@ -88,7 +87,6 @@ class AuthService implements AuthRepository {
 
   final FlutterSecureStorage _storage;
   final String _baseUrl;
-  final AppDatabase _database;
 
   /// One client for the lifetime of the service. The previous code used the
   /// top-level `http.post`/`http.get` helpers, each of which opens and closes
@@ -109,13 +107,11 @@ class AuthService implements AuthRepository {
       StreamController<void>.broadcast();
 
   AuthService({
-    required AppDatabase database,
     FlutterSecureStorage? storage,
     String? baseUrl,
     http.Client? client,
   }) : _storage = storage ?? const FlutterSecureStorage(),
        _baseUrl = baseUrl ?? ApiConfig.apiUrl,
-       _database = database,
        _client = client ?? http.Client();
 
   /// Get current cached user

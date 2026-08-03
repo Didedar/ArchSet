@@ -4,8 +4,6 @@ import 'auth_dependencies.dart';
 
 abstract class AuthDependenciesBuilder {
   static AuthDependencies build(CoreDependencies core) {
-    return AuthDependencies(
-      repository: AuthService(database: core.database),
-    );
+    return AuthDependencies(repository: AuthService());
   }
 }

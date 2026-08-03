@@ -20,7 +20,7 @@ void main() {
       secureStorage: const FlutterSecureStorage(),
       logger: Logger(),
     );
-    final auth = AuthDependencies(repository: AuthService(database: database));
+    final auth = AuthDependencies(repository: AuthService());
 
     final deps = SyncDependenciesBuilder.build(core, auth);
 

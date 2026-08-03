@@ -79,9 +79,9 @@ void main() {
   testWidgets('an unknown email is explained, not shown as a status code', (
     tester,
   ) async {
-    when(() => service.invite(any(), any())).thenThrow(
-      const InviteException(InviteFailure.unknownEmail),
-    );
+    when(
+      () => service.invite(any(), any()),
+    ).thenThrow(const InviteException(InviteFailure.unknownEmail));
     await pump(tester, isOwner: true);
 
     await tester.enterText(find.byType(TextField), 'nobody@example.com');
@@ -95,9 +95,9 @@ void main() {
   testWidgets('an offline invitation says so instead of failing silently', (
     tester,
   ) async {
-    when(() => service.invite(any(), any())).thenThrow(
-      const InviteException(InviteFailure.offline),
-    );
+    when(
+      () => service.invite(any(), any()),
+    ).thenThrow(const InviteException(InviteFailure.offline));
     await pump(tester, isOwner: true);
 
     await tester.enterText(find.byType(TextField), 'maria@example.com');

@@ -753,10 +753,7 @@ void main() {
         return http.Response('', 200);
       });
 
-      final api = ApiService(
-        authService: AuthService(database: FakeAppDatabase()),
-        client: client,
-      );
+      final api = ApiService(authService: AuthService(), client: client);
       addTearDown(api.dispose);
 
       final healthy = await api.checkHealth();
@@ -769,7 +766,7 @@ void main() {
 
     test('returns false on a non-200 response', () async {
       final api = ApiService(
-        authService: AuthService(database: FakeAppDatabase()),
+        authService: AuthService(),
         client: MockClient((request) async => http.Response('', 503)),
       );
       addTearDown(api.dispose);
@@ -779,7 +776,7 @@ void main() {
 
     test('returns false instead of throwing on a network error', () async {
       final api = ApiService(
-        authService: AuthService(database: FakeAppDatabase()),
+        authService: AuthService(),
         client: MockClient((request) async {
           throw const SocketException('no route to host');
         }),

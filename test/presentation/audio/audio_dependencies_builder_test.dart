@@ -12,9 +12,7 @@ void main() {
 
   test('builds an AudioService/BackendGeminiService and reuses the given '
       'WhisperService', () {
-    final auth = AuthDependencies(
-      repository: AuthService(database: FakeAppDatabase()),
-    );
+    final auth = AuthDependencies(repository: AuthService());
     final whisperService = WhisperService();
 
     final deps = AudioDependenciesBuilder.build(auth, whisperService);

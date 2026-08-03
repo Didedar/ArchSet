@@ -56,7 +56,6 @@ MockClient _clientFor({
 
 AuthService _service({required String baseUrl, required MockClient client}) {
   return AuthService(
-    database: FakeAppDatabase(),
     storage: const FlutterSecureStorage(),
     baseUrl: baseUrl,
     client: client,
