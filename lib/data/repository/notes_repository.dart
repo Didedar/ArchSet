@@ -124,16 +124,36 @@ class NotesRepository {
       }
     }
 
+    final now = DateTime.now();
+
     // Soft delete locally so it can be synced
     await (database.update(
       database.notes,
     )..where((t) => t.id.equals(id))).write(
       NotesCompanion(
         isDeleted: const Value(true),
-        updatedAt: Value(DateTime.now()),
+        updatedAt: Value(now),
         pendingSync: const Value(true),
         ownerKey: Value(_owner.value),
         authorId: Value(_owner.value),
+      ),
+    );
+
+    // ...and take its photographed finds with it. A find only exists as part
+    // of the entry it was photographed in, so a pin left behind claims a find
+    // whose record is gone -- someone would go looking for the context and
+    // find none.
+    //
+    // Cascaded here rather than only filtered at read time so the deletion
+    // actually reaches the server, and a colleague's map loses the pin too.
+    // Artifacts carry no `pendingSync` flag: the sync layer selects them by
+    // `updatedAt > lastSyncAt`, so the fresh timestamp is what schedules it.
+    await (database.update(
+      database.imageMetadata,
+    )..where((t) => t.noteId.equals(id))).write(
+      ImageMetadataCompanion(
+        isDeleted: const Value(true),
+        updatedAt: Value(now),
       ),
     );
   }

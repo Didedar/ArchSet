@@ -198,6 +198,65 @@ void main() {
       expect(saved.isDeleted, isTrue);
       expect(saved.pendingSync, isTrue);
     });
+
+    /// A photographed find only exists as part of the entry it was
+    /// photographed in. Hiding its pin locally is not enough: the artifact
+    /// row would stay alive on the server and come back to a colleague's map,
+    /// pointing at an entry that no longer exists.
+    test("also deletes the entry's artifacts, so the deletion syncs", () async {
+      await repository.insertNote(note('n1'));
+      await database
+          .into(database.imageMetadata)
+          .insert(
+            ImageMetadataCompanion.insert(
+              id: 'a1',
+              imagePath: '/photos/a1.jpg',
+              capturedAt: DateTime(2026, 8, 2),
+              noteId: const Value('n1'),
+            ),
+          );
+
+      await repository.deleteNote('n1');
+
+      final artifact = await (database.select(
+        database.imageMetadata,
+      )..where((t) => t.id.equals('a1'))).getSingle();
+      expect(artifact.isDeleted, isTrue);
+      // Artifacts have no pendingSync flag -- the sync layer selects them by
+      // `updatedAt > lastSyncAt`, so a fresh timestamp IS what makes the
+      // deletion reach the server.
+      expect(artifact.updatedAt, isNotNull);
+      expect(
+        artifact.updatedAt!.isAfter(
+          DateTime.now().subtract(const Duration(seconds: 5)),
+        ),
+        isTrue,
+      );
+    });
+
+    test("leaves another entry's artifacts alone", () async {
+      await repository.insertNote(note('n1'));
+      await repository.insertNote(note('n2'));
+      for (final (id, noteId) in [('a1', 'n1'), ('a2', 'n2')]) {
+        await database
+            .into(database.imageMetadata)
+            .insert(
+              ImageMetadataCompanion.insert(
+                id: id,
+                imagePath: '/photos/$id.jpg',
+                capturedAt: DateTime(2026, 8, 2),
+                noteId: Value(noteId),
+              ),
+            );
+      }
+
+      await repository.deleteNote('n1');
+
+      final other = await (database.select(
+        database.imageMetadata,
+      )..where((t) => t.id.equals('a2'))).getSingle();
+      expect(other.isDeleted, isFalse);
+    });
   });
 
   group('createFolder', () {

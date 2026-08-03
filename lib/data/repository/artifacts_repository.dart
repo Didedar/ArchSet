@@ -17,6 +17,22 @@ class ArtifactsRepository {
 
   /// Artifacts that can be placed on the map, newest first.
   ///
+
+  /// True when an artifact's parent entry is still alive.
+  ///
+  /// A photographed find only exists as part of the entry it was photographed
+  /// in, so deleting the entry has to take its pin off the map. `isNull()` is
+  /// the load-bearing half: a photo attached to no entry at all has nothing to
+  /// outlive, and must keep showing.
+  ///
+  /// This is a safety net rather than the primary mechanism -- `deleteNote`
+  /// now soft-deletes the artifacts too, so the deletion reaches the server
+  /// and a colleague's map as well. This catches rows already orphaned by
+  /// deletions that happened before that existed.
+  Expression<bool> get _parentNoteAlive =>
+      database.notes.isDeleted.isNull() |
+      database.notes.isDeleted.equals(false);
+
   /// Joins note titles and comment counts in SQL so the map doesn't issue a
   /// query per pin.
   Stream<List<models.Artifact>> watchLocatedArtifacts() {
@@ -39,6 +55,7 @@ class ArtifactsRepository {
           ..addColumns([commentCount])
           ..where(
             database.imageMetadata.isDeleted.equals(false) &
+                _parentNoteAlive &
                 database.imageMetadata.latitude.isNotNull() &
                 database.imageMetadata.longitude.isNotNull(),
           )
@@ -68,13 +85,23 @@ class ArtifactsRepository {
   /// fix (permission denied, or an indoor timeout).
   Stream<int> watchUnlocatedCount() {
     final count = database.imageMetadata.id.count();
-    final query = database.selectOnly(database.imageMetadata)
-      ..addColumns([count])
-      ..where(
-        database.imageMetadata.isDeleted.equals(false) &
-            (database.imageMetadata.latitude.isNull() |
-                database.imageMetadata.longitude.isNull()),
-      );
+    // Joined purely to reach `_parentNoteAlive`; the count itself is over
+    // image_metadata, and the join is one-to-one on a primary key so it
+    // cannot multiply rows.
+    final query =
+        database.selectOnly(database.imageMetadata).join([
+            leftOuterJoin(
+              database.notes,
+              database.notes.id.equalsExp(database.imageMetadata.noteId),
+            ),
+          ])
+          ..addColumns([count])
+          ..where(
+            database.imageMetadata.isDeleted.equals(false) &
+                _parentNoteAlive &
+                (database.imageMetadata.latitude.isNull() |
+                    database.imageMetadata.longitude.isNull()),
+          );
 
     return query.watchSingle().map((row) => row.read(count) ?? 0);
   }
@@ -90,6 +117,7 @@ class ArtifactsRepository {
           ])
           ..where(
             database.imageMetadata.isDeleted.equals(false) &
+                _parentNoteAlive &
                 (database.imageMetadata.latitude.isNull() |
                     database.imageMetadata.longitude.isNull()),
           )

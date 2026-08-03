@@ -101,13 +101,17 @@ void main() {
       expect(artifacts.single.noteTitle, 'Sector B');
     });
 
-    test('leaves noteTitle null when the note was deleted', () async {
+    test('drops an artifact entirely when its note was deleted', () async {
+      // Previously this asserted the artifact stayed on the map with a null
+      // title. That left a pin claiming a find whose entry no longer exists,
+      // which is worse than not showing it: someone would go looking for the
+      // context and find none. The pin now goes with the entry.
       await insertNote('note-1', isDeleted: true);
       await insertArtifact('a1', noteId: 'note-1');
 
       final artifacts = await repository.watchLocatedArtifacts().first;
 
-      expect(artifacts.single.noteTitle, isNull);
+      expect(artifacts, isEmpty);
     });
 
     test('survives an artifact whose noteId matches no note', () async {
@@ -246,5 +250,62 @@ void main() {
         expect(comments.map((c) => c.body), ['first', 'second']);
       },
     );
+  });
+
+  /// Deleting a diary has to take its finds off the map with it.
+  ///
+  /// A photographed artifact only exists as part of the entry it was
+  /// photographed in; leaving its pin behind after the entry is gone means the
+  /// map claims a find that has no record anywhere -- worse than not showing
+  /// it, because a colleague would go looking for the context and find none.
+  group('artifacts of a deleted note', () {
+    Future<void> insertNoteRow(String id, {bool isDeleted = false}) {
+      return database
+          .into(database.notes)
+          .insert(
+            NotesCompanion.insert(
+              id: id,
+              title: 'Раскоп 3',
+              content: '',
+              date: DateTime(2026, 8, 2),
+              isDeleted: Value(isDeleted),
+            ),
+          );
+    }
+
+    test('a pin disappears once its note is deleted', () async {
+      await insertNoteRow('n1', isDeleted: true);
+      await insertArtifact('a1', noteId: 'n1');
+
+      final artifacts = await repository.watchLocatedArtifacts().first;
+
+      expect(artifacts.map((a) => a.id), isNot(contains('a1')));
+    });
+
+    test('a pin stays while its note is alive', () async {
+      await insertNoteRow('n1');
+      await insertArtifact('a1', noteId: 'n1');
+
+      final artifacts = await repository.watchLocatedArtifacts().first;
+
+      expect(artifacts.map((a) => a.id), contains('a1'));
+    });
+
+    test('an artifact attached to no note at all still shows', () async {
+      // A photo taken outside any entry has no parent to be deleted, so the
+      // join must not filter it out along with the orphans.
+      await insertArtifact('a-loose', noteId: null);
+
+      final artifacts = await repository.watchLocatedArtifacts().first;
+
+      expect(artifacts.map((a) => a.id), contains('a-loose'));
+    });
+
+    test('the unlocated count also ignores a deleted note\'s photos', () async {
+      await insertNoteRow('n1', isDeleted: true);
+      await insertArtifact('a1', noteId: 'n1', latitude: null, longitude: null);
+
+      expect(await repository.watchUnlocatedCount().first, 0);
+    });
   });
 }
