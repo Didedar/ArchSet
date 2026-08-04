@@ -224,4 +224,135 @@ void main() {
       expect(pushed, hasLength(1));
     });
   });
+
+  group('one device, two accounts, one row', () {
+    /// The local table is keyed by the server id, but rows are *scoped* by
+    /// ownerKey. So two accounts that both reach the same dig site cannot each
+    /// hold their own copy -- there is one row, branded with whoever synced
+    /// last. Ivan syncs, Maria signs in, and the folder on disk still says
+    /// "Ivan": her queries filter it out and the app looks empty.
+    ///
+    /// Being in the pull is the server's confirmation that this account may
+    /// reach the row, and that is a different question from whose text is
+    /// newer.
+    setUp(() {
+      storage['current_owner_id'] = maria;
+    });
+
+    Future<void> givenFolderOwnedBy(String owner, DateTime updatedAt) async {
+      await database
+          .into(database.folders)
+          .insert(
+            Folder(
+              id: 'f-site',
+              name: 'Papka 1',
+              color: '#E8B731',
+              createdAt: DateTime.utc(2026, 8, 1),
+              updatedAt: updatedAt,
+              isDeleted: false,
+              isShared: false,
+              pendingSync: false,
+              ownerKey: owner,
+            ),
+          );
+    }
+
+    test('a site left branded by the previous account is claimed', () async {
+      // Local copy is NEWER, so last-write-wins keeps its text and skips the
+      // upsert -- which is exactly where the re-stamp used to be missed.
+      await givenFolderOwnedBy(ivan, DateTime.utc(2026, 8, 10));
+      when(() => apiService.post(any(), any())).thenAnswer((invocation) async {
+        pushed.add(invocation.positionalArguments[1] as Map<String, dynamic>);
+        return response(
+          folders: [folderPayload('f-site', 'Papka 1')],
+          accessible: const ['f-site'],
+        );
+      });
+      final service = buildService();
+      addTearDown(service.dispose);
+
+      await service.sync();
+
+      final folder = await (database.select(
+        database.folders,
+      )..where((f) => f.id.equals('f-site'))).getSingle();
+      expect(folder.ownerKey, maria);
+      expect(folder.name, 'Papka 1');
+    });
+
+    test('a site the server did not send keeps its owner', () async {
+      // Ivan's private folder. Nothing shared it, so it is absent from
+      // Maria's pull and must stay invisible to her.
+      await database
+          .into(database.folders)
+          .insert(
+            Folder(
+              id: 'f-private',
+              name: 'Личное',
+              color: '#E8B731',
+              createdAt: DateTime.utc(2026, 8, 1),
+              updatedAt: DateTime.utc(2026, 8, 10),
+              isDeleted: false,
+              isShared: false,
+              pendingSync: false,
+              ownerKey: ivan,
+            ),
+          );
+      final service = buildService();
+      addTearDown(service.dispose);
+
+      await service.sync();
+
+      final folder = await (database.select(
+        database.folders,
+      )..where((f) => f.id.equals('f-private'))).getSingle();
+      expect(folder.ownerKey, ivan, reason: 'never shared, never claimed');
+    });
+
+    test('an entry inside the shared site is claimed too', () async {
+      await database
+          .into(database.notes)
+          .insert(
+            Note(
+              id: 'n-shared',
+              title: 'Personality',
+              content: 'x',
+              date: DateTime.utc(2026, 8, 1),
+              updatedAt: DateTime.utc(2026, 8, 10),
+              isDeleted: false,
+              pendingSync: false,
+              ownerKey: ivan,
+            ),
+          );
+      when(() => apiService.post(any(), any())).thenAnswer((invocation) async {
+        pushed.add(invocation.positionalArguments[1] as Map<String, dynamic>);
+        return {
+          'notes': [
+            {
+              'id': 'n-shared',
+              'title': 'Personality',
+              'content': 'x',
+              'date': DateTime.utc(2026, 8, 1).toIso8601String(),
+              'updated_at': DateTime.utc(2026, 8, 3).toIso8601String(),
+              'is_deleted': false,
+            },
+          ],
+          'folders': const [],
+          'artifacts': const [],
+          'artifact_comments': const [],
+          'sync_timestamp': DateTime.utc(2026, 8, 4, 12).toIso8601String(),
+        };
+      });
+      final service = buildService();
+      addTearDown(service.dispose);
+
+      await service.sync();
+
+      final note = await (database.select(
+        database.notes,
+      )..where((n) => n.id.equals('n-shared'))).getSingle();
+      expect(note.ownerKey, maria);
+      expect(note.title, 'Personality', reason: 'the newer local text stands');
+    });
+  });
 }

@@ -683,6 +683,19 @@ class SyncService {
         )..where((f) => f.id.equals(folderId))).getSingleOrNull();
         if (local != null &&
             _serverLoses(local.updatedAt, local.pendingSync, serverUpdatedAt)) {
+          // Content and visibility are different questions. The pull already
+          // proved this account may reach the dig site; keeping the local
+          // copy's text does not change that. Without the re-stamp the row
+          // stays branded with whoever synced it last, and the person
+          // actually signed in sees an empty app -- one device, two
+          // accounts, one row.
+          if (local.ownerKey != ownerId) {
+            await (_database.update(
+              _database.folders,
+            )..where((f) => f.id.equals(folderId))).write(
+              FoldersCompanion(ownerKey: Value(ownerId)),
+            );
+          }
           continue;
         }
 
@@ -732,6 +745,15 @@ class SyncService {
         )..where((n) => n.id.equals(noteId))).getSingleOrNull();
         if (local != null &&
             _serverLoses(local.updatedAt, local.pendingSync, serverUpdatedAt)) {
+          // Same as folders above: the server sent it, so this account can
+          // see it -- whatever the local copy's text.
+          if (local.ownerKey != ownerId) {
+            await (_database.update(
+              _database.notes,
+            )..where((n) => n.id.equals(noteId))).write(
+              NotesCompanion(ownerKey: Value(ownerId)),
+            );
+          }
           continue;
         }
 
