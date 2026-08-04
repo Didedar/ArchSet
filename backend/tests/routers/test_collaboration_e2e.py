@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import pytest
 from httpx import AsyncClient
 
+from app.models.artifact import Artifact
 from app.models.folder import Folder
 from app.models.membership import FolderMember
 from app.models.note import Note
@@ -349,3 +350,64 @@ class TestReceivingAnInvitation:
 
         assert quiet["folders"] == []
         assert quiet["notes"] == []
+
+
+class TestPushingSomethingYouMayNotTouch:
+    """A stale row on the device must be skipped, never re-inserted.
+
+    Notes and folders already guard this. Artifacts did not: an id that exists
+    on the server but is out of this user's reach fell straight into the
+    "create new" branch, and the INSERT hit the primary key. That is an
+    IntegrityError, which fails the WHOLE sync batch -- so one leftover row
+    stopped every unrelated note, folder and photo from ever syncing again.
+    """
+
+    @pytest.mark.asyncio
+    async def test_an_artifact_out_of_reach_is_skipped_not_recreated(
+        self, client: AsyncClient, db_session, test_user, other_auth_headers
+    ):
+        # Ivan's find, hanging off no note at all -- nothing shares it.
+        db_session.add(
+            Artifact(
+                id="a-ivan",
+                user_id=test_user.id,
+                note_id=None,
+                image_path="/ivan/find.jpg",
+                captured_at=datetime(2026, 8, 1),
+                created_at=datetime(2026, 8, 1),
+                updated_at=datetime(2026, 8, 1),
+                is_deleted=False,
+            )
+        )
+        await db_session.commit()
+
+        # Maria's device still holds that id and pushes it, alongside a note
+        # of her own that has every right to be saved.
+        response = await client.post(
+            "/api/v1/sync",
+            json={
+                "notes": [_note("n-mine", "Мой слой", datetime(2026, 8, 2, 12))],
+                "artifacts": [
+                    {
+                        "id": "a-ivan",
+                        "note_id": None,
+                        "image_path": "/maria/overwrite.jpg",
+                        "captured_at": datetime(2026, 8, 2).isoformat(),
+                        "updated_at": datetime(2026, 8, 2).isoformat(),
+                        "is_deleted": False,
+                    }
+                ],
+            },
+            headers=other_auth_headers,
+        )
+
+        assert response.status_code == 200, response.text
+
+        # Ivan's find is untouched...
+        artifact = await db_session.get(Artifact, "a-ivan")
+        await db_session.refresh(artifact)
+        assert artifact.user_id == test_user.id
+        assert artifact.image_path == "/ivan/find.jpg"
+
+        # ...and Maria's own work was not collateral damage.
+        assert await db_session.get(Note, "n-mine") is not None

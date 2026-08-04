@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.artifact import Artifact, ArtifactComment
@@ -742,23 +741,25 @@ async def test_sync_never_returns_another_users_artifacts_or_comments(
 
 
 @pytest.mark.asyncio
-async def test_sync_does_not_let_another_user_overwrite_an_artifact(
+async def test_sync_with_another_users_artifact_id_is_skipped_not_crashed(
     client: AsyncClient,
     auth_headers: dict,
     other_auth_headers: dict,
     other_user: User,
     db_session: AsyncSession,
 ):
-    """Documents current behavior, matching sync_notes.
+    """An artifact id the caller may not touch is ignored, and the sync succeeds.
 
-    Existing-row lookup is scoped to `id AND user_id`, so reusing another
-    user's artifact ID finds nothing and falls into the "create" branch,
-    where the INSERT collides with the existing primary key. The other
-    user's row is never read or overwritten -- the request just dies with
-    an IntegrityError instead of being skipped. Same unhandled-crash
-    robustness gap already documented for notes in test_sync.py's
-    test_sync_with_another_users_note_id_raises_instead_of_leaking; kept
-    consistent here rather than diverging for artifacts alone.
+    This previously pinned the opposite -- an unhandled IntegrityError -- and
+    called it a robustness gap in its own docstring. Sharing turned the gap
+    into a real failure: a member keeps someone else's finds in their local
+    copy, and after access is revoked every sync died on the primary key,
+    taking the person's own unrelated notes and photos down with it.
+
+    What is NOT being changed is the security property: the other user's row
+    is still never read or overwritten. Only the failure mode is -- skipped
+    instead of crashing the whole batch. Notes and folders were fixed first;
+    this brings artifacts into line.
     """
     now = datetime.utcnow()
     db_session.add(
@@ -772,17 +773,24 @@ async def test_sync_does_not_let_another_user_overwrite_an_artifact(
     )
     await db_session.commit()
 
-    with pytest.raises(IntegrityError, match="UNIQUE constraint failed"):
-        await client.post(
-            "/api/v1/sync",
-            json={
-                "artifacts": [
-                    _artifact_item(
-                        "victim-artifact",
-                        image_path="/hijacked.jpg",
-                        updated_at=now + timedelta(hours=1),
-                    )
-                ]
-            },
-            headers=auth_headers,
-        )
+    response = await client.post(
+        "/api/v1/sync",
+        json={
+            "artifacts": [
+                _artifact_item(
+                    "victim-artifact",
+                    image_path="/hijacked.jpg",
+                    updated_at=now + timedelta(hours=1),
+                )
+            ]
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["artifacts"] == [], "it must not be handed back either"
+
+    victim = await db_session.get(Artifact, "victim-artifact")
+    await db_session.refresh(victim)
+    assert victim.user_id == other_user.id
+    assert victim.image_path == "/theirs/photo.jpg", "never overwritten"

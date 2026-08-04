@@ -54,6 +54,20 @@ class SyncService:
         return {row for row in result.scalars().all()} - set(reachable_ids)
 
 
+    async def _reachable_ids_among(self, model, client_ids, predicate):
+        """Which of [client_ids] this user may actually touch.
+
+        Notes and folders can answer this from the prefetch they already do;
+        artifacts are matched one at a time against a predicate, so they need
+        it asked separately.
+        """
+        if not client_ids:
+            return set()
+        result = await self.db.execute(
+            select(model.id).where(model.id.in_(client_ids), predicate)
+        )
+        return set(result.scalars().all())
+
     @staticmethod
     def _permitted_folder(folder_id, folder_ids):
         """The folder a note may actually be filed into.
@@ -440,8 +454,29 @@ class SyncService:
         folder_ids, note_pred, artifact_pred = await self._reachable(user)
         sync_time = datetime.utcnow()
 
+        # Finds that exist on the server but are out of this user's reach --
+        # someone else's photo still sitting in a stale local copy, typically
+        # after access to a dig site was revoked. The lookup below cannot see
+        # them, so without this they fall into the "new artifact" branch and
+        # the INSERT hits the primary key. That is an IntegrityError, and it
+        # fails the WHOLE batch: one leftover row would stop the person's own
+        # notes, folders and photos from ever syncing again. Notes and folders
+        # have guarded this from the start; artifacts did not.
+        skip_artifact_ids = await self._unreachable_ids(
+            Artifact,
+            [client_artifact.id for client_artifact in client_artifacts],
+            await self._reachable_ids_among(
+                Artifact,
+                [client_artifact.id for client_artifact in client_artifacts],
+                artifact_pred,
+            ),
+        )
+
         # Process client artifacts
         for client_artifact in client_artifacts:
+            if client_artifact.id in skip_artifact_ids:
+                continue
+
             result = await self.db.execute(
                 select(Artifact).where(
                     Artifact.id == client_artifact.id, artifact_pred
