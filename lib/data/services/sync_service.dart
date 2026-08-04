@@ -47,7 +47,21 @@ class SyncService {
   final FlutterSecureStorage _storage;
   final List<Duration> _retryBackoff;
 
-  static const String _lastSyncKey = 'last_sync_timestamp';
+  /// Pre-namespacing key. Read by nobody now: it belonged to whichever
+  /// account last used the device, and there is no way to tell which. Deleted
+  /// on sight so it cannot be misattributed to someone else.
+  static const String _legacyLastSyncKey = 'last_sync_timestamp';
+
+  /// The sync cursor, scoped to the account it belongs to.
+  ///
+  /// It used to be a single global key. On a shared device a newly signed-in
+  /// account inherited whatever cutoff the previous one had left behind and
+  /// asked the server "what changed since then?" -- so everything older,
+  /// including a dig site shared with it days earlier, came back as
+  /// "unchanged" and never arrived. The account looked empty and there was no
+  /// way to tell why.
+  static String _lastSyncKeyFor(String ownerId) =>
+      'last_sync_timestamp_$ownerId';
 
   /// Un-namespaced signed-in account id (mirrors
   /// `AuthStorageKeys.currentOwnerId`); absent means guest. Sync is a no-op
@@ -62,6 +76,10 @@ class SyncService {
 
   SyncStatus _currentStatus = SyncStatus.idle;
   DateTime? _lastSyncAt;
+
+  /// Whose cursor [_lastSyncAt] currently holds. Signing into a different
+  /// account must not reuse it.
+  String? _cursorOwnerId;
 
   SyncService({
     required ApiService apiService,
@@ -79,22 +97,30 @@ class SyncService {
              Duration(seconds: 1),
              Duration(seconds: 2),
              Duration(seconds: 4),
-           ] {
-    _loadLastSyncTime();
-  }
+           ];
 
-  /// Load last sync timestamp from storage
-  Future<void> _loadLastSyncTime() async {
-    final timestamp = await _storage.read(key: _lastSyncKey);
-    if (timestamp != null) {
-      _lastSyncAt = DateTime.parse(timestamp);
-    }
+  /// Point [_lastSyncAt] at [ownerId]'s cursor, reading it from storage the
+  /// first time this account is seen. Deliberately not done in the
+  /// constructor: there is no account yet at that point, and loading a cursor
+  /// before knowing whose it is caused this bug.
+  Future<void> _useCursorOf(String ownerId) async {
+    if (_cursorOwnerId == ownerId) return;
+
+    _cursorOwnerId = ownerId;
+    _lastSyncAt = null;
+    await _storage.delete(key: _legacyLastSyncKey);
+
+    final timestamp = await _storage.read(key: _lastSyncKeyFor(ownerId));
+    if (timestamp != null) _lastSyncAt = DateTime.parse(timestamp);
   }
 
   /// Save last sync timestamp to storage
-  Future<void> _saveLastSyncTime(DateTime timestamp) async {
+  Future<void> _saveLastSyncTime(DateTime timestamp, String ownerId) async {
     _lastSyncAt = timestamp;
-    await _storage.write(key: _lastSyncKey, value: timestamp.toIso8601String());
+    await _storage.write(
+      key: _lastSyncKeyFor(ownerId),
+      value: timestamp.toIso8601String(),
+    );
   }
 
   /// Stream of sync status updates
@@ -196,10 +222,7 @@ class SyncService {
     _updateStatus(SyncStatus.syncing);
 
     try {
-      // Ensure we have loaded the last sync time
-      if (_lastSyncAt == null) {
-        await _loadLastSyncTime();
-      }
+      await _useCursorOf(ownerId);
 
       // Get unsynced (pendingSync == true) local notes and folders owned by
       // the currently authenticated account -- never another account's.
@@ -260,8 +283,8 @@ class SyncService {
       await _clearPendingFolders(localFolders);
 
       // Apply server changes
-      final serverNotes = (response['notes'] as List?) ?? [];
-      final serverFolders = (response['folders'] as List?) ?? [];
+      var serverNotes = (response['notes'] as List?) ?? [];
+      var serverFolders = (response['folders'] as List?) ?? [];
       final serverArtifacts = (response['artifacts'] as List?) ?? [];
       final serverComments = (response['artifact_comments'] as List?) ?? [];
 
@@ -272,9 +295,37 @@ class SyncService {
       // failure path, so a dropped connection can never trigger detachment.
       await _detachNotesFromUnreachableFolders(response, ownerId);
 
-      // Update last sync timestamp
-      final newSyncTime = DateTime.parse(response['sync_timestamp'] as String);
-      await _saveLastSyncTime(newSyncTime);
+      var newSyncTime = DateTime.parse(response['sync_timestamp'] as String);
+
+      // The server says this account may reach a dig site the device does not
+      // have at all. That means the invitation landed before our cutoff, and
+      // an incremental pull -- which only ever reports what changed -- will
+      // never mention it again: the site would stay invisible for good.
+      //
+      // One extra round trip pushing nothing and asking for everything
+      // repairs it. Exactly one: the trigger is a gap in what we already
+      // hold, so a full pull that somehow still leaves a gap cannot loop.
+      if (await _hasUnreceivedFolder(response, ownerId)) {
+        debugPrint('[SyncService] a reachable dig site was missing; full pull');
+        final full = await _pushWithRetry({
+          'notes': const [],
+          'folders': const [],
+          'artifacts': const [],
+          'artifact_comments': const [],
+          'last_sync_at': null,
+        });
+
+        serverNotes = (full['notes'] as List?) ?? [];
+        serverFolders = (full['folders'] as List?) ?? [];
+        await _applyServerChanges(serverNotes, serverFolders, ownerId);
+        await _applyServerArtifactChanges(
+          (full['artifacts'] as List?) ?? [],
+          (full['artifact_comments'] as List?) ?? [],
+        );
+        newSyncTime = DateTime.parse(full['sync_timestamp'] as String);
+      }
+
+      await _saveLastSyncTime(newSyncTime, ownerId);
 
       _updateStatus(SyncStatus.success);
 
@@ -316,6 +367,33 @@ class SyncService {
   ///
   /// Older servers omit the field entirely; that is indistinguishable from
   /// "you may reach nothing", so absence means do nothing.
+  /// True when the server names a dig site this account may reach but the
+  /// device holds no copy of.
+  ///
+  /// `accessible_folder_ids` is the server's complete answer, not an
+  /// incremental one, so a folder listed there and absent here is a real gap
+  /// -- not merely something that happened not to change since last time.
+  ///
+  /// An older server omits the field; that is "no opinion", not "you may
+  /// reach nothing", so it reports no gap rather than forcing a full pull on
+  /// every sync.
+  Future<bool> _hasUnreceivedFolder(
+    Map<String, dynamic> response,
+    String ownerId,
+  ) async {
+    final raw = response['accessible_folder_ids'] as List?;
+    if (raw == null) return false;
+    final reachable = raw.cast<String>().toSet();
+    if (reachable.isEmpty) return false;
+
+    final held =
+        await (_database.select(_database.folders)..where(
+              (t) => t.id.isIn(reachable) & t.ownerKey.equals(ownerId),
+            ))
+            .get();
+    return held.length < reachable.length;
+  }
+
   Future<void> _detachNotesFromUnreachableFolders(
     Map<String, dynamic> response,
     String ownerId,
