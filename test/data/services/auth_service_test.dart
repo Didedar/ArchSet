@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:archset_r2/data/services/auth_service.dart';
 
-import '../../support/fake_app_database.dart';
 import '../../support/fake_secure_storage.dart';
 
 /// B2 namespaces token storage by backend origin: a JWT minted by production

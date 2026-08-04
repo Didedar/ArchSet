@@ -34,11 +34,26 @@ if ! lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   exit 1
 fi
 
-# --- USB tunnel ------------------------------------------------------------
+# --- USB tunnel, kept alive ------------------------------------------------
+# Creating the tunnel once is not enough. An `adb reverse` binding belongs to
+# one device connection and is lost on every cable unplug, `adb kill-server`
+# and phone reboot -- which is why "Connection refused" kept coming back after
+# it had supposedly been fixed. This re-creates it for as long as the app runs
+# and dies with this script.
+keep_tunnel_alive() {
+  while true; do
+    if ! adb reverse --list 2>/dev/null | grep -q "tcp:$PORT"; then
+      adb reverse "tcp:$PORT" "tcp:$PORT" >/dev/null 2>&1 || true
+    fi
+    sleep 3
+  done
+}
+
 if command -v adb >/dev/null 2>&1 && [ -n "$(adb devices | sed -n '2p')" ]; then
-  adb reverse "tcp:$PORT" "tcp:$PORT" >/dev/null 2>&1 \
-    && echo "-> adb reverse tcp:$PORT ready" \
-    || echo "!! adb reverse failed; relying on Wi-Fi instead"
+  keep_tunnel_alive &
+  TUNNEL_PID=$!
+  trap 'kill "${TUNNEL_PID:-}" 2>/dev/null || true' EXIT INT TERM
+  echo "-> adb reverse tcp:$PORT will be re-created whenever it drops"
 else
   echo "-- no adb device; relying on Wi-Fi instead"
 fi
@@ -65,4 +80,5 @@ DEFINES=(--dart-define-from-file=mapbox.json)
 [ -n "$HOST_IP" ] && DEFINES+=(--dart-define=DEV_API_HOST="$HOST_IP")
 
 echo
-exec flutter run "${DEFINES[@]}" "$@"
+# Not `exec`: replacing this shell would orphan the tunnel watchdog above.
+flutter run "${DEFINES[@]}" "$@"

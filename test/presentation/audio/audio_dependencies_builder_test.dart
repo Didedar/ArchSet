@@ -5,7 +5,6 @@ import 'package:archset_r2/data/services/whisper_service.dart';
 import 'package:archset_r2/domain/services/audio_service.dart';
 import 'package:archset_r2/presentation/audio/audio_dependencies_builder.dart';
 import 'package:archset_r2/presentation/auth/auth_dependencies.dart';
-import '../../support/fake_app_database.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

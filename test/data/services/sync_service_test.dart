@@ -16,7 +16,6 @@ import 'package:archset_r2/data/services/api_service.dart';
 import 'package:archset_r2/data/services/auth_service.dart';
 import 'package:archset_r2/data/services/sync_service.dart';
 
-import '../../support/fake_app_database.dart';
 import '../../support/fake_secure_storage.dart';
 
 class _MockApiService extends Mock implements ApiService {}

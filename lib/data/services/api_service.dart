@@ -80,16 +80,42 @@ class ApiConfig {
     if (Platform.isAndroid) 'http://10.0.2.2:8000',
   ];
 
-  /// Resolves the base URL to talk to.
+  /// Builds the client used to probe candidates. A seam so tests can drive
+  /// re-resolution without real sockets.
+  @visibleForTesting
+  static http.Client Function() probeClientFactory = http.Client.new;
+
+  /// The probe currently in flight, so several callers noticing the backend is
+  /// down at once share one round of probing instead of racing.
+  static Future<void>? _resolving;
+
+  /// Resolves the base URL to talk to, once at startup.
   ///
   /// Release builds always target production, so this returns immediately and
   /// never touches the network -- the local-server fallback is purely a
   /// development affordance. Probing it in release added a DNS+TCP+TLS round
   /// trip (up to the timeout on a bad network) before the first frame.
-  static Future<void> init() async {
-    if (kReleaseMode) return;
+  static Future<void> init() => _resolve('startup');
 
-    final client = http.Client();
+  /// Re-resolves because the chosen backend stopped answering.
+  ///
+  /// The address a debug build should talk to is not stable: the `adb reverse`
+  /// tunnel dies on every cable unplug and adb restart, and DHCP hands the
+  /// machine a new address every so often. Deciding only at startup froze the
+  /// app on whatever happened to be true at launch, which is why restarting
+  /// the backend could not fix anything -- the decision had already been made
+  /// and nothing ever revisited it.
+  static Future<void> refresh() => _resolve('re-check');
+
+  static Future<void> _resolve(String reason) {
+    if (kReleaseMode) return Future<void>.value();
+    return _resolving ??= _probeAndAdopt(reason).whenComplete(() {
+      _resolving = null;
+    });
+  }
+
+  static Future<void> _probeAndAdopt(String reason) async {
+    final client = probeClientFactory();
     try {
       _baseUrl = await resolveBaseUrl(
         client: client,
@@ -100,10 +126,17 @@ class ApiConfig {
     }
 
     if (_baseUrl == productionUrl) {
-      debugPrint('🌍 API: production ($_baseUrl)');
+      debugPrint('🌍 API ($reason): production ($_baseUrl)');
     } else {
-      debugPrint('🔌 API: local dev backend ($_baseUrl)');
+      debugPrint('🔌 API ($reason): local dev backend ($_baseUrl)');
     }
+  }
+
+  @visibleForTesting
+  static void resetForTesting() {
+    probeClientFactory = http.Client.new;
+    _baseUrl = productionUrl;
+    _resolving = null;
   }
 
   static String get baseUrl => _baseUrl;
@@ -386,10 +419,24 @@ class ApiService {
   /// Lightweight reachability probe for the sync layer. Hits the ROOT /health
   /// (NOT under /api/v1), so it builds off ApiConfig.baseUrl. Returns false on
   /// any error/timeout instead of throwing.
+  ///
+  /// A failed probe in a debug build re-resolves the base URL before giving
+  /// up. The dev backend moves -- the USB tunnel dies, DHCP reassigns the
+  /// machine's address -- and the sync layer calls this before every sync, so
+  /// it is the natural place to notice. Without it the app stayed pointed at
+  /// whatever it picked at launch until someone restarted it.
   Future<bool> checkHealth() async {
+    if (await _healthy(ApiConfig.baseUrl)) return true;
+    if (kReleaseMode) return false;
+
+    await ApiConfig.refresh();
+    return _healthy(ApiConfig.baseUrl);
+  }
+
+  Future<bool> _healthy(String origin) async {
     try {
       final response = await _client
-          .get(Uri.parse('${ApiConfig.baseUrl}/health'))
+          .get(Uri.parse('$origin/health'))
           .timeout(const Duration(seconds: 5));
       return response.statusCode == 200;
     } catch (_) {
