@@ -16,9 +16,11 @@ import '../../domain/repositories/auth_repository.dart';
 /// The app re-picks its backend (production vs. localhost) on every launch,
 /// but a JWT minted by one backend is meaningless to the other — they sign
 /// with different secrets and have different user databases. So every
-/// per-account key is namespaced by [originSlug], keyed off the backend's
-/// host+port, to stop a token (or cached identity) from one origin being
-/// misread as valid for another.
+/// per-account key is namespaced by [originSlug] to stop a token (or cached
+/// identity) from one backend being misread as valid for another.
+///
+/// The unit of separation is the *backend*, not the address: all the ways to
+/// reach a dev server share one namespace. See [originSlug].
 class AuthStorageKeys {
   const AuthStorageKeys._();
 
@@ -33,12 +35,44 @@ class AuthStorageKeys {
   /// backend it happens to be talking to.
   static const String currentOwnerId = 'current_owner_id';
 
+  /// The one namespace shared by every route to a development backend.
+  static const String devSlug = 'local';
+
   /// Stable slug for a backend origin (host+port).
+  ///
+  /// Every development address collapses onto [devSlug] on purpose. The USB
+  /// tunnel (127.0.0.1), the machine's Wi-Fi address and the emulator's host
+  /// alias (10.0.2.2) are three routes to the *same* backend holding the
+  /// *same* accounts. Giving each its own namespace orphaned the stored
+  /// session whenever the route changed -- which the person using the app
+  /// experiences as their diaries disappearing. A public origin still keeps
+  /// its own namespace: a token minted by production genuinely is meaningless
+  /// to a dev server, which is what this namespacing exists to prevent.
   static String originSlug(String baseUrl) {
     final uri = Uri.tryParse(baseUrl);
-    final host = (uri == null || uri.host.isEmpty) ? 'local' : uri.host;
+    final host = (uri == null || uri.host.isEmpty) ? '' : uri.host;
+    if (host.isEmpty || _isDevHost(host)) return devSlug;
     final port = uri?.port ?? 0;
     return '${host}_$port'.replaceAll(RegExp(r'[^A-Za-z0-9]+'), '_');
+  }
+
+  /// Loopback, and the private ranges a laptop is handed on a home, office or
+  /// tethered network -- including 10.0.2.2, the emulator's alias for its host.
+  static bool _isDevHost(String host) {
+    if (host == 'localhost' || host == '::1') return true;
+    return _isPrivateV4(host.split('.'));
+  }
+
+  static bool _isPrivateV4(List<String> octets) {
+    if (octets.length != 4) return false;
+    final a = int.tryParse(octets[0]);
+    final b = int.tryParse(octets[1]);
+    if (a == null || b == null) return false;
+    return a == 127 ||
+        a == 10 ||
+        (a == 192 && b == 168) ||
+        (a == 172 && b >= 16 && b <= 31) ||
+        (a == 169 && b == 254);
   }
 
   static String accessToken(String slug) => '${_accessTokenStem}_$slug';
@@ -46,6 +80,35 @@ class AuthStorageKeys {
   static String userId(String slug) => '${_userIdStem}_$slug';
   static String userEmail(String slug) => '${_userEmailStem}_$slug';
   static String userCreatedAt(String slug) => '${_userCreatedAtStem}_$slug';
+
+  /// Every per-account key for [slug], in a fixed order so a session can be
+  /// moved wholesale from one namespace to another.
+  static List<String> sessionKeys(String slug) => [
+    accessToken(slug),
+    refreshToken(slug),
+    userId(slug),
+    userEmail(slug),
+    userCreatedAt(slug),
+  ];
+
+  /// A session left behind by an older build that namespaced dev backends by
+  /// address, or null if there is none. Recognised by an access-token key
+  /// whose slug is a dev host+port, e.g. `access_token_127_0_0_1_8000`.
+  static String? legacyDevSlug(Iterable<String> storedKeys) {
+    const prefix = '${_accessTokenStem}_';
+    for (final key in storedKeys) {
+      if (!key.startsWith(prefix)) continue;
+      final slug = key.substring(prefix.length);
+      if (slug.isEmpty || slug == devSlug) continue;
+      // `127.0.0.1:8000` was stored as `127_0_0_1_8000`.
+      final parts = slug.split('_');
+      if (slug.startsWith('localhost_') ||
+          (parts.length == 5 && _isPrivateV4(parts.take(4).toList()))) {
+        return slug;
+      }
+    }
+    return null;
+  }
 }
 
 /// User model for authentication
@@ -132,13 +195,56 @@ class AuthService implements AuthRepository {
     return token != null;
   }
 
+  /// Runs at most once per instance; awaited by every token read.
+  Future<void>? _legacyMigration;
+
+  /// Adopts a session stored under an older, per-address dev slug.
+  ///
+  /// Dev sessions used to be namespaced by host+port, so the same backend
+  /// reached over the USB tunnel and over Wi-Fi looked like two different
+  /// accounts. Installs upgraded from such a build still hold their tokens
+  /// under the old name, and without this they would be silently signed out
+  /// -- which hides every account-owned diary behind an apparently empty app.
+  Future<void> _adoptLegacyDevSession() {
+    return _legacyMigration ??= _runLegacyDevMigration();
+  }
+
+  Future<void> _runLegacyDevMigration() async {
+    // A failure here must not take token reads down with it: no migration is
+    // recoverable, a broken getAccessToken() is not.
+    try {
+      if (_originSlug != AuthStorageKeys.devSlug) return;
+      final current = await _storage.read(
+        key: AuthStorageKeys.accessToken(AuthStorageKeys.devSlug),
+      );
+      if (current != null) return;
+
+      final stored = await _storage.readAll();
+      final legacy = AuthStorageKeys.legacyDevSlug(stored.keys);
+      if (legacy == null) return;
+
+      final from = AuthStorageKeys.sessionKeys(legacy);
+      final to = AuthStorageKeys.sessionKeys(AuthStorageKeys.devSlug);
+      for (var i = 0; i < from.length; i++) {
+        final value = stored[from[i]];
+        if (value != null) await _storage.write(key: to[i], value: value);
+        await _storage.delete(key: from[i]);
+      }
+      debugPrint('🔑 adopted dev session previously stored as "$legacy"');
+    } catch (error) {
+      debugPrint('🔑 legacy dev session not adopted: $error');
+    }
+  }
+
   /// Get stored access token
   Future<String?> getAccessToken() async {
+    await _adoptLegacyDevSession();
     return await _storage.read(key: AuthStorageKeys.accessToken(_originSlug));
   }
 
   /// Get stored refresh token
   Future<String?> getRefreshToken() async {
+    await _adoptLegacyDevSession();
     return await _storage.read(key: AuthStorageKeys.refreshToken(_originSlug));
   }
 

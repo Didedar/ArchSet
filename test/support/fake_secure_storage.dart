@@ -21,6 +21,8 @@ Map<String, String> installFakeSecureStorage() {
           case 'delete':
             values.remove(call.arguments['key']);
             return null;
+          case 'readAll':
+            return Map<String, String>.from(values);
           case 'deleteAll':
             values.clear();
             return null;

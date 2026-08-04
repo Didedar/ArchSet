@@ -78,8 +78,21 @@ void main() {
       expect(prodSlug, isNot(equals(localSlug)));
     });
 
-    test('produces the documented slug for 127.0.0.1:8000', () {
-      expect(AuthStorageKeys.originSlug(_localBaseUrl), '127_0_0_1_8000');
+    test('derives a stable, key-safe slug from a public origin', () {
+      expect(
+        AuthStorageKeys.originSlug(_prodBaseUrl),
+        'archset_backend_production_up_railway_app_443',
+      );
+    });
+
+    test('gives every route to the dev backend one namespace', () {
+      // The tunnel and the machine's Wi-Fi address reach the same server
+      // holding the same accounts. Namespacing them apart orphaned the stored
+      // session whenever the route changed.
+      expect(
+        AuthStorageKeys.originSlug(_localBaseUrl),
+        AuthStorageKeys.originSlug('http://10.240.102.61:8000'),
+      );
     });
   });
 
