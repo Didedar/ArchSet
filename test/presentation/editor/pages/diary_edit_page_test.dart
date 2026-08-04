@@ -6,6 +6,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:archset_r2/core/localization/app_strings.dart';
 import 'package:archset_r2/presentation/audio/bloc/audio_bloc.dart';
 import 'package:archset_r2/presentation/editor/bloc/editor_bloc.dart';
 import 'package:archset_r2/presentation/editor/pages/diary_edit_page.dart';
@@ -174,4 +175,33 @@ void main() {
     expect(find.byType(DiaryEditPage), findsOneWidget);
     expect(find.text('Save failed. Please try again.'), findsOneWidget);
   });
+
+  /// The overflow menu is a fixed 192pt column. A label that fits in English
+  /// can still run off the edge once translated, and every one of these
+  /// locales ships in the app -- so every one of them has to fit.
+  for (final code in AppStrings.supportedLanguageCodes) {
+    testWidgets('the editor menu fits its column in "$code"', (tester) async {
+      localeBloc = _MockLocaleBloc();
+      whenListen(
+        localeBloc,
+        const Stream<LocaleState>.empty(),
+        initialState: LocaleState(Locale(code)),
+      );
+
+      await pumpAndOpenEditor(tester);
+      await tester.tap(
+        find.descendant(
+          of: find.byType(CompositedTransformTarget),
+          matching: find.byType(IconButton),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'a menu label overflowed its column in "$code"',
+      );
+    });
+  }
 }

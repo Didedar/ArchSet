@@ -1735,13 +1735,20 @@ class _HoverMenuItemState extends State<_HoverMenuItem> {
             children: [
               Icon(widget.icon, color: color, size: 20),
               const SizedBox(width: 12),
-              Text(
-                widget.text,
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: color,
+              // Expanded, not bare: the menu is a fixed 192pt column, and an
+              // unconstrained label ran off the right edge -- by 15pt in
+              // English and up to 100pt once translated. Wrapping rather than
+              // ellipsising, because a menu that reads "Карта артеф…" has
+              // stopped doing its job.
+              Expanded(
+                child: Text(
+                  widget.text,
+                  style: TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: color,
+                  ),
                 ),
               ),
             ],

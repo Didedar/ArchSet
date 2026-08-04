@@ -249,3 +249,103 @@ class TestSeamsThatCouldBePriedOpen:
         assert note.title == "Слой 2", (
             "a revoked member still wrote into the dig site"
         )
+
+
+class TestReceivingAnInvitation:
+    """What the invitee's account actually shows after being invited.
+
+    Reported from the field: Ivan invited Maria, and her account had neither
+    the dig site nor any sign that an invitation had happened.
+    """
+
+    @pytest.mark.asyncio
+    async def test_an_invitation_arrives_on_the_next_incremental_sync(
+        self, client: AsyncClient, db_session, test_user, other_user,
+        auth_headers, other_auth_headers
+    ):
+        """Being invited changes no row the invitee can see.
+
+        The folder and its entries keep the `updated_at` they already had, so
+        an incremental pull -- "what changed since I last looked?" -- answered
+        "nothing" and the site never arrived. What matters to a client is what
+        is newly *visible*, which is recorded on the membership, not the rows.
+        """
+        db_session.add(
+            Folder(
+                id="f-invite",
+                user_id=test_user.id,
+                name="Раскоп 7",
+                color="#E8B731",
+                created_at=datetime(2026, 8, 1),
+                updated_at=datetime(2026, 8, 1),
+                is_deleted=False,
+            )
+        )
+        db_session.add(
+            Note(
+                id="n-before-invite",
+                user_id=test_user.id,
+                folder_id="f-invite",
+                title="Слой 2",
+                content="кость",
+                date=datetime(2026, 8, 1),
+                created_at=datetime(2026, 8, 1),
+                updated_at=datetime(2026, 8, 1),
+                is_deleted=False,
+            )
+        )
+        await db_session.commit()
+
+        # Maria syncs before the invitation: nothing is hers yet, and this is
+        # the cutoff her client keeps sending from now on.
+        first = await _sync(client, other_auth_headers)
+        assert first["folders"] == []
+        maria_last_sync = datetime.fromisoformat(first["sync_timestamp"])
+
+        db_session.add(
+            FolderMember(
+                folder_id="f-invite",
+                user_id=other_user.id,
+                joined_at=maria_last_sync + timedelta(seconds=1),
+            )
+        )
+        await db_session.commit()
+
+        pulled = await _sync(
+            client, other_auth_headers, last_sync_at=maria_last_sync
+        )
+
+        assert [f["name"] for f in pulled["folders"]] == ["Раскоп 7"], (
+            "the dig site never reached the person invited into it"
+        )
+        assert [n["id"] for n in pulled["notes"]] == ["n-before-invite"], (
+            "entries written before the invitation stayed invisible"
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_site_already_received_is_not_sent_again(
+        self, client: AsyncClient, db_session, shared_site, auth_headers,
+        other_auth_headers
+    ):
+        """Newly-visible is a one-time condition, not a standing exemption.
+
+        If membership kept overriding the cutoff, every quiet sync would drag
+        the whole site down the wire again.
+        """
+        await _sync(
+            client,
+            auth_headers,
+            notes=[_note("n-site", "Слой 2", datetime(2026, 8, 2, 9),
+                         folder_id="f-site")],
+        )
+        caught_up = await _sync(client, other_auth_headers)
+        assert any(n["id"] == "n-site" for n in caught_up["notes"])
+
+        quiet = await _sync(
+            client,
+            other_auth_headers,
+            last_sync_at=datetime.fromisoformat(caught_up["sync_timestamp"]),
+        )
+
+        assert quiet["folders"] == []
+        assert quiet["notes"] == []

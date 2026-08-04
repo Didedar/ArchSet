@@ -3,13 +3,14 @@ Sync service for handling offline-first synchronization.
 """
 
 from datetime import datetime
-from typing import List, Optional
-import os 
+from typing import List, Optional, Set
+import os
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
 from ..models.note import Note
 from ..models.folder import Folder
+from ..models.membership import FolderMember
 from ..models.user import User
 from ..utils.access import accessible_folder_ids
 from ..models.artifact import Artifact, ArtifactComment
@@ -86,6 +87,45 @@ class SyncService:
             Artifact.note_id.in_(select(Note.id).where(note_pred)),
         )
         return folder_ids, note_pred, artifact_pred
+
+    async def _newly_shared(
+        self, user: User, last_sync_at: Optional[datetime]
+    ) -> Set[str]:
+        """Dig sites this user gained access to since they last synced.
+
+        Being invited changes nothing about the folder or its entries: they
+        keep the `updated_at` they already had. So an incremental pull, which
+        asks "what changed since I last looked?", answers "nothing" and the
+        shared site never arrives -- the invitee sees an account with no trace
+        of the invitation at all.
+
+        The question that actually matters to a client is "what is newly
+        *visible* to me", and membership is where that is recorded. Every pull
+        below therefore unions its normal cutoff with everything reachable
+        through a membership granted after that cutoff.
+        """
+        if last_sync_at is None:
+            return set()  # a full pull already carries everything reachable
+
+        result = await self.db.execute(
+            select(FolderMember.folder_id).where(
+                FolderMember.user_id == user.id,
+                FolderMember.joined_at > last_sync_at,
+            )
+        )
+        return set(result.scalars().all())
+
+    @staticmethod
+    def _notes_in(folder_ids):
+        """Ids of every note filed under [folder_ids], as a subquery."""
+        return select(Note.id).where(Note.folder_id.in_(folder_ids))
+
+    @staticmethod
+    def _artifacts_in(folder_ids):
+        """Ids of every artifact hanging off those notes, as a subquery."""
+        return select(Artifact.id).where(
+            Artifact.note_id.in_(SyncService._notes_in(folder_ids))
+        )
 
     async def sync_notes(
         self,
@@ -223,11 +263,14 @@ class SyncService:
         query = select(Note).where(note_pred)
         
         if last_sync_at:
-            # Get notes updated after last sync
+            # Updated since last sync, or newly reachable through an
+            # invitation that did not touch the rows themselves.
+            newly_shared = await self._newly_shared(user, last_sync_at)
             query = query.where(
                 or_(
                     Note.updated_at > last_sync_at,
-                    Note.synced_at > last_sync_at
+                    Note.synced_at > last_sync_at,
+                    Note.folder_id.in_(newly_shared),
                 )
             )
         
@@ -341,7 +384,13 @@ class SyncService:
         query = select(Folder).where(Folder.id.in_(folder_ids))
         
         if last_sync_at:
-            query = query.where(Folder.updated_at > last_sync_at)
+            newly_shared = await self._newly_shared(user, last_sync_at)
+            query = query.where(
+                or_(
+                    Folder.updated_at > last_sync_at,
+                    Folder.id.in_(newly_shared),
+                )
+            )
         
         result = await self.db.execute(query)
         server_folders = result.scalars().all()
@@ -452,10 +501,12 @@ class SyncService:
         query = select(Artifact).where(artifact_pred)
 
         if last_sync_at:
+            newly_shared = await self._newly_shared(user, last_sync_at)
             query = query.where(
                 or_(
                     Artifact.updated_at > last_sync_at,
-                    Artifact.synced_at > last_sync_at
+                    Artifact.synced_at > last_sync_at,
+                    Artifact.note_id.in_(self._notes_in(newly_shared)),
                 )
             )
 
@@ -562,10 +613,14 @@ class SyncService:
         )
 
         if last_sync_at:
+            newly_shared = await self._newly_shared(user, last_sync_at)
             query = query.where(
                 or_(
                     ArtifactComment.updated_at > last_sync_at,
-                    ArtifactComment.synced_at > last_sync_at
+                    ArtifactComment.synced_at > last_sync_at,
+                    ArtifactComment.artifact_id.in_(
+                        self._artifacts_in(newly_shared)
+                    ),
                 )
             )
 
