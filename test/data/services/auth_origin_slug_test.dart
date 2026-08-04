@@ -132,6 +132,20 @@ void main() {
       expect(await service.getAccessToken(), isNull);
     });
 
+    test('un-namespaced keys from a much older build are ignored', () async {
+      // Real installs carry both: `access_token` from before namespacing
+      // existed, alongside `access_token_127_0_0_1_8000`. The bare one must
+      // not be mistaken for a slug, or it would be adopted as a session.
+      storage['access_token'] = 'ancient';
+      storage['user_id'] = 'someone-else';
+      givenSessionStoredAs('127_0_0_1_8000');
+      final service = devService();
+      addTearDown(service.dispose);
+
+      expect(await service.getAccessToken(), 'access');
+      expect(storage['access_token'], 'ancient', reason: 'left untouched');
+    });
+
     test('no stored session at all stays a guest', () async {
       final service = devService();
       addTearDown(service.dispose);
