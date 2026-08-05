@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Runs before every Flutter launch (see the preLaunchTask in
+      // launch.json). Brings up Postgres and the backend if they are down,
+      // re-creates the adb reverse tunnel and leaves a watchdog holding it
+      // open, and writes this machine's current Wi-Fi address to
+      // .dev-env.json for the build to pick up.
+      //
+      // Without it, launching from the IDE skipped all of that and the app
+      // could only reach the backend if a tunnel happened to still be alive.
+      "label": "dev-env",
+      "type": "shell",
+      "command": "./scripts/dev-env.sh",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}

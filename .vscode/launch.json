@@ -1,0 +1,29 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Flutter: Launch Frontend",
+      "type": "dart",
+      "request": "launch",
+      "program": "${workspaceFolder}/lib/main.dart",
+      "cwd": "${workspaceFolder}",
+      "flutterMode": "debug",
+      // Brings up Postgres, the backend and the USB tunnel, and refreshes
+      // .dev-env.json below. Without it, launching from the IDE skipped all
+      // of that and the app could only reach the backend when a tunnel
+      // happened to have survived from an earlier session -- which is why
+      // "Connection refused" kept coming back.
+      "preLaunchTask": "dev-env",
+      "toolArgs": [
+        // Mapbox public token lives in the gitignored mapbox.json; without it
+        // the artifacts map renders the "map is not configured" banner.
+        "--dart-define-from-file=mapbox.json",
+        // Written fresh by the task above: this machine's current address on
+        // the local network, so the app can still reach the backend over
+        // Wi-Fi when the USB tunnel is gone. Generated, never committed --
+        // DHCP hands out a different address every few days.
+        "--dart-define-from-file=.dev-env.json"
+      ]
+    }
+  ]
+}

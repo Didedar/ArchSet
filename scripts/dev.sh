@@ -1,84 +1,21 @@
 #!/usr/bin/env bash
 #
-# Run the app against the local backend without the ritual.
+# Run the app against the local backend from a terminal.
 #
-# Why this exists: the Android debug build used to reach the backend only at
-# 127.0.0.1:8000, which on a phone means the phone itself. That works solely
-# while an `adb reverse tcp:8000 tcp:8000` tunnel is alive -- and that tunnel
-# dies on every cable unplug, phone reboot and `adb kill-server`, with nothing
-# re-creating it. The symptom was a "Connection refused" that kept coming back
-# and looked like the backend was down.
-#
-# This does both halves so neither has to be remembered:
-#   1. re-creates the USB tunnel (harmless if it already exists);
-#   2. passes this machine's current Wi-Fi address to the build, so the app
-#      still reaches the backend when the tunnel is gone but the phone and the
-#      laptop are on the same network.
-#
-# The app tries production, then the tunnel, then Wi-Fi, and uses whichever
-# answers -- see ApiConfig.resolveBaseUrl.
+# The IDE does the same thing through .vscode/launch.json, whose preLaunchTask
+# runs the same dev-env.sh. Keeping one script for both is the point: a fix
+# applied in a terminal that does not reach the IDE launch path is how
+# "Connection refused" kept coming back.
 #
 # Usage:  ./scripts/dev.sh [extra flutter run args]
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PORT="${BACKEND_PORT:-8000}"
-
-# --- is the backend actually up? ------------------------------------------
-if ! lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-  echo "!! Nothing is listening on port $PORT."
-  echo "   Start Postgres and the backend first:"
-  echo "     docker compose up -d"
-  echo "     cd backend && source venv/bin/activate && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-  exit 1
-fi
-
-# --- USB tunnel, kept alive ------------------------------------------------
-# Creating the tunnel once is not enough. An `adb reverse` binding belongs to
-# one device connection and is lost on every cable unplug, `adb kill-server`
-# and phone reboot -- which is why "Connection refused" kept coming back after
-# it had supposedly been fixed. This re-creates it for as long as the app runs
-# and dies with this script.
-keep_tunnel_alive() {
-  while true; do
-    if ! adb reverse --list 2>/dev/null | grep -q "tcp:$PORT"; then
-      adb reverse "tcp:$PORT" "tcp:$PORT" >/dev/null 2>&1 || true
-    fi
-    sleep 3
-  done
-}
-
-if command -v adb >/dev/null 2>&1 && [ -n "$(adb devices | sed -n '2p')" ]; then
-  keep_tunnel_alive &
-  TUNNEL_PID=$!
-  trap 'kill "${TUNNEL_PID:-}" 2>/dev/null || true' EXIT INT TERM
-  echo "-> adb reverse tcp:$PORT will be re-created whenever it drops"
-else
-  echo "-- no adb device; relying on Wi-Fi instead"
-fi
-
-# --- Wi-Fi address ---------------------------------------------------------
-# en0 is Wi-Fi on most Macs; en1 covers the rest. Empty is fine -- the app
-# simply has one fewer candidate to try.
-HOST_IP="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
-
-if [ -n "$HOST_IP" ]; then
-  echo "-> this machine is $HOST_IP on the local network"
-  # The backend must be bound to 0.0.0.0, not 127.0.0.1, to answer there.
-  if ! curl -s -m 3 -o /dev/null "http://$HOST_IP:$PORT/health"; then
-    echo "!! $HOST_IP:$PORT does not answer /health."
-    echo "   The backend is probably bound to 127.0.0.1 only. Restart it with:"
-    echo "     uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-    echo "   Continuing anyway -- the USB tunnel may still work."
-  fi
-else
-  echo "-- no Wi-Fi address found"
-fi
+./scripts/dev-env.sh
 
 DEFINES=(--dart-define-from-file=mapbox.json)
-[ -n "$HOST_IP" ] && DEFINES+=(--dart-define=DEV_API_HOST="$HOST_IP")
+[ -f .dev-env.json ] && DEFINES+=(--dart-define-from-file=.dev-env.json)
 
 echo
-# Not `exec`: replacing this shell would orphan the tunnel watchdog above.
-flutter run "${DEFINES[@]}" "$@"
+exec flutter run "${DEFINES[@]}" "$@"
