@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:drift/drift.dart';
@@ -28,16 +29,58 @@ class NotesRepository {
         : (ownerKey.equals(owner) | ownerKey.isNull());
   }
 
+  /// Re-runs [build] from scratch whenever the signed-in account changes.
+  ///
+  /// A database watch compiles its WHERE clause once, when subscribed, and
+  /// then re-runs *that* query on every table change. Signing in mid-session
+  /// changes whose rows these are without touching a table, so a stream
+  /// opened while the app was a guest kept answering the guest's question --
+  /// the diary stayed empty, and entries written after signing in did not
+  /// show up either, because they carried an owner the frozen query was not
+  /// looking for.
+  Stream<T> _scopedToOwner<T>(Stream<T> Function() build) {
+    late StreamController<T> controller;
+    StreamSubscription<String?>? ownerSubscription;
+    StreamSubscription<T>? querySubscription;
+
+    void restartQuery() {
+      querySubscription?.cancel();
+      querySubscription = build().listen(
+        controller.add,
+        onError: controller.addError,
+      );
+    }
+
+    controller = StreamController<T>(
+      onListen: () {
+        // `changes` emits the current owner first, so this also starts the
+        // very first query.
+        ownerSubscription = _owner.changes.listen((_) => restartQuery());
+      },
+      onCancel: () async {
+        await ownerSubscription?.cancel();
+        await querySubscription?.cancel();
+      },
+    );
+    return controller.stream;
+  }
+
   // ==================== NOTES OPERATIONS ====================
 
   /// Stream of all notes, ordered by date descending
   Stream<List<Note>> watchAllNotes() {
-    return (database.select(database.notes)
-          ..where((t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey))
-          ..orderBy([
-            (t) => OrderingTerm(expression: t.date, mode: OrderingMode.desc),
-          ]))
-        .watch();
+    return _scopedToOwner(
+      () =>
+          (database.select(database.notes)
+                ..where(
+                  (t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey),
+                )
+                ..orderBy([
+                  (t) =>
+                      OrderingTerm(expression: t.date, mode: OrderingMode.desc),
+                ]))
+              .watch(),
+    );
   }
 
   /// Get a single note by ID
@@ -211,6 +254,10 @@ class NotesRepository {
 
   /// Watch notes in a specific folder (null = All Notes / uncategorized)
   Stream<List<Note>> watchNotesInFolder(String? folderId) {
+    return _scopedToOwner(() => _notesInFolder(folderId));
+  }
+
+  Stream<List<Note>> _notesInFolder(String? folderId) {
     if (folderId == null) {
       // All notes without a folder
       return (database.select(database.notes)
@@ -242,13 +289,20 @@ class NotesRepository {
 
   /// Stream of all folders, ordered by creation date
   Stream<List<Folder>> watchAllFolders() {
-    return (database.select(database.folders)
-          ..where((t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey))
-          ..orderBy([
-            (t) =>
-                OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc),
-          ]))
-        .watch();
+    return _scopedToOwner(
+      () =>
+          (database.select(database.folders)
+                ..where(
+                  (t) => t.isDeleted.equals(false) & _ownerFilter(t.ownerKey),
+                )
+                ..orderBy([
+                  (t) => OrderingTerm(
+                    expression: t.createdAt,
+                    mode: OrderingMode.asc,
+                  ),
+                ]))
+              .watch(),
+    );
   }
 
   /// Get a single folder by ID
@@ -324,6 +378,10 @@ class NotesRepository {
 
   /// Get count of notes in each folder
   Stream<Map<String, int>> watchFolderNoteCounts() {
+    return _scopedToOwner(_folderNoteCounts);
+  }
+
+  Stream<Map<String, int>> _folderNoteCounts() {
     final count = database.notes.id.count();
     final query = database.selectOnly(database.notes)
       ..addColumns([database.notes.folderId, count])
@@ -347,6 +405,10 @@ class NotesRepository {
 
   /// Get count of notes without a folder (All Notes)
   Stream<int> watchAllNotesCount() {
+    return _scopedToOwner(_allNotesCount);
+  }
+
+  Stream<int> _allNotesCount() {
     final count = database.notes.id.count();
     final query = database.selectOnly(database.notes)
       ..addColumns([count])
