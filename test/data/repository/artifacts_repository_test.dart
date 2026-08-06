@@ -114,8 +114,25 @@ void main() {
       expect(artifacts, isEmpty);
     });
 
-    test('survives an artifact whose noteId matches no note', () async {
+    test('drops an artifact whose entry was hard-deleted', () async {
+      // The editor hard-deletes once the server confirms, so the note row is
+      // gone rather than tombstoned. This used to assert the opposite -- that
+      // the pin survived with a null title -- because a left join to a missing
+      // row and a photo attached to nothing both read as "notes.isDeleted IS
+      // NULL". They are not the same thing, and treating them alike is what
+      // left pins on the map for diaries the user had deleted.
       await insertArtifact('a1', noteId: 'missing-note');
+
+      final artifacts = await repository.watchLocatedArtifacts().first;
+
+      expect(artifacts, isEmpty);
+    });
+
+    test('keeps a photo that was never attached to an entry', () async {
+      // The other half, and the reason the rule cannot simply be "the note
+      // must exist": a find photographed outside any entry has nothing to
+      // outlive, and must stay on the map.
+      await insertArtifact('a1');
 
       final artifacts = await repository.watchLocatedArtifacts().first;
 

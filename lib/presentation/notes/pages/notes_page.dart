@@ -131,12 +131,16 @@ class _NotesPageState extends State<NotesPage>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        AppStrings.tr(locale, AppStrings.myNotes),
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 25,
-                          color: textColor,
+                      // 25pt is large enough that a translated heading can
+                      // reach the settings icon on a narrow phone.
+                      Expanded(
+                        child: Text(
+                          AppStrings.tr(locale, AppStrings.myNotes),
+                          style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 25,
+                            color: textColor,
+                          ),
                         ),
                       ),
                       // Settings Icon

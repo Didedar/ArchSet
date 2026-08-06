@@ -13,8 +13,8 @@ part 'folders_state.dart';
 /// per-folder note counts, all-notes count) into one [FoldersLoadSuccess].
 class FoldersBloc extends Bloc<FoldersEvent, FoldersState> {
   FoldersBloc({required NotesRepository repository})
-      : _repository = repository,
-        super(const FoldersInitial()) {
+    : _repository = repository,
+      super(const FoldersInitial()) {
     on<FoldersSubscriptionRequested>(
       _onSubscriptionRequested,
       transformer: restartable(),
@@ -42,15 +42,15 @@ class FoldersBloc extends Bloc<FoldersEvent, FoldersState> {
     await _foldersSub?.cancel();
     await _countsSub?.cancel();
     await _allNotesCountSub?.cancel();
-    _foldersSub = _repository
-        .watchAllFolders()
-        .listen((folders) => add(_FoldersUpdated(folders)));
-    _countsSub = _repository
-        .watchFolderNoteCounts()
-        .listen((counts) => add(_FolderCountsUpdated(counts)));
-    _allNotesCountSub = _repository
-        .watchAllNotesCount()
-        .listen((count) => add(_AllNotesCountUpdated(count)));
+    _foldersSub = _repository.watchAllFolders().listen(
+      (folders) => add(_FoldersUpdated(folders)),
+    );
+    _countsSub = _repository.watchFolderNoteCounts().listen(
+      (counts) => add(_FolderCountsUpdated(counts)),
+    );
+    _allNotesCountSub = _repository.watchAllNotesCount().listen(
+      (count) => add(_AllNotesCountUpdated(count)),
+    );
   }
 
   Future<void> _onCreateRequested(

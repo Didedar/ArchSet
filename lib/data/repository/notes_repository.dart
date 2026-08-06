@@ -233,6 +233,25 @@ class NotesRepository {
       }
     }
 
+    // The finds photographed in this entry go with it, exactly as in
+    // `deleteNote`. Missed here at first, and this is the path the editor
+    // actually takes once the server confirms the deletion -- so the pins
+    // stayed on the map, pointing at an entry that no longer existed.
+    //
+    // Soft-deleted rather than removed outright: artifacts carry no
+    // `pendingSync` flag, so the fresh `updatedAt` is what schedules the
+    // deletion for the server and, through it, a colleague's map. Done before
+    // the note row goes, since after that there is nothing to look the
+    // artifacts up by.
+    await (database.update(
+      database.imageMetadata,
+    )..where((t) => t.noteId.equals(id))).write(
+      ImageMetadataCompanion(
+        isDeleted: const Value(true),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+
     // Hard delete from DB
     await (database.delete(database.notes)..where((t) => t.id.equals(id))).go();
   }

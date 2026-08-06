@@ -313,12 +313,14 @@ class _AnalysisDialog extends StatelessWidget {
           children: [
             const Icon(Icons.location_on, color: Color(0xFFFF9000), size: 16),
             const SizedBox(width: 8),
-            Text(
-              '${lat.toStringAsFixed(5)}, ${long.toStringAsFixed(5)}',
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-                fontFamily: 'Inter',
+            Flexible(
+              child: Text(
+                '${lat.toStringAsFixed(5)}, ${long.toStringAsFixed(5)}',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontFamily: 'Inter',
+                ),
               ),
             ),
           ],

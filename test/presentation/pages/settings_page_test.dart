@@ -377,4 +377,36 @@ void main() {
 
     verify(() => sessionCubit.logout()).called(1);
   });
+
+  /// Every locale ships in the app, and the app supports phones down to about
+  /// 320pt wide. A settings row that fits an English label on a roomy screen
+  /// can still run off the edge once translated, or on a small handset -- and
+  /// an overflow there is a red-and-yellow stripe across a screen people open
+  /// to sign out.
+  for (final code in AppStrings.supportedLanguageCodes) {
+    for (final width in const [320.0, 411.0]) {
+      testWidgets('fits at ${width.toInt()}pt wide in "$code"', (tester) async {
+        tester.view.physicalSize = Size(width, 780);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        localeBloc = _MockLocaleBloc();
+        whenListen(
+          localeBloc,
+          const Stream<LocaleState>.empty(),
+          initialState: LocaleState(Locale(code)),
+        );
+
+        await pumpSettingsPage(tester);
+        await tester.pumpAndSettle();
+
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'settings overflowed at ${width.toInt()}pt in "$code"',
+        );
+      });
+    }
+  }
 }

@@ -257,6 +257,56 @@ void main() {
       )..where((t) => t.id.equals('a2'))).getSingle();
       expect(other.isDeleted, isFalse);
     });
+
+    /// The editor takes this path, not `deleteNote`, whenever the server
+    /// confirms the deletion -- which is the usual case online. The cascade
+    /// was added to `deleteNote` alone, so in practice the pins kept surviving
+    /// the entries they belonged to.
+    test('hardDeleteNote takes the artifacts with it too', () async {
+      await repository.insertNote(note('n1'));
+      await database
+          .into(database.imageMetadata)
+          .insert(
+            ImageMetadataCompanion.insert(
+              id: 'a1',
+              imagePath: '/photos/a1.jpg',
+              capturedAt: DateTime(2026, 8, 2),
+              noteId: const Value('n1'),
+            ),
+          );
+
+      await repository.hardDeleteNote('n1');
+
+      final artifact = await (database.select(
+        database.imageMetadata,
+      )..where((t) => t.id.equals('a1'))).getSingle();
+      expect(artifact.isDeleted, isTrue, reason: 'the pin must go with the entry');
+      expect(artifact.updatedAt, isNotNull, reason: 'so the deletion syncs');
+    });
+
+    test('hardDeleteNote leaves another entry\'s artifacts alone', () async {
+      await repository.insertNote(note('n1'));
+      await repository.insertNote(note('n2'));
+      for (final (id, noteId) in [('a1', 'n1'), ('a2', 'n2')]) {
+        await database
+            .into(database.imageMetadata)
+            .insert(
+              ImageMetadataCompanion.insert(
+                id: id,
+                imagePath: '/photos/$id.jpg',
+                capturedAt: DateTime(2026, 8, 2),
+                noteId: Value(noteId),
+              ),
+            );
+      }
+
+      await repository.hardDeleteNote('n1');
+
+      final other = await (database.select(
+        database.imageMetadata,
+      )..where((t) => t.id.equals('a2'))).getSingle();
+      expect(other.isDeleted, isFalse);
+    });
   });
 
   group('createFolder', () {

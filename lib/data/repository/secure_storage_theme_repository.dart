@@ -4,7 +4,7 @@ import '../../domain/repositories/theme_repository.dart';
 
 class SecureStorageThemeRepository implements ThemeRepository {
   const SecureStorageThemeRepository({required FlutterSecureStorage storage})
-      : _storage = storage;
+    : _storage = storage;
 
   static const _key = 'theme_mode';
 

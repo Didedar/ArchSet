@@ -31,9 +31,9 @@ final class TranscriptionState extends Equatable {
 
   @override
   List<Object?> get props => [
-        engine,
-        isModelDownloaded,
-        isDownloading,
-        downloadProgress,
-      ];
+    engine,
+    isModelDownloaded,
+    isDownloading,
+    downloadProgress,
+  ];
 }

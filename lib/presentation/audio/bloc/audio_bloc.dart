@@ -21,10 +21,10 @@ class AudioBloc extends Bloc<AudioEvent, AudioState> {
     required AudioService audioService,
     required BackendGeminiService geminiService,
     required WhisperService whisperService,
-  })  : _audioService = audioService,
-        _geminiService = geminiService,
-        _whisperService = whisperService,
-        super(const AudioState()) {
+  }) : _audioService = audioService,
+       _geminiService = geminiService,
+       _whisperService = whisperService,
+       super(const AudioState()) {
     on<AudioInitRequested>(_onInitRequested, transformer: droppable());
     on<AudioRecordingToggleRequested>(
       _onRecordingToggleRequested,
@@ -82,10 +82,7 @@ class AudioBloc extends Bloc<AudioEvent, AudioState> {
     );
     on<_AmplitudesUpdated>(_onAmplitudesUpdated, transformer: sequential());
     on<_PlayerStateUpdated>(_onPlayerStateUpdated, transformer: sequential());
-    on<_CurrentIndexUpdated>(
-      _onCurrentIndexUpdated,
-      transformer: sequential(),
-    );
+    on<_CurrentIndexUpdated>(_onCurrentIndexUpdated, transformer: sequential());
 
     _setupListeners();
   }
@@ -153,8 +150,7 @@ class AudioBloc extends Bloc<AudioEvent, AudioState> {
 
       final jsonString = await file.readAsString();
       final List<dynamic> jsonList = jsonDecode(jsonString);
-      final segments =
-          jsonList.map((e) => AudioSegment.fromJson(e)).toList();
+      final segments = jsonList.map((e) => AudioSegment.fromJson(e)).toList();
       final totalDuration = segments.fold<Duration>(
         Duration.zero,
         (sum, segment) => sum + segment.duration,
@@ -283,7 +279,9 @@ class AudioBloc extends Bloc<AudioEvent, AudioState> {
       // swallowed, leaving lastTranscription null.
     }
 
-    emit(state.copyWith(isTranscribing: false, lastTranscription: transcription));
+    emit(
+      state.copyWith(isTranscribing: false, lastTranscription: transcription),
+    );
   }
 
   Future<String?> _saveSegmentsMetadata() async {
@@ -398,10 +396,7 @@ class AudioBloc extends Bloc<AudioEvent, AudioState> {
     );
   }
 
-  void _onSegmentRenamed(
-    AudioSegmentRenamed event,
-    Emitter<AudioState> emit,
-  ) {
+  void _onSegmentRenamed(AudioSegmentRenamed event, Emitter<AudioState> emit) {
     final index = event.index;
     if (index < 0 || index >= state.segments.length) return;
     if (event.name.trim().isEmpty) return;
@@ -481,9 +476,7 @@ class AudioBloc extends Bloc<AudioEvent, AudioState> {
     if (wasPlayingDeletedSegment) {
       await _audioService.stopAudio();
     } else if (state.currentSegmentIndex > index) {
-      emit(
-        state.copyWith(currentSegmentIndex: state.currentSegmentIndex - 1),
-      );
+      emit(state.copyWith(currentSegmentIndex: state.currentSegmentIndex - 1));
     }
   }
 

@@ -337,14 +337,16 @@ class SettingsPage extends StatelessWidget {
                                     size: 16,
                                   ),
                                   const SizedBox(width: 8),
-                                  Text(
-                                    AppStrings.tr(
-                                      currentLocale,
-                                      AppStrings.modelDownloaded,
-                                    ),
-                                    style: GoogleFonts.inter(
-                                      color: Colors.green,
-                                      fontSize: 12,
+                                  Flexible(
+                                    child: Text(
+                                      AppStrings.tr(
+                                        currentLocale,
+                                        AppStrings.modelDownloaded,
+                                      ),
+                                      style: GoogleFonts.inter(
+                                        color: Colors.green,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -484,15 +486,21 @@ class SettingsPage extends StatelessWidget {
             color: color,
           ),
           const SizedBox(width: 6),
-          Text(
-            AppStrings.tr(
-              locale,
-              isGuest ? AppStrings.noAccount : AppStrings.signedIn,
-            ),
-            style: GoogleFonts.inter(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+          // Flexible even though the row is MainAxisSize.min: asking for the
+          // natural width is not the same as staying inside what the parent
+          // offers. On a 320pt phone the Kazakh label ran 11pt past the edge
+          // of the header column.
+          Flexible(
+            child: Text(
+              AppStrings.tr(
+                locale,
+                isGuest ? AppStrings.noAccount : AppStrings.signedIn,
+              ),
+              style: GoogleFonts.inter(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],
@@ -634,15 +642,21 @@ class SettingsPage extends StatelessWidget {
           children: [
             Icon(icon, color: effectiveColor, size: 24),
             const SizedBox(width: 16),
-            Text(
-              text,
-              style: GoogleFonts.inter(
-                color: effectiveTextColor,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+            // Expanded rather than a bare Text followed by a Spacer: the label
+            // claimed its natural width and shoved the trailing widget off the
+            // right edge -- by 20pt on a 320pt phone even in English, more once
+            // translated. Expanded also does the Spacer's job, so the row still
+            // ends flush right.
+            Expanded(
+              child: Text(
+                text,
+                style: GoogleFonts.inter(
+                  color: effectiveTextColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const Spacer(),
             if (trailing != null) trailing,
           ],
         ),

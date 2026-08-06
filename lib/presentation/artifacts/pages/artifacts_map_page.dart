@@ -467,9 +467,13 @@ class _UnlocatedChip extends StatelessWidget {
                 color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               ),
               const SizedBox(width: 8),
-              Text(
-                '$count $label',
-                style: theme.textTheme.bodySmall?.copyWith(fontFamily: 'Inter'),
+              Flexible(
+                child: Text(
+                  '$count $label',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'Inter',
+                  ),
+                ),
               ),
             ],
           ),

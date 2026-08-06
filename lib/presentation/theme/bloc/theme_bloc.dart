@@ -9,8 +9,8 @@ part 'theme_state.dart';
 
 class ThemeBloc extends Bloc<ThemeEvent, ThemeState> {
   ThemeBloc({required ThemeRepository repository})
-      : _repository = repository,
-        super(const ThemeState(ThemeMode.system)) {
+    : _repository = repository,
+      super(const ThemeState(ThemeMode.system)) {
     on<ThemeEvent>(
       (event, emit) => switch (event) {
         ThemeLoadRequested() => _onLoadRequested(event, emit),

@@ -50,9 +50,9 @@ class SessionCubit extends Cubit<AppSession> {
     required AuthRepository repository,
     CurrentOwnerHolder? ownerHolder,
     Stream<void>? sessionExpiredSignal,
-  })  : _repository = repository,
-        _ownerHolder = ownerHolder ?? CurrentOwnerHolder(),
-        super(const SessionUnknown()) {
+  }) : _repository = repository,
+       _ownerHolder = ownerHolder ?? CurrentOwnerHolder(),
+       super(const SessionUnknown()) {
     _expiredSub = sessionExpiredSignal?.listen((_) => sessionLost());
   }
 
@@ -99,8 +99,9 @@ class SessionCubit extends Cubit<AppSession> {
   /// repository read triggered by a rebuilt widget) already sees the right
   /// owner.
   void _emit(AppSession session) {
-    _ownerHolder.value =
-        session is SessionAuthenticated ? session.user.id : null;
+    _ownerHolder.value = session is SessionAuthenticated
+        ? session.user.id
+        : null;
     emit(session);
   }
 

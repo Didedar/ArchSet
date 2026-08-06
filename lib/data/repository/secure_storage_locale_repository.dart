@@ -4,7 +4,7 @@ import '../../domain/repositories/locale_repository.dart';
 
 class SecureStorageLocaleRepository implements LocaleRepository {
   const SecureStorageLocaleRepository({required FlutterSecureStorage storage})
-      : _storage = storage;
+    : _storage = storage;
 
   static const _key = 'language_code';
 

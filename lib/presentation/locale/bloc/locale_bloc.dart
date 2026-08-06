@@ -9,8 +9,8 @@ part 'locale_state.dart';
 
 class LocaleBloc extends Bloc<LocaleEvent, LocaleState> {
   LocaleBloc({required LocaleRepository repository})
-      : _repository = repository,
-        super(const LocaleState(Locale('en'))) {
+    : _repository = repository,
+      super(const LocaleState(Locale('en'))) {
     on<LocaleEvent>(
       (event, emit) => switch (event) {
         LocaleLoadRequested() => _onLoadRequested(event, emit),

@@ -133,12 +133,18 @@ class _FolderDetailPageState extends State<FolderDetailPage>
                 ),
               ),
               const SizedBox(width: 10),
-              Text(
-                widget.folder.name,
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18,
-                  color: theme.colorScheme.onSurface,
+              // A dig site's name is whatever the archaeologist typed, and an
+              // AppBar title has no room to spare. Flexible lets it ellipsise
+              // instead of striping the bar.
+              Flexible(
+                child: Text(
+                  widget.folder.name,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                    color: theme.colorScheme.onSurface,
+                  ),
                 ),
               ),
             ],
@@ -170,9 +176,11 @@ class _FolderDetailPageState extends State<FolderDetailPage>
                         size: 20,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        AppStrings.tr(locale, AppStrings.deleteFolder),
-                        style: GoogleFonts.inter(color: Colors.redAccent),
+                      Flexible(
+                        child: Text(
+                          AppStrings.tr(locale, AppStrings.deleteFolder),
+                          style: GoogleFonts.inter(color: Colors.redAccent),
+                        ),
                       ),
                     ],
                   ),

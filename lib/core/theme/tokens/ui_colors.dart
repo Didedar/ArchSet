@@ -12,18 +12,18 @@ class UiColors {
   });
 
   const UiColors.light()
-      : primary = Colors.black,
-        surface = Colors.white,
-        background = const Color(0xFFF2F2F7),
-        secondary = const Color(0xFFE5E5EA),
-        divider = const Color(0xFFC6C6C8);
+    : primary = Colors.black,
+      surface = Colors.white,
+      background = const Color(0xFFF2F2F7),
+      secondary = const Color(0xFFE5E5EA),
+      divider = const Color(0xFFC6C6C8);
 
   const UiColors.dark()
-      : primary = Colors.white,
-        surface = const Color(0xFF2C2C2E),
-        background = Colors.black,
-        secondary = const Color(0xFF1C1C1E),
-        divider = const Color(0xFF38383A);
+    : primary = Colors.white,
+      surface = const Color(0xFF2C2C2E),
+      background = Colors.black,
+      secondary = const Color(0xFF1C1C1E),
+      divider = const Color(0xFF38383A);
 
   final Color primary;
   final Color surface;

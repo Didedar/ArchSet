@@ -50,27 +50,31 @@ class AppRunner {
 
         await _composeAndRun(binding, logger);
       },
-      (error, stackTrace) => logger.error('Uncaught zone error', error, stackTrace),
+      (error, stackTrace) =>
+          logger.error('Uncaught zone error', error, stackTrace),
     );
   }
 
   Future<void> _composeAndRun(WidgetsBinding binding, Logger logger) async {
     try {
-      final Dependencies dependencies =
-          await CompositionRoot(logger).initDependencies();
+      final Dependencies dependencies = await CompositionRoot(
+        logger,
+      ).initDependencies();
       binding.allowFirstFrame();
       runApp(AppScope(dependencies: dependencies, child: const RootContext()));
     } catch (error, stackTrace) {
       logger.error('Failed to initialize dependencies', error, stackTrace);
       binding.allowFirstFrame();
-      runApp(MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: StartupErrorScreen(
-          error: error,
-          stackTrace: stackTrace,
-          onRetry: () => _composeAndRun(binding, logger),
+      runApp(
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          home: StartupErrorScreen(
+            error: error,
+            stackTrace: stackTrace,
+            onRetry: () => _composeAndRun(binding, logger),
+          ),
         ),
-      ));
+      );
     }
   }
 }

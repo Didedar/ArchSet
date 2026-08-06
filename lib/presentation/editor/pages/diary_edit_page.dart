@@ -1619,12 +1619,14 @@ class _DiaryEditPageState extends State<DiaryEditPage> {
               size: 20,
             ),
             const SizedBox(width: 8),
-            Text(
-              AppStrings.tr(locale, AppStrings.aiAssistant), // "AI Assistant"
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontWeight: FontWeight.w600,
-                color: isDark ? Colors.white : Colors.black,
+            Flexible(
+              child: Text(
+                AppStrings.tr(locale, AppStrings.aiAssistant),
+                style: TextStyle(
+                  fontFamily: 'Inter',
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
               ),
             ),
           ],

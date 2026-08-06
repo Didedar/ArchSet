@@ -406,12 +406,14 @@ class _CreateFolderButtonState extends State<_CreateFolderButton> {
                 size: 20,
               ), // Keep gold/orange for action
               const SizedBox(width: 8),
-              Text(
-                AppStrings.tr(locale, AppStrings.createNewFolder),
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 15,
-                  color: const Color(0xFFE8B731),
+              Flexible(
+                child: Text(
+                  AppStrings.tr(locale, AppStrings.createNewFolder),
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 15,
+                    color: const Color(0xFFE8B731),
+                  ),
                 ),
               ),
             ],

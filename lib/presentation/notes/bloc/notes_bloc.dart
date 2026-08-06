@@ -11,8 +11,8 @@ part 'notes_state.dart';
 
 class NotesBloc extends Bloc<NotesEvent, NotesState> {
   NotesBloc({required NotesRepository repository})
-      : _repository = repository,
-        super(const NotesInitial()) {
+    : _repository = repository,
+      super(const NotesInitial()) {
     on<NotesSubscriptionRequested>(
       _onSubscriptionRequested,
       transformer: restartable(),

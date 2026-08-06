@@ -9,8 +9,8 @@ part 'auth_state.dart';
 
 class AuthBloc extends Bloc<AuthEvent, AuthState> {
   AuthBloc({required AuthRepository repository})
-      : _repository = repository,
-        super(const AuthInitial()) {
+    : _repository = repository,
+      super(const AuthInitial()) {
     on<AuthCheckRequested>(_onCheckRequested, transformer: droppable());
     on<AuthLoginRequested>(_onLoginRequested, transformer: droppable());
     on<AuthRegisterRequested>(_onRegisterRequested, transformer: droppable());

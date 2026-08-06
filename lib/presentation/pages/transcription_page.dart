@@ -444,14 +444,18 @@ class _TranscriptionPageState extends State<TranscriptionPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                segment.audioName,
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                  color: textColor,
+              Expanded(
+                child: Text(
+                  segment.audioName,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                    color: textColor,
+                  ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${TranscriptionSegment.formatDuration(position)} / ${TranscriptionSegment.formatDuration(duration)}',
                 style: GoogleFonts.inter(
@@ -635,13 +639,18 @@ class _TranscriptionSegmentCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              // Audio name
-              Text(
-                segment.audioName,
-                style: GoogleFonts.inter(
-                  fontWeight: FontWeight.w400,
-                  fontSize: 13,
-                  color: theme.colorScheme.onSurface.withOpacity(0.5),
+              // Audio name. Flexible because the name is whatever the file was
+              // called -- the timestamp beside it is fixed width, so this is
+              // the part that has to give.
+              Flexible(
+                child: Text(
+                  segment.audioName,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w400,
+                    fontSize: 13,
+                    color: theme.colorScheme.onSurface.withOpacity(0.5),
+                  ),
                 ),
               ),
             ],

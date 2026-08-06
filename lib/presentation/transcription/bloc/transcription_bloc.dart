@@ -8,8 +8,8 @@ part 'transcription_state.dart';
 
 class TranscriptionBloc extends Bloc<TranscriptionEvent, TranscriptionState> {
   TranscriptionBloc({required WhisperService whisperService})
-      : _whisperService = whisperService,
-        super(const TranscriptionState()) {
+    : _whisperService = whisperService,
+      super(const TranscriptionState()) {
     on<TranscriptionModelStatusChecked>(_onModelStatusChecked);
     on<TranscriptionEngineChanged>(_onEngineChanged);
     on<TranscriptionModelDownloadRequested>(

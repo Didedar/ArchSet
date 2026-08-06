@@ -106,21 +106,21 @@ final class AudioState extends Equatable {
 
   @override
   List<Object?> get props => [
-        recordingState,
-        playbackState,
-        recordingDuration,
-        playbackPosition,
-        playbackTotalDuration,
-        audioPath,
-        amplitudes,
-        playbackSpeed,
-        errorMessage,
-        segments,
-        isSegmentsPopupVisible,
-        segmentCounter,
-        isPlayerExpanded,
-        currentSegmentIndex,
-        isTranscribing,
-        lastTranscription,
-      ];
+    recordingState,
+    playbackState,
+    recordingDuration,
+    playbackPosition,
+    playbackTotalDuration,
+    audioPath,
+    amplitudes,
+    playbackSpeed,
+    errorMessage,
+    segments,
+    isSegmentsPopupVisible,
+    segmentCounter,
+    isPlayerExpanded,
+    currentSegmentIndex,
+    isTranscribing,
+    lastTranscription,
+  ];
 }
