@@ -129,7 +129,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   /// Indexes covering every filter/sort the repository actually issues.
   ///
@@ -266,6 +266,29 @@ class AppDatabase extends _$AppDatabase {
         if (from >= 8) {
           await m.addColumn(artifactComments, artifactComments.authorId);
         }
+      }
+      if (from < 12) {
+        // A one-time sweep for finds whose entry is already gone.
+        //
+        // Deleting a diary was supposed to take its photographed finds with
+        // it, but for a long while it only did so on one of the two delete
+        // paths -- the editor takes the other whenever the server confirms.
+        // Those artifacts are still alive here and, worse, still alive on the
+        // server, so hiding them locally would leave them on a colleague's
+        // map. Tombstoning them with a fresh updatedAt is what actually
+        // removes them: the sync layer picks artifacts up by
+        // `updatedAt > lastSyncAt`.
+        //
+        // Safe to run at open: a note that simply has not been pulled yet is
+        // not a case here, because notes are applied before artifacts inside
+        // one sync transaction, and no sync has run at this point.
+        await customStatement('''
+          UPDATE image_metadata
+             SET is_deleted = 1, updated_at = ?
+           WHERE note_id IS NOT NULL
+             AND is_deleted = 0
+             AND note_id NOT IN (SELECT id FROM notes)
+        ''', [DateTime.now().millisecondsSinceEpoch ~/ 1000]);
       }
     },
   );

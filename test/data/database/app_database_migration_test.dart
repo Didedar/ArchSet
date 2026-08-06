@@ -171,7 +171,7 @@ void main() {
     // Any query forces the migration to run.
     final rows = await database.select(database.imageMetadata).get();
 
-    expect(database.schemaVersion, 11);
+    expect(database.schemaVersion, 12);
     expect(rows.single.id, 'legacy');
     expect(rows.single.latitude, 12.5);
     // New columns take their defaults rather than dropping the row.
@@ -198,7 +198,7 @@ void main() {
       final notes = await database.select(database.notes).get();
       final folders = await database.select(database.folders).get();
 
-      expect(database.schemaVersion, 11);
+      expect(database.schemaVersion, 12);
       expect(notes.single.pendingSync, isFalse);
       expect(notes.single.ownerKey, isNull);
       expect(folders.single.pendingSync, isFalse);
@@ -293,7 +293,7 @@ void main() {
     final artifacts = await database.select(database.imageMetadata).get();
     final comments = await database.select(database.artifactComments).get();
 
-    expect(database.schemaVersion, 11);
+    expect(database.schemaVersion, 12);
 
     // Null, not zero: a row that has never been to the server has no revision
     // to have been based on, and zero would look like a real one.
@@ -332,7 +332,7 @@ void main() {
       final notes = await database.select(database.notes).get();
       final folders = await database.select(database.folders).get();
 
-      expect(database.schemaVersion, 11);
+      expect(database.schemaVersion, 12);
 
       // Null, not the owner: rows that predate authorship have no recorded
       // author, and inventing one would claim knowledge the database never had.
@@ -433,5 +433,60 @@ void main() {
 
     final rows = await database.select(database.imageMetadata).get();
     expect(rows.single.noteId, 'note-1');
+  });
+
+  group('v12 sweeps up finds left behind by a deleted entry', () {
+    /// Deleting a diary was meant to take its photographed finds with it, but
+    /// for a long while only one of the two delete paths did so -- and the
+    /// editor takes the other whenever the server confirms. Those artifacts
+    /// are still here, and still alive on the server, so hiding them locally
+    /// would leave them on a colleague's map. Tombstoning them with a fresh
+    /// updatedAt is what actually removes them: the sync layer picks artifacts
+    /// up by `updatedAt > lastSyncAt`.
+    test('an orphaned find is tombstoned so the deletion syncs', () async {
+      final raw = buildV8Database();
+      raw.execute(
+        "INSERT INTO notes (id, title, content, date, is_deleted) "
+        "VALUES ('n-alive','T','C',1767225600,0)",
+      );
+      raw.execute(
+        "INSERT INTO image_metadata "
+        "(id, image_path, latitude, longitude, analysis_result, captured_at, note_id) "
+        "VALUES ('a-orphan','/p/a.jpg',12.5,41.9,NULL,1767225600,'n-gone')",
+      );
+      raw.execute(
+        "INSERT INTO image_metadata "
+        "(id, image_path, latitude, longitude, analysis_result, captured_at, note_id) "
+        "VALUES ('a-kept','/p/b.jpg',12.5,41.9,NULL,1767225600,'n-alive')",
+      );
+
+      final database = AppDatabase.forTesting(NativeDatabase.opened(raw));
+      addTearDown(database.close);
+
+      final rows = await database.select(database.imageMetadata).get();
+      final orphan = rows.firstWhere((r) => r.id == 'a-orphan');
+      final kept = rows.firstWhere((r) => r.id == 'a-kept');
+
+      expect(orphan.isDeleted, isTrue);
+      expect(orphan.updatedAt, isNotNull, reason: 'so the removal reaches the server');
+      expect(kept.isDeleted, isFalse, reason: 'its entry is still there');
+    });
+
+    test('a photo attached to no entry at all is left alone', () async {
+      // Nothing to outlive: it was never part of a diary, so it stays.
+      final raw = buildV8Database();
+      raw.execute(
+        "INSERT INTO image_metadata "
+        "(id, image_path, latitude, longitude, analysis_result, captured_at) "
+        "VALUES ('a-loose','/p/c.jpg',12.5,41.9,NULL,1767225600)",
+      );
+
+      final database = AppDatabase.forTesting(NativeDatabase.opened(raw));
+      addTearDown(database.close);
+
+      final row = (await database.select(database.imageMetadata).get()).single;
+
+      expect(row.isDeleted, isFalse);
+    });
   });
 }

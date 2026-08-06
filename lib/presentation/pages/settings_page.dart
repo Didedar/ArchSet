@@ -189,11 +189,18 @@ class SettingsPage extends StatelessWidget {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            _getLanguageName(currentLocale.languageCode),
-                            style: GoogleFonts.inter(
-                              color: textColor.withOpacity(0.5),
-                              fontSize: 14,
+                          // The value sits in a nested Row, and a Row is what
+                          // overflows -- a Text on its own would just clip.
+                          // So the shrinking has to be asked for here.
+                          Flexible(
+                            child: Text(
+                              _getLanguageName(currentLocale.languageCode),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                color: textColor.withOpacity(0.5),
+                                fontSize: 14,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -389,6 +396,8 @@ class SettingsPage extends StatelessWidget {
                         textColor: textColor,
                         trailing: Text(
                           user.id,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
                             color: textColor.withOpacity(0.5),
                             fontSize: 14,
@@ -404,6 +413,8 @@ class SettingsPage extends StatelessWidget {
                         textColor: textColor,
                         trailing: Text(
                           user.email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
                             color: textColor.withOpacity(0.5),
                             fontSize: 14,
@@ -642,12 +653,18 @@ class SettingsPage extends StatelessWidget {
           children: [
             Icon(icon, color: effectiveColor, size: 24),
             const SizedBox(width: 16),
-            // Expanded rather than a bare Text followed by a Spacer: the label
-            // claimed its natural width and shoved the trailing widget off the
-            // right edge -- by 20pt on a 320pt phone even in English, more once
-            // translated. Expanded also does the Spacer's job, so the row still
-            // ends flush right.
-            Expanded(
+            // Both sides have to bend, and neither may take everything.
+            //
+            // A bare label with a Spacer overflowed: it claimed its natural
+            // width and shoved the trailing widget off the edge. Making only
+            // the label Expanded was worse -- an unbounded trailing (the user
+            // id is a 36-character uuid) was measured first and left the label
+            // nothing, so "User ID" came out stacked one letter per line.
+            //
+            // Flexible for the label so it takes what it needs and no more,
+            // Expanded for the value so it fills the rest and ends flush right
+            // the way the Spacer used to make it.
+            Flexible(
               child: Text(
                 text,
                 style: GoogleFonts.inter(
@@ -657,7 +674,15 @@ class SettingsPage extends StatelessWidget {
                 ),
               ),
             ),
-            if (trailing != null) trailing,
+            if (trailing != null) ...[
+              const SizedBox(width: 12),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: trailing,
+                ),
+              ),
+            ],
           ],
         ),
       ),

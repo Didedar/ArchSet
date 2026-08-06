@@ -65,7 +65,14 @@ void main() {
   late _FakeDependencies dependencies;
   late StreamController<SyncState> syncStateController;
 
-  final user = AuthUser(id: '1', email: 'a@b.com', createdAt: DateTime(2026));
+  // A real uuid and a real address, not '1'/'a@b.com': the settings rows put
+  // these opposite their label, and a one-character id hid the fact that a
+  // 36-character one leaves the label nothing.
+  final user = AuthUser(
+    id: '302ae3b7-279e-4348-a8e1-6a3616f0d2f9',
+    email: 'noname1@example.com',
+    createdAt: DateTime(2026),
+  );
 
   setUp(() {
     authBloc = _MockAuthBloc();
@@ -409,4 +416,30 @@ void main() {
       });
     }
   }
+
+  /// The sweep above cannot catch this: a label squeezed to nothing *wraps*,
+  /// and wrapping is not an overflow. "User ID" came out stacked one letter
+  /// per line beside a user id that had claimed the whole row.
+  ///
+  /// Measured as width rather than line count on purpose. Line count depends
+  /// on the font, and the test font's glyphs are fixed-width and far wider
+  /// than Inter's -- it would report a wrap that no phone shows. Width says
+  /// the thing that actually went wrong: the label was left with nothing.
+  testWidgets('a long value never crushes its label', (tester) async {
+    tester.view.physicalSize = const Size(320, 780);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pumpSettingsPage(tester);
+    await tester.pumpAndSettle();
+
+    final label = find.text(AppStrings.tr(locale, AppStrings.userId));
+    expect(label, findsOneWidget);
+    expect(
+      tester.getSize(label).width,
+      greaterThan(80),
+      reason: 'the 36-character user id beside it took the whole row',
+    );
+  });
 }
