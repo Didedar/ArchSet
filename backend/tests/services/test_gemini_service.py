@@ -182,3 +182,54 @@ async def test_extract_text_from_image_returns_none_when_gemini_raises():
     result = await service.extract_text_from_image(b"image-bytes")
 
     assert result is None
+
+
+class TestAnalysisLanguage:
+    """The findings are read by the person who chose the app's language.
+
+    The prompt used to hardcode "write information in russian", so a diary
+    kept in Kazakh or Chinese still came back described in Russian.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "code,expected",
+        [("ru", "Russian"), ("kk", "Kazakh"), ("zh", "Chinese"), ("en", "English")],
+    )
+    async def test_the_prompt_asks_for_the_requested_language(self, code, expected):
+        service = _service_with_fake_model('{"ok": true}')
+
+        await service.analyze_image_bytes(b"jpeg", language=code)
+
+        prompt = service.model.generate_content.call_args[0][0][0]
+        assert f"Write every value in {expected}" in prompt
+
+    @pytest.mark.asyncio
+    async def test_an_unknown_or_missing_language_falls_back_to_english(self):
+        for code in (None, "", "tlh"):
+            service = _service_with_fake_model('{"ok": true}')
+
+            await service.analyze_image_bytes(b"jpeg", language=code)
+
+            prompt = service.model.generate_content.call_args[0][0][0]
+            assert "Write every value in English" in prompt
+
+    @pytest.mark.asyncio
+    async def test_the_json_keys_are_never_translated(self):
+        # The app looks these up by name; a translated key is a missing key.
+        service = _service_with_fake_model('{"ok": true}')
+
+        await service.analyze_image_bytes(b"jpeg", language="zh")
+
+        prompt = service.model.generate_content.call_args[0][0][0]
+        assert "Keep the JSON keys exactly as written below, in English" in prompt
+        assert '"spatial_context"' in prompt
+
+    @pytest.mark.asyncio
+    async def test_russian_is_no_longer_hardcoded(self):
+        service = _service_with_fake_model('{"ok": true}')
+
+        await service.analyze_image_bytes(b"jpeg", language="zh")
+
+        prompt = service.model.generate_content.call_args[0][0][0]
+        assert "in russian" not in prompt.lower()

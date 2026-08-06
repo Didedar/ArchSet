@@ -190,12 +190,27 @@ Please provide the rewritten documentation:"""
             print(f"Gemini rewrite error: {e}")
             return None
 
+    # Gemini follows a language *name* far more reliably than a code, and an
+    # unknown code has to land somewhere -- English, not the caller's guess.
+    LANGUAGE_NAMES = {
+        "en": "English",
+        "ru": "Russian",
+        "kk": "Kazakh",
+        "zh": "Chinese",
+    }
+
+    @classmethod
+    def language_name(cls, code: Optional[str]) -> str:
+        """The language to answer in, given an app locale code."""
+        return cls.LANGUAGE_NAMES.get((code or "").lower(), "English")
+
     async def analyze_image_bytes(
         self,
         image_bytes: bytes,
         mime_type: str = "image/jpeg",
         latitude: Optional[float] = None,
-        longitude: Optional[float] = None
+        longitude: Optional[float] = None,
+        language: Optional[str] = None
     ) -> Optional[str]:
         """
         Analyze an image to extract archaeological context.
@@ -205,6 +220,9 @@ Please provide the rewritten documentation:"""
             mime_type: MIME type of the image
             latitude: Optional latitude where photo was taken
             longitude: Optional longitude where photo was taken
+            language: App locale code ("ru", "kk", "zh", ...). The findings are
+                written in that language; the JSON keys are not, since the app
+                reads them.
             
         Returns:
             JSON string containing the analysis
@@ -217,10 +235,15 @@ Please provide the rewritten documentation:"""
             if latitude is not None and longitude is not None:
                 location_info = f"\n            Note: The photo was taken at coordinates: Latitude {latitude}, Longitude {longitude}. Use this to infer location context if possible."
 
+            answer_in = self.language_name(language)
+
             prompt = f"""
             Analyze this archaeological photo and provide the following information in JSON format.
             This is what distinguishes science from treasure hunting.{location_info}.
-            First, write information in russian. You must provide the entire response
+
+            Write every value in {answer_in}, including any "unknown" placeholder.
+            Keep the JSON keys exactly as written below, in English -- the app
+            reads them by name and will not find them translated.
             
             1. Spatial Context (Where?)
             - Stratigraphic Index (Layer/Unit): The number of the earth's layer (e.g., "US 105"). If unknown, state "unknown".

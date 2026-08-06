@@ -160,6 +160,7 @@ async def analyze_image(
     file: UploadFile = File(..., description="Image file to analyze"),
     latitude: Optional[float] = Form(None),
     longitude: Optional[float] = Form(None),
+    language: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
     gemini: GeminiService = Depends(get_gemini_service)
 ):
@@ -168,6 +169,10 @@ async def analyze_image(
     
     Extracts spatial, physical, relational, and administrative context.
     Optionally providing latitude and longitude helps refine the spatial context.
+
+    **language** is the app's locale code ("ru", "kk", "zh", ...). The findings
+    come back in that language; the JSON keys stay English because the app
+    reads them by name. Omitted, or unrecognised, means English.
     """
     # Validate file type
     allowed_extensions = {".jpg", ".jpeg", ".png", ".webp", ".heic"}
@@ -204,7 +209,8 @@ async def analyze_image(
             content, 
             mime_type,
             latitude=latitude,
-            longitude=longitude
+            longitude=longitude,
+            language=language
         )
         
         if analysis_json:

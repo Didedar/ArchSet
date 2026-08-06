@@ -116,10 +116,17 @@ class BackendGeminiService {
   /// [latitude] - Optional latitude
   /// [longitude] - Optional longitude
   /// Returns JSON string with analysis or null if error
+  /// Analyse a photographed find.
+  ///
+  /// [languageCode] is the app's current locale. The findings come back in
+  /// that language -- an archaeologist reading their diary in Kazakh should
+  /// not be handed a Russian description of their own photo. The JSON keys
+  /// stay English either way; the app reads them by name.
   Future<String?> analyzeImage(
     String path, {
     double? latitude,
     double? longitude,
+    String? languageCode,
   }) async {
     try {
       final file = File(path);
@@ -133,6 +140,9 @@ class BackendGeminiService {
       final fields = <String, String>{};
       if (latitude != null) fields['latitude'] = latitude.toString();
       if (longitude != null) fields['longitude'] = longitude.toString();
+      if (languageCode != null && languageCode.isNotEmpty) {
+        fields['language'] = languageCode;
+      }
 
       final response = await _apiService.uploadFile(
         '/gemini/analyze-image',

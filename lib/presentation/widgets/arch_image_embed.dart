@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import '../../core/di/app_scope.dart';
 import '../../data/database/app_database.dart';
 import '../../data/services/api_service.dart';
 import '../../data/services/backend_gemini_service.dart';
+import '../locale/bloc/locale_bloc.dart';
 import 'package:drift/drift.dart' as drift;
 
 class ArchImageEmbedBuilder extends EmbedBuilder {
@@ -59,11 +61,14 @@ class _ArchImageEmbedState extends State<ArchImageEmbed> {
           apiService: ApiService(authService: context.di.auth.repository),
         );
 
-        // Pass location if available locally (even if analysis is missing)
+        // Pass location if available locally (even if analysis is missing),
+        // and the language the diary is being kept in -- the findings are read
+        // by the person who set that language, not by the backend.
         final jsonString = await geminiService.analyzeImage(
           widget.imagePath,
           latitude: existing?.latitude,
           longitude: existing?.longitude,
+          languageCode: context.read<LocaleBloc>().state.locale.languageCode,
         );
 
         if (jsonString != null) {
