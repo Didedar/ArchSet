@@ -171,13 +171,18 @@ void main() {
     // Any query forces the migration to run.
     final rows = await database.select(database.imageMetadata).get();
 
-    expect(database.schemaVersion, 12);
+    expect(database.schemaVersion, 13);
     expect(rows.single.id, 'legacy');
     expect(rows.single.latitude, 12.5);
     // New columns take their defaults rather than dropping the row.
     expect(rows.single.noteId, isNull);
-    expect(rows.single.updatedAt, isNull);
-    expect(rows.single.isDeleted, isFalse);
+    // Tombstoned by the v13 sweep rather than dropped: the row survives the
+    // upgrade (that is what this test is about), but a photo with no note
+    // link predates that column and its entry is gone, so it no longer
+    // belongs on the map. `updatedAt` is set by the sweep so the removal
+    // reaches the server too.
+    expect(rows.single.isDeleted, isTrue);
+    expect(rows.single.updatedAt, isNotNull);
   });
 
   test(
@@ -198,7 +203,7 @@ void main() {
       final notes = await database.select(database.notes).get();
       final folders = await database.select(database.folders).get();
 
-      expect(database.schemaVersion, 12);
+      expect(database.schemaVersion, 13);
       expect(notes.single.pendingSync, isFalse);
       expect(notes.single.ownerKey, isNull);
       expect(folders.single.pendingSync, isFalse);
@@ -293,7 +298,7 @@ void main() {
     final artifacts = await database.select(database.imageMetadata).get();
     final comments = await database.select(database.artifactComments).get();
 
-    expect(database.schemaVersion, 12);
+    expect(database.schemaVersion, 13);
 
     // Null, not zero: a row that has never been to the server has no revision
     // to have been based on, and zero would look like a real one.
@@ -332,7 +337,7 @@ void main() {
       final notes = await database.select(database.notes).get();
       final folders = await database.select(database.folders).get();
 
-      expect(database.schemaVersion, 12);
+      expect(database.schemaVersion, 13);
 
       // Null, not the owner: rows that predate authorship have no recorded
       // author, and inventing one would claim knowledge the database never had.
@@ -378,8 +383,16 @@ void main() {
     expect(row.ownerKey, 'user-1');
   });
 
-  test('a migrated legacy photo still appears on the map', () async {
+  test('a migrated photo appears on the map when its entry is alive', () async {
+    // The point of the migration is that a photo captured before the sync
+    // columns existed keeps working. It has to still have an entry, though --
+    // the version of this test that used a note-less row was asserting the
+    // rule that left deleted diaries' pins on the map.
     final raw = buildV6Database();
+    raw.execute(
+      "INSERT INTO notes (id, title, content, date) "
+      "VALUES ('n-legacy','Trench A','',1767225600)",
+    );
     raw.execute(
       "INSERT INTO image_metadata "
       "(id, image_path, latitude, longitude, analysis_result, captured_at) "
@@ -388,6 +401,11 @@ void main() {
 
     final database = AppDatabase.forTesting(NativeDatabase.opened(raw));
     addTearDown(database.close);
+
+    // Attach it the way the editor would, after the column exists.
+    await database.customStatement(
+      "UPDATE image_metadata SET note_id = 'n-legacy', is_deleted = 0",
+    );
     final repository = ArtifactsRepository(database);
 
     final artifacts = await repository.watchLocatedArtifacts().first;
@@ -472,13 +490,59 @@ void main() {
       expect(kept.isDeleted, isFalse, reason: 'its entry is still there');
     });
 
-    test('a photo attached to no entry at all is left alone', () async {
-      // Nothing to outlive: it was never part of a diary, so it stays.
+    test('a find whose entry was tombstoned is swept up too', () async {
+      // v12 only looked for hard-deleted entries. A tombstoned one still
+      // exists as a row, so its finds stayed alive on the server and kept
+      // their pin on a colleague's map even while hidden here.
+      final raw = buildV8Database();
+      raw.execute(
+        "INSERT INTO notes (id, title, content, date, is_deleted) "
+        "VALUES ('n-tombstoned','T','C',1767225600,1)",
+      );
+      raw.execute(
+        "INSERT INTO image_metadata "
+        "(id, image_path, latitude, longitude, analysis_result, captured_at, note_id) "
+        "VALUES ('a-soft','/p/d.jpg',12.5,41.9,NULL,1767225600,'n-tombstoned')",
+      );
+
+      final database = AppDatabase.forTesting(NativeDatabase.opened(raw));
+      addTearDown(database.close);
+
+      final row = (await database.select(database.imageMetadata).get()).single;
+
+      expect(row.isDeleted, isTrue);
+      expect(row.updatedAt, isNotNull, reason: 'so the removal reaches the server');
+    });
+
+    test('a photo with no note link at all is swept up', () async {
+      // Not an unattached find: every capture records its entry's id, so a row
+      // without one predates that column and its entry is long gone. Sparing
+      // these is what left July's pins on the map with no way to remove them.
       final raw = buildV8Database();
       raw.execute(
         "INSERT INTO image_metadata "
         "(id, image_path, latitude, longitude, analysis_result, captured_at) "
-        "VALUES ('a-loose','/p/c.jpg',12.5,41.9,NULL,1767225600)",
+        "VALUES ('a-legacy','/p/c.jpg',12.5,41.9,NULL,1767225600)",
+      );
+
+      final database = AppDatabase.forTesting(NativeDatabase.opened(raw));
+      addTearDown(database.close);
+
+      final row = (await database.select(database.imageMetadata).get()).single;
+
+      expect(row.isDeleted, isTrue);
+    });
+
+    test('a find whose entry is alive is untouched', () async {
+      final raw = buildV8Database();
+      raw.execute(
+        "INSERT INTO notes (id, title, content, date, is_deleted) "
+        "VALUES ('n-alive2','T','C',1767225600,0)",
+      );
+      raw.execute(
+        "INSERT INTO image_metadata "
+        "(id, image_path, latitude, longitude, analysis_result, captured_at, note_id) "
+        "VALUES ('a-live','/p/e.jpg',12.5,41.9,NULL,1767225600,'n-alive2')",
       );
 
       final database = AppDatabase.forTesting(NativeDatabase.opened(raw));

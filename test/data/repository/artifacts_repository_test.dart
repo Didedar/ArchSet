@@ -13,9 +13,25 @@ void main() {
   late AppDatabase database;
   late ArtifactsRepository repository;
 
-  setUp(() {
+  /// Every photo is taken inside an entry, so the default fixture has one.
+  /// The old default -- an artifact with no note at all -- is a shape the
+  /// capture path cannot produce, and testing against it is what let a rule
+  /// that keeps note-less pins on the map look correct.
+  const defaultNoteId = 'note-default';
+
+  setUp(() async {
     database = AppDatabase.forTesting(NativeDatabase.memory());
     repository = ArtifactsRepository(database);
+    await database
+        .into(database.notes)
+        .insert(
+          NotesCompanion.insert(
+            id: defaultNoteId,
+            title: 'Trench A',
+            content: '',
+            date: DateTime(2026, 1, 1),
+          ),
+        );
   });
 
   tearDown(() => database.close());
@@ -24,7 +40,7 @@ void main() {
     String id, {
     double? latitude = 10.0,
     double? longitude = 20.0,
-    String? noteId,
+    String? noteId = defaultNoteId,
     String? analysisResult,
     bool isDeleted = false,
     DateTime? capturedAt,
@@ -128,16 +144,17 @@ void main() {
       expect(artifacts, isEmpty);
     });
 
-    test('keeps a photo that was never attached to an entry', () async {
-      // The other half, and the reason the rule cannot simply be "the note
-      // must exist": a find photographed outside any entry has nothing to
-      // outlive, and must stay on the map.
-      await insertArtifact('a1');
+    test('drops a photo with no note link at all', () async {
+      // Previously kept, on the theory that a find photographed outside any
+      // entry has nothing to outlive. The capture path disproves it: every
+      // photo records its entry's id. A row without one predates that column
+      // and its entry is long gone -- and sparing it left pins on the map
+      // with no way to remove them.
+      await insertArtifact('a1', noteId: null);
 
       final artifacts = await repository.watchLocatedArtifacts().first;
 
-      expect(artifacts.single.id, 'a1');
-      expect(artifacts.single.noteTitle, isNull);
+      expect(artifacts, isEmpty);
     });
 
     test('counts only live comments', () async {
@@ -308,14 +325,16 @@ void main() {
       expect(artifacts.map((a) => a.id), contains('a1'));
     });
 
-    test('an artifact attached to no note at all still shows', () async {
-      // A photo taken outside any entry has no parent to be deleted, so the
-      // join must not filter it out along with the orphans.
+    test('an artifact with no note link is treated as a leftover', () async {
+      // This asserted the opposite, on the theory that a photo taken outside
+      // any entry has no parent to lose. There is no such photo: the capture
+      // path always records the entry's id, so a row without one is a
+      // survivor from before that column and its entry is gone.
       await insertArtifact('a-loose', noteId: null);
 
       final artifacts = await repository.watchLocatedArtifacts().first;
 
-      expect(artifacts.map((a) => a.id), contains('a-loose'));
+      expect(artifacts.map((a) => a.id), isNot(contains('a-loose')));
     });
 
     test('the unlocated count also ignores a deleted note\'s photos', () async {
@@ -344,14 +363,15 @@ void main() {
       expect(artifacts.map((a) => a.id), ['a1']);
     });
 
-    test('without a noteId it still returns everything', () async {
+    test('without a noteId it returns every live entry\'s finds', () async {
       await insertNote('n1');
+      await insertNote('n2');
       await insertArtifact('a1', noteId: 'n1');
-      await insertArtifact('a-loose', noteId: null);
+      await insertArtifact('a2', noteId: 'n2');
 
       final artifacts = await repository.watchLocatedArtifacts().first;
 
-      expect(artifacts.map((a) => a.id), containsAll(['a1', 'a-loose']));
+      expect(artifacts.map((a) => a.id), containsAll(['a1', 'a2']));
     });
 
     test('a deleted note scoped to itself yields nothing', () async {

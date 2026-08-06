@@ -31,18 +31,17 @@ class ArtifactsRepository {
   /// True when an artifact's parent entry is still alive.
   ///
   /// A photographed find only exists as part of the entry it was photographed
-  /// in, so deleting the entry has to take its pin off the map.
+  /// in, so a pin without a live entry claims a find whose record is gone --
+  /// someone would go looking for the context and find none.
   ///
-  /// The first half asks about the *artifact's* column, not the joined note's.
-  /// That distinction is the whole fix: `notes.isDeleted IS NULL` is true both
-  /// for a photo attached to nothing and for one whose entry was hard-deleted,
-  /// because a left join to a row that no longer exists yields nulls either
-  /// way. So the pin of a deleted entry stayed on the map, and no amount of
-  /// cascading on the delete path could reach rows orphaned before that
-  /// cascade existed. Asking `imageMetadata.noteId IS NULL` instead keeps
-  /// genuinely unattached photos visible while letting an orphan fall out.
+  /// No exemption for a null `noteId`. Two earlier attempts carved one out,
+  /// on the theory that a photo attached to nothing has nothing to outlive.
+  /// The capture path disproves it: every photo is taken inside an entry and
+  /// always records its id. A row with no note link is therefore not an
+  /// unattached find but a leftover from before that column existed, whose
+  /// entry is long gone -- and the exemption was keeping exactly those pins
+  /// on the map with no way to remove them.
   Expression<bool> get _parentNoteAlive =>
-      database.imageMetadata.noteId.isNull() |
       database.notes.isDeleted.equals(false);
 
   /// Joins note titles and comment counts in SQL so the map doesn't issue a

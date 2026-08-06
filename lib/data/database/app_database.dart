@@ -129,7 +129,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   /// Indexes covering every filter/sort the repository actually issues.
   ///
@@ -288,6 +288,26 @@ class AppDatabase extends _$AppDatabase {
            WHERE note_id IS NOT NULL
              AND is_deleted = 0
              AND note_id NOT IN (SELECT id FROM notes)
+        ''', [DateTime.now().millisecondsSinceEpoch ~/ 1000]);
+      }
+      if (from < 13) {
+        // The v12 sweep was too narrow, twice over.
+        //
+        // It only looked for entries that were *hard*-deleted. An entry that
+        // was tombstoned instead still exists as a row, so its finds slipped
+        // through -- hidden by the map query here, but alive on the server and
+        // still pinned on a colleague's map.
+        //
+        // And it spared rows with no note link at all, on the theory that such
+        // a photo was never part of an entry. The capture path says otherwise:
+        // every photo is taken inside an entry and records its id. A row
+        // without one predates that column, and its entry is long gone.
+        await customStatement('''
+          UPDATE image_metadata
+             SET is_deleted = 1, updated_at = ?
+           WHERE is_deleted = 0
+             AND (note_id IS NULL
+                  OR note_id NOT IN (SELECT id FROM notes WHERE is_deleted = 0))
         ''', [DateTime.now().millisecondsSinceEpoch ~/ 1000]);
       }
     },
