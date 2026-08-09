@@ -22,10 +22,6 @@ class _WelcomePageState extends State<WelcomePage>
   late Animation<Offset> _textSlide;
   late Animation<double> _btn1Opacity;
   late Animation<Offset> _btn1Slide;
-  late Animation<double> _btn2Opacity;
-  late Animation<Offset> _btn2Slide;
-  late Animation<double> _btn3Opacity;
-  late Animation<Offset> _btn3Slide;
   late Animation<double> _guestOpacity;
   late Animation<Offset> _guestSlide;
 
@@ -54,7 +50,7 @@ class _WelcomePageState extends State<WelcomePage>
           ),
         );
 
-    // 2. Кнопка Google
+    // 2. Кнопка Email
     _btn1Opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
@@ -69,48 +65,18 @@ class _WelcomePageState extends State<WelcomePage>
           ),
         );
 
-    // 3. Кнопка Apple
-    _btn2Opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.4, 0.7, curve: Curves.easeOut),
-      ),
-    );
-    _btn2Slide = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _controller,
-            curve: const Interval(0.4, 0.7, curve: Curves.easeOut),
-          ),
-        );
-
-    // 4. Кнопка Email
-    _btn3Opacity = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _controller,
-        curve: const Interval(0.6, 0.9, curve: Curves.easeOut),
-      ),
-    );
-    _btn3Slide = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero)
-        .animate(
-          CurvedAnimation(
-            parent: _controller,
-            curve: const Interval(0.6, 0.9, curve: Curves.easeOut),
-          ),
-        );
-
-    // 5. Гостевой режим
+    // 3. Гостевой режим
     _guestOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.75, 1.0, curve: Curves.easeOut),
+        curve: const Interval(0.55, 0.8, curve: Curves.easeOut),
       ),
     );
     _guestSlide = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero)
         .animate(
           CurvedAnimation(
             parent: _controller,
-            curve: const Interval(0.75, 1.0, curve: Curves.easeOut),
+            curve: const Interval(0.55, 0.8, curve: Curves.easeOut),
           ),
         );
 
@@ -199,47 +165,11 @@ class _WelcomePageState extends State<WelcomePage>
                           // Это создаст большую "дырку" посередине, выталкивая текст вверх.
                           SizedBox(height: screenHeight * 0.18),
 
-                          // Кнопка 1
+                          // Кнопка Email
                           FadeTransition(
                             opacity: _btn1Opacity,
                             child: SlideTransition(
                               position: _btn1Slide,
-                              child: _buildButton(
-                                context,
-                                text: AppStrings.tr(
-                                  locale,
-                                  AppStrings.signInGoogle,
-                                ),
-                                iconPath: 'assets/images/icon_google.png',
-                                onPressed: () {},
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Кнопка 2
-                          FadeTransition(
-                            opacity: _btn2Opacity,
-                            child: SlideTransition(
-                              position: _btn2Slide,
-                              child: _buildButton(
-                                context,
-                                text: AppStrings.tr(
-                                  locale,
-                                  AppStrings.signInApple,
-                                ),
-                                iconPath: 'assets/images/icon_apple.png',
-                                onPressed: () {},
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-
-                          // Кнопка 3
-                          FadeTransition(
-                            opacity: _btn3Opacity,
-                            child: SlideTransition(
-                              position: _btn3Slide,
                               child: _buildButton(
                                 context,
                                 text: AppStrings.tr(
