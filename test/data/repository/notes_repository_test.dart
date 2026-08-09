@@ -734,4 +734,28 @@ void main() {
       });
     });
   });
+
+  group('wipeAllLocalData', () {
+    test('deletes every row from every table', () async {
+      await repository.createFolder(folder('f1'));
+      await repository.insertNote(note('n1', folderId: 'f1'));
+
+      await repository.wipeAllLocalData();
+
+      expect(await database.select(database.folders).get(), isEmpty);
+      expect(await database.select(database.notes).get(), isEmpty);
+    });
+
+    test('clears rows regardless of which owner they belong to', () async {
+      ownerHolder.value = 'user-1';
+      await repository.createFolder(folder('f1'));
+      ownerHolder.value = null;
+      await repository.insertNote(note('n2'));
+
+      await repository.wipeAllLocalData();
+
+      expect(await database.select(database.folders).get(), isEmpty);
+      expect(await database.select(database.notes).get(), isEmpty);
+    });
+  });
 }

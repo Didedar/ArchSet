@@ -504,4 +504,19 @@ class NotesRepository {
     final row = await query.getSingle();
     return row.read(count) ?? 0;
   }
+
+  /// Deletes every row from every table, regardless of owner.
+  ///
+  /// Used only when the signed-in account is permanently deleted: unlike
+  /// sign-out, which deliberately preserves local data so a returning user
+  /// doesn't lose anything, account deletion means there is no server copy
+  /// left to sync back to, so nothing is left behind on the device either.
+  Future<void> wipeAllLocalData() async {
+    await database.transaction(() async {
+      await database.delete(database.notes).go();
+      await database.delete(database.folders).go();
+      await database.delete(database.imageMetadata).go();
+      await database.delete(database.artifactComments).go();
+    });
+  }
 }
