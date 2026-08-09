@@ -72,7 +72,7 @@ app = FastAPI(
     - **Sync**: Offline-first synchronization
     - **Gemini AI**: Audio transcription and archaeological text rewriting
     """,
-    version="1.0.1",
+    version="1.0.2",
     lifespan=lifespan,
 )
 
@@ -107,7 +107,7 @@ async def root():
     """Root endpoint - API status check."""
     return {
         "name": "ArchSet API",
-        "version": "1.0.1",
+        "version": "1.0.2",
         "status": "running",
         "docs": "/docs"
     }
