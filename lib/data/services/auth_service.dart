@@ -373,6 +373,8 @@ class AuthService implements AuthRepository {
   @override
   Future<void> deleteAccount() async {
     final token = await getAccessToken();
+    if (token == null) throw Exception('Not signed in');
+
     final response = await _client
         .delete(
           Uri.parse('$_baseUrl/auth/me'),
