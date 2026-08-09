@@ -913,14 +913,22 @@ class SettingsPage extends StatelessWidget {
 
     if (confirmed != true || !context.mounted) return;
 
+    // Captured before the session call: once deleteAccount() succeeds, the
+    // global BlocListener<SessionCubit> in RootContext pops navigation back
+    // to WelcomePage, which can unmount this widget before wipeAllLocalData()
+    // gets a chance to run -- capturing the repository reference now means
+    // the wipe still happens regardless of whether that leaves `context`
+    // usable afterward.
+    final notesRepository = context.di.notes.repository;
+
     try {
       // The global BlocListener<SessionCubit> in RootContext resets
       // navigation back to the root screen (WelcomePage) once the session
       // flips to Unauthenticated -- nothing to navigate here.
       await context.read<SessionCubit>().deleteAccount();
-      if (!context.mounted) return;
-      await context.di.notes.repository.wipeAllLocalData();
+      await notesRepository.wipeAllLocalData();
     } catch (e) {
+      debugPrint('Delete account failed: $e');
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
