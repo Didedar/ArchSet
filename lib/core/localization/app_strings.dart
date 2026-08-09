@@ -25,8 +25,6 @@ class AppStrings {
   static const String unknown = 'unknown';
   static const String welcomeTo = 'welcome_to';
   static const String archset = 'archset';
-  static const String signInGoogle = 'sign_in_google';
-  static const String signInApple = 'sign_in_apple';
   static const String signInEmail = 'sign_in_email';
   static const String myNotes = 'my_notes';
   static const String all = 'all';
@@ -171,8 +169,6 @@ class AppStrings {
     unknown,
     welcomeTo,
     archset,
-    signInGoogle,
-    signInApple,
     signInEmail,
     myNotes,
     all,
@@ -315,8 +311,6 @@ class AppStrings {
       unknown: 'Unknown',
       welcomeTo: 'Welcome to',
       archset: 'ARCHSET',
-      signInGoogle: 'Sign in with Google',
-      signInApple: 'Sign in with Apple',
       signInEmail: 'Sign in with Email',
       myNotes: 'My Notes',
       all: 'All',
@@ -470,8 +464,6 @@ class AppStrings {
       unknown: 'Неизвестно',
       welcomeTo: 'Добро пожаловать в',
       archset: 'ARCHSET',
-      signInGoogle: 'Войти через Google',
-      signInApple: 'Войти через Apple',
       signInEmail: 'Войти через Email',
       myNotes: 'Мои заметки',
       all: 'Все',
@@ -623,8 +615,6 @@ class AppStrings {
       unknown: 'Белгісіз',
       welcomeTo: 'Қош келдініз',
       archset: 'ARCHSET',
-      signInGoogle: 'Google арқылы кіру',
-      signInApple: 'Apple арқылы кіру',
       signInEmail: 'Email арқылы кіру',
       myNotes: 'Менің жазбаларым',
       all: 'Барлығы',
@@ -771,8 +761,6 @@ class AppStrings {
       unknown: '未知',
       welcomeTo: '欢迎使用',
       archset: 'ARCHSET',
-      signInGoogle: '使用 Google 登录',
-      signInApple: '使用 Apple 登录',
       signInEmail: '使用邮箱登录',
       myNotes: '我的笔记',
       all: '全部',
