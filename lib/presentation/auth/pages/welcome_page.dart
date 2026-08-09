@@ -69,14 +69,14 @@ class _WelcomePageState extends State<WelcomePage>
     _guestOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.75, 1.0, curve: Curves.easeOut),
+        curve: const Interval(0.55, 0.8, curve: Curves.easeOut),
       ),
     );
     _guestSlide = Tween<Offset>(begin: const Offset(0, 0.5), end: Offset.zero)
         .animate(
           CurvedAnimation(
             parent: _controller,
-            curve: const Interval(0.75, 1.0, curve: Curves.easeOut),
+            curve: const Interval(0.55, 0.8, curve: Curves.easeOut),
           ),
         );
 
