@@ -96,11 +96,13 @@ class SessionCubit extends Cubit<AppSession> {
   /// [SessionUnauthenticated] -- the same terminal state [logout] reaches,
   /// so routing needs no separate handling for it.
   ///
-  /// Deliberately does not touch local diary data; unlike [logout], the
-  /// caller (SettingsPage) wipes it separately, and only after this
-  /// completes successfully. Propagates any failure from the repository
-  /// instead of swallowing it, so the caller knows the account was NOT
-  /// deleted and must not wipe anything.
+  /// Like [logout], does not touch local diary data itself; but unlike after
+  /// logout (where local data is intentionally preserved), the caller here
+  /// wipes it separately, and only once this succeeds.
+  ///
+  /// Throws on failure -- callers must catch this (unlike [logout]'s
+  /// repository call, which cannot realistically fail). No state is emitted
+  /// in that case, so the session is left exactly as it was.
   Future<void> deleteAccount() async {
     await _repository.deleteAccount();
     _emit(const SessionUnauthenticated());
