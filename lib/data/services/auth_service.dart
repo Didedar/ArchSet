@@ -361,6 +361,37 @@ class AuthService implements AuthRepository {
     await _clearNamespacedSession();
   }
 
+  /// Permanently deletes the signed-in account on the server. Clears the
+  /// namespaced session on success, exactly like [logout] -- the tokens are
+  /// dead either way once the account is gone. Throws and leaves the
+  /// session untouched on failure: the account (and its session) still
+  /// exists in that case, so nothing local should change.
+  ///
+  /// Deliberately does not touch the on-device diary (notes/folders) --
+  /// that's the caller's job once this succeeds, same separation of
+  /// concerns [logout] already keeps.
+  @override
+  Future<void> deleteAccount() async {
+    final token = await getAccessToken();
+    final response = await _client
+        .delete(
+          Uri.parse('$_baseUrl/auth/me'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+        )
+        .timeout(_requestTimeout);
+
+    if (response.statusCode != 204) {
+      final error = jsonDecode(response.body);
+      throw Exception(error['detail'] ?? 'Failed to delete account');
+    }
+
+    _currentUser = null;
+    await _clearNamespacedSession();
+  }
+
   /// Load user from storage (for app startup).
   ///
   /// Fails closed only when the server actively rejects the token (401). A
