@@ -48,14 +48,20 @@ class ImageAnalysisResponse(BaseModel):
 @router.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe_audio(
     file: UploadFile = File(..., description="Audio file to transcribe"),
-    current_user: User = Depends(get_current_user),
     gemini: GeminiService = Depends(get_gemini_service)
 ):
     """
     Transcribe an audio file to text using Gemini AI.
-    
+
+    Deliberately open to guests, unlike /rewrite, /analyze-image and /ocr:
+    Gemini is the app's *default* transcription engine, so gating it on an
+    account would silently break the common case for anyone who hasn't
+    signed in yet. Not rate-limited -- there's no per-caller accounting here,
+    so this endpoint is reachable by anyone who can reach the server, signed
+    in or not.
+
     Supported formats: .m4a, .mp3, .wav, .webm, .ogg
-    
+
     Maximum file size: 50MB
     """
     # Validate file type

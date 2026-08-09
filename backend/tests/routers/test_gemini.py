@@ -95,13 +95,21 @@ async def test_transcribe_reports_a_value_error_as_a_clean_failure(
 
 
 @pytest.mark.asyncio
-async def test_transcribe_requires_auth(client: AsyncClient, fake_gemini):
+async def test_transcribe_works_without_auth(client: AsyncClient, fake_gemini):
+    # Unlike rewrite/analyze-image/ocr below: transcribe is the app's default
+    # transcription engine, so a guest who hasn't signed in yet still needs
+    # it to work.
+    fake_gemini.transcribe_audio_bytes.return_value = "Found a shard at 2m depth."
+
     response = await client.post(
         "/api/v1/gemini/transcribe",
         files={"file": ("recording.m4a", b"fake-audio-bytes", "audio/mp4")},
     )
 
-    assert response.status_code == 401
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["text"] == "Found a shard at 2m depth."
 
 
 @pytest.mark.asyncio
