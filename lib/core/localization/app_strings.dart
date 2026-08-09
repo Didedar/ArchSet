@@ -16,7 +16,8 @@ class AppStrings {
   static const String userId = 'user_id';
   static const String email = 'email';
   static const String deleteAccount = 'delete_account';
-  static const String deleteAccountConfirmTitle = 'delete_account_confirm_title';
+  static const String deleteAccountConfirmTitle =
+      'delete_account_confirm_title';
   static const String deleteAccountConfirmMessage =
       'delete_account_confirm_message';
   static const String deleteAccountFailed = 'delete_account_failed';
