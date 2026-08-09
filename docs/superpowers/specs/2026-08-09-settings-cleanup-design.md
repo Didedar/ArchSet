@@ -3,10 +3,14 @@
 **Date:** 2026-08-09
 **Status:** Approved, ready for planning
 **Scope note:** This is sub-project 1 of 2 requested together. Sub-project 2
-(Google/Apple Sign-In) is a separate, much larger effort — new backend OAuth
-endpoints, a User schema migration, native SDK integration, and real
-credentials from the user's Apple/Google developer accounts. It gets its own
-design doc and is explicitly out of scope here.
+(Google/Apple Sign-In) was scoped as a separate, much larger effort — new
+backend OAuth endpoints, a User schema migration, native SDK integration, and
+real credentials from the user's Apple/Google developer accounts — and was
+explicitly out of scope here. **Update:** the user later decided against
+building it (didn't want to take on the OAuth credential setup) and asked to
+remove the dead Google/Apple buttons instead. See
+`docs/superpowers/specs/2026-08-09-remove-social-signin-buttons-design.md` —
+sub-project 2 is closed, not pending.
 
 ## Overview
 
@@ -23,7 +27,8 @@ covers making three of them real and removing the fourth:
 
 ## Out of scope
 
-- Google/Apple Sign-In (separate spec).
+- Google/Apple Sign-In — abandoned, not deferred; see
+  `docs/superpowers/specs/2026-08-09-remove-social-signin-buttons-design.md`.
 - Localizing the legal text into ru/kk/zh (English only for now, per
   decision below).
 - Soft-delete / grace-period account recovery.
