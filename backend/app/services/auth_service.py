@@ -2,6 +2,8 @@
 Authentication service for user registration and login.
 """
 
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
@@ -15,6 +17,8 @@ from ..utils.security import (
     create_refresh_token,
     decode_token,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -104,3 +108,14 @@ class AuthService:
             access_token=access_token,
             refresh_token=new_refresh_token
         )
+
+    async def delete_account(self, user: User) -> None:
+        """Permanently delete a user account and all associated data.
+
+        Relies on the cascade="all, delete-orphan" relationships declared on
+        User (folders/notes/artifacts/artifact_comments) to remove every row
+        that belongs to this user.
+        """
+        logger.info(f"Account deleted: user_id={user.id}")
+        await self.db.delete(user)
+        await self.db.commit()
