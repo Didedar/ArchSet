@@ -11,12 +11,16 @@ class AppStrings {
   static const String confirm = 'confirm';
   static const String termsOfUse = 'terms_of_use';
   static const String privacyPolicy = 'privacy_policy';
-  static const String featureRequest = 'feature_request';
   static const String darkMode = 'dark_mode';
   static const String language = 'language';
   static const String userId = 'user_id';
   static const String email = 'email';
   static const String deleteAccount = 'delete_account';
+  static const String deleteAccountConfirmTitle =
+      'delete_account_confirm_title';
+  static const String deleteAccountConfirmMessage =
+      'delete_account_confirm_message';
+  static const String deleteAccountFailed = 'delete_account_failed';
   static const String hello = 'hello';
   static const String unknown = 'unknown';
   static const String welcomeTo = 'welcome_to';
@@ -155,12 +159,14 @@ class AppStrings {
     confirm,
     termsOfUse,
     privacyPolicy,
-    featureRequest,
     darkMode,
     language,
     userId,
     email,
     deleteAccount,
+    deleteAccountConfirmTitle,
+    deleteAccountConfirmMessage,
+    deleteAccountFailed,
     hello,
     unknown,
     welcomeTo,
@@ -293,12 +299,18 @@ class AppStrings {
       confirm: 'Confirm',
       termsOfUse: 'Terms of Use',
       privacyPolicy: 'Privacy Policy',
-      featureRequest: 'Feature request',
       darkMode: 'Dark mode',
       language: 'Language',
       userId: 'User ID',
       email: 'Email',
       deleteAccount: 'Delete Account',
+      deleteAccountConfirmTitle: 'Delete Account',
+      deleteAccountConfirmMessage:
+          'This will permanently delete your account and all your diary '
+          'data. This cannot be undone.',
+      deleteAccountFailed:
+          'Failed to delete account. Please check your connection and try '
+          'again.',
       hello: 'Hello',
       unknown: 'Unknown',
       welcomeTo: 'Welcome to',
@@ -442,12 +454,18 @@ class AppStrings {
       confirm: 'Подтвердить',
       termsOfUse: 'Условия использования',
       privacyPolicy: 'Политика конфиденциальности',
-      featureRequest: 'Запрос функций',
       darkMode: 'Тёмная тема',
       language: 'Язык',
       userId: 'ID пользователя',
       email: 'Email',
       deleteAccount: 'Удалить аккаунт',
+      deleteAccountConfirmTitle: 'Удалить аккаунт',
+      deleteAccountConfirmMessage:
+          'Аккаунт и весь дневник будут удалены навсегда. Это действие '
+          'нельзя отменить.',
+      deleteAccountFailed:
+          'Не удалось удалить аккаунт. Проверьте соединение и попробуйте '
+          'снова.',
       hello: 'Привет',
       unknown: 'Неизвестно',
       welcomeTo: 'Добро пожаловать в',
@@ -589,12 +607,18 @@ class AppStrings {
       confirm: 'Растау',
       termsOfUse: 'Пайдалану шарттары',
       privacyPolicy: 'Құпиялылық саясаты',
-      featureRequest: 'Функция сұрау',
       darkMode: 'Қараңғы режим',
       language: 'Тіл',
       userId: 'Пайдаланушы ID',
       email: 'Email',
       deleteAccount: 'Аккаунтты өшіру',
+      deleteAccountConfirmTitle: 'Аккаунтты өшіру',
+      deleteAccountConfirmMessage:
+          'Аккаунт және барлық күнделік деректері толығымен өшіріледі. Бұл '
+          'әрекетті қайтару мүмкін емес.',
+      deleteAccountFailed:
+          'Аккаунтты өшіру сәтсіз аяқталды. Байланысты тексеріп, қайталап '
+          'көріңіз.',
       hello: 'Сәлем',
       unknown: 'Белгісіз',
       welcomeTo: 'Қош келдініз',
@@ -735,12 +759,14 @@ class AppStrings {
       confirm: '确认',
       termsOfUse: '使用条款',
       privacyPolicy: '隐私政策',
-      featureRequest: '功能请求',
       darkMode: '深色模式',
       language: '语言',
       userId: '用户ID',
       email: '邮箱',
       deleteAccount: '删除账户',
+      deleteAccountConfirmTitle: '删除账户',
+      deleteAccountConfirmMessage: '这将永久删除您的账户和全部日记数据，此操作无法撤销。',
+      deleteAccountFailed: '删除账户失败，请检查网络连接后重试。',
       hello: '你好',
       unknown: '未知',
       welcomeTo: '欢迎使用',

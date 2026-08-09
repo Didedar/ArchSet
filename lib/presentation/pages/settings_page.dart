@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/di/app_scope.dart';
+import '../../core/legal/legal_text.dart';
 import '../auth/pages/sign_in_email_page.dart';
 import '../locale/bloc/locale_bloc.dart';
 import '../session/bloc/session_cubit.dart';
@@ -10,6 +11,7 @@ import '../sync/bloc/sync_bloc.dart';
 import '../theme/bloc/theme_bloc.dart';
 import '../transcription/bloc/transcription_bloc.dart';
 import '../../core/localization/app_strings.dart';
+import 'legal_document_page.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
@@ -120,7 +122,18 @@ class SettingsPage extends StatelessWidget {
                       context,
                       icon: Icons.description_outlined,
                       text: AppStrings.tr(currentLocale, AppStrings.termsOfUse),
-                      onTap: () {}, // TODO: Implement URL launch
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => LegalDocumentPage(
+                            title: AppStrings.tr(
+                              currentLocale,
+                              AppStrings.termsOfUse,
+                            ),
+                            body: LegalText.termsOfUse,
+                          ),
+                        ),
+                      ),
                       textColor: textColor,
                     ),
                     _buildDivider(context),
@@ -131,18 +144,18 @@ class SettingsPage extends StatelessWidget {
                         currentLocale,
                         AppStrings.privacyPolicy,
                       ),
-                      onTap: () {}, // TODO: Implement URL launch
-                      textColor: textColor,
-                    ),
-                    _buildDivider(context),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.card_membership_outlined,
-                      text: AppStrings.tr(
-                        currentLocale,
-                        AppStrings.featureRequest,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute<void>(
+                          builder: (_) => LegalDocumentPage(
+                            title: AppStrings.tr(
+                              currentLocale,
+                              AppStrings.privacyPolicy,
+                            ),
+                            body: LegalText.privacyPolicy,
+                          ),
+                        ),
                       ),
-                      onTap: () {}, // TODO: Implement URL launch
                       textColor: textColor,
                     ),
                   ],
@@ -448,7 +461,7 @@ class SettingsPage extends StatelessWidget {
                       AppStrings.deleteAccount,
                     ),
                     color: const Color(0xFFE99C9C), // Keep red tint
-                    onTap: () {}, // TODO: Implement delete account
+                    onTap: () => _handleDeleteAccount(context, currentLocale),
                     textColor: const Color(0xFFE99C9C),
                   ),
                 ),
@@ -857,6 +870,71 @@ class SettingsPage extends StatelessWidget {
       // navigation back to the root screen (WelcomePage) once the session
       // flips to Unauthenticated -- nothing to navigate here.
       await context.read<SessionCubit>().logout();
+    }
+  }
+
+  Future<void> _handleDeleteAccount(BuildContext context, Locale locale) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Theme.of(context).dialogBackgroundColor,
+        title: Text(
+          AppStrings.tr(locale, AppStrings.deleteAccountConfirmTitle),
+          style: GoogleFonts.inter(
+            color: Theme.of(context).colorScheme.onSurface,
+          ),
+        ),
+        content: Text(
+          AppStrings.tr(locale, AppStrings.deleteAccountConfirmMessage),
+          style: GoogleFonts.inter(
+            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(
+              AppStrings.tr(locale, AppStrings.cancel),
+              style: GoogleFonts.inter(
+                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.5),
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(
+              AppStrings.tr(locale, AppStrings.delete),
+              style: GoogleFonts.inter(color: Colors.redAccent),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !context.mounted) return;
+
+    // Captured before the session call: once deleteAccount() succeeds, the
+    // global BlocListener<SessionCubit> in RootContext pops navigation back
+    // to WelcomePage, which can unmount this widget before wipeAllLocalData()
+    // gets a chance to run -- capturing the repository reference now means
+    // the wipe still happens regardless of whether that leaves `context`
+    // usable afterward.
+    final notesRepository = context.di.notes.repository;
+
+    try {
+      // The global BlocListener<SessionCubit> in RootContext resets
+      // navigation back to the root screen (WelcomePage) once the session
+      // flips to Unauthenticated -- nothing to navigate here.
+      await context.read<SessionCubit>().deleteAccount();
+      await notesRepository.wipeAllLocalData();
+    } catch (e) {
+      debugPrint('Delete account failed: $e');
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppStrings.tr(locale, AppStrings.deleteAccountFailed)),
+        ),
+      );
     }
   }
 }

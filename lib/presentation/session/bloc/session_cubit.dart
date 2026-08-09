@@ -92,6 +92,22 @@ class SessionCubit extends Cubit<AppSession> {
     _emit(const SessionUnauthenticated());
   }
 
+  /// Permanently deletes the signed-in account and transitions to
+  /// [SessionUnauthenticated] -- the same terminal state [logout] reaches,
+  /// so routing needs no separate handling for it.
+  ///
+  /// Like [logout], does not touch local diary data itself; but unlike after
+  /// logout (where local data is intentionally preserved), the caller here
+  /// wipes it separately, and only once this succeeds.
+  ///
+  /// Throws on failure -- callers must catch this (unlike [logout]'s
+  /// repository call, which cannot realistically fail). No state is emitted
+  /// in that case, so the session is left exactly as it was.
+  Future<void> deleteAccount() async {
+    await _repository.deleteAccount();
+    _emit(const SessionUnauthenticated());
+  }
+
   void sessionLost() => _emit(const SessionUnauthenticated());
 
   /// Single choke point for every state transition: updates [_ownerHolder]

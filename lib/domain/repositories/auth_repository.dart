@@ -5,5 +5,6 @@ abstract interface class AuthRepository {
   Future<AuthUser> login(String email, String password);
   Future<AuthUser> register(String email, String password);
   Future<void> logout();
+  Future<void> deleteAccount();
   Future<AuthUser?> loadStoredUser();
 }

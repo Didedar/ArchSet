@@ -1,8 +1,13 @@
-"""Tests for /api/v1/auth: register, login, refresh, me."""
+"""Tests for /api/v1/auth: register, login, refresh, me, delete."""
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.artifact import Artifact, ArtifactComment
+from app.models.folder import Folder
+from app.models.note import Note
 from app.models.user import User
 from app.utils.security import create_access_token, create_refresh_token
 
@@ -139,3 +144,102 @@ async def test_me_rejects_an_invalid_token(client: AsyncClient):
     )
 
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_delete_account_removes_the_user(
+    client: AsyncClient, test_user: User, auth_headers: dict
+):
+    response = await client.delete("/api/v1/auth/me", headers=auth_headers)
+
+    assert response.status_code == 204
+
+
+@pytest.mark.asyncio
+async def test_delete_account_revokes_the_access_token(
+    client: AsyncClient, test_user: User, auth_headers: dict
+):
+    delete_response = await client.delete("/api/v1/auth/me", headers=auth_headers)
+    assert delete_response.status_code == 204
+
+    response = await client.get("/api/v1/auth/me", headers=auth_headers)
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_delete_account_requires_a_token(client: AsyncClient):
+    response = await client.delete("/api/v1/auth/me")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_delete_account_does_not_affect_other_users(
+    client: AsyncClient,
+    test_user: User,
+    auth_headers: dict,
+    other_user: User,
+    other_auth_headers: dict,
+):
+    response = await client.delete("/api/v1/auth/me", headers=auth_headers)
+    assert response.status_code == 204
+
+    response = await client.get("/api/v1/auth/me", headers=other_auth_headers)
+    assert response.status_code == 200
+    assert response.json()["email"] == other_user.email
+
+
+@pytest.mark.asyncio
+async def test_delete_account_cascades_to_folders_notes_artifacts_and_comments(
+    client: AsyncClient,
+    test_user: User,
+    auth_headers: dict,
+    db_session: AsyncSession,
+):
+    folder = Folder(user_id=test_user.id, name="Trench A")
+    db_session.add(folder)
+    await db_session.commit()
+    await db_session.refresh(folder)
+
+    note = Note(
+        user_id=test_user.id,
+        folder_id=folder.id,
+        title="Day 1",
+        content="Context 42",
+    )
+    db_session.add(note)
+    await db_session.commit()
+
+    artifact = Artifact(user_id=test_user.id, image_path="finds/necklace.jpg")
+    db_session.add(artifact)
+    await db_session.commit()
+    await db_session.refresh(artifact)
+
+    comment = ArtifactComment(
+        artifact_id=artifact.id,
+        user_id=test_user.id,
+        body="Found near the north wall.",
+    )
+    db_session.add(comment)
+    await db_session.commit()
+
+    response = await client.delete("/api/v1/auth/me", headers=auth_headers)
+    assert response.status_code == 204
+
+    remaining_folders = await db_session.execute(
+        select(Folder).where(Folder.user_id == test_user.id)
+    )
+    remaining_notes = await db_session.execute(
+        select(Note).where(Note.user_id == test_user.id)
+    )
+    remaining_artifacts = await db_session.execute(
+        select(Artifact).where(Artifact.user_id == test_user.id)
+    )
+    remaining_comments = await db_session.execute(
+        select(ArtifactComment).where(ArtifactComment.user_id == test_user.id)
+    )
+    assert remaining_folders.scalar_one_or_none() is None
+    assert remaining_notes.scalar_one_or_none() is None
+    assert remaining_artifacts.scalar_one_or_none() is None
+    assert remaining_comments.scalar_one_or_none() is None

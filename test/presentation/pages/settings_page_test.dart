@@ -17,6 +17,8 @@ import 'package:archset_r2/data/services/sync_service.dart';
 import 'package:archset_r2/presentation/auth/bloc/auth_bloc.dart';
 import 'package:archset_r2/presentation/auth/pages/sign_in_email_page.dart';
 import 'package:archset_r2/presentation/locale/bloc/locale_bloc.dart';
+import 'package:archset_r2/presentation/pages/legal_document_page.dart';
+import 'package:archset_r2/core/legal/legal_text.dart';
 import 'package:archset_r2/presentation/pages/settings_page.dart';
 import 'package:archset_r2/presentation/session/bloc/session_cubit.dart';
 import 'package:archset_r2/presentation/sync/bloc/sync_bloc.dart';
@@ -118,11 +120,15 @@ void main() {
       initialState: SessionAuthenticated(user),
     );
     when(() => sessionCubit.logout()).thenAnswer((_) async {});
+    when(() => sessionCubit.deleteAccount()).thenAnswer((_) async {});
 
     // Nothing pending by default, so the existing sign-out tests below see
     // the confirm dialog directly, exactly as before this warning existed.
     notesRepository = _MockNotesRepository();
     when(() => notesRepository.pendingSyncCount()).thenAnswer((_) async => 0);
+    when(
+      () => notesRepository.wipeAllLocalData(),
+    ).thenAnswer((_) async {});
 
     dependencies = _FakeDependencies();
     when(
@@ -239,6 +245,135 @@ void main() {
 
         expect(find.text(s(AppStrings.unknown)), findsNothing);
         expect(find.text(s(AppStrings.guestMode)), findsNothing);
+      },
+    );
+
+    testWidgets('tapping Terms of Use opens the terms page', (tester) async {
+      givenSession(SessionAuthenticated(user));
+      await pumpSettingsPage(tester);
+
+      final row = find.text(s(AppStrings.termsOfUse));
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LegalDocumentPage), findsOneWidget);
+      expect(find.text(LegalText.termsOfUse), findsOneWidget);
+    });
+
+    testWidgets('tapping Privacy Policy opens the privacy page', (
+      tester,
+    ) async {
+      givenSession(SessionAuthenticated(user));
+      await pumpSettingsPage(tester);
+
+      final row = find.text(s(AppStrings.privacyPolicy));
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LegalDocumentPage), findsOneWidget);
+      expect(find.text(LegalText.privacyPolicy), findsOneWidget);
+    });
+
+    testWidgets('the feature request row no longer exists', (tester) async {
+      givenSession(SessionAuthenticated(user));
+      await pumpSettingsPage(tester);
+
+      expect(find.byIcon(Icons.card_membership_outlined), findsNothing);
+    });
+
+    testWidgets(
+      'confirming Delete Account calls SessionCubit.deleteAccount() then '
+      'wipes local data',
+      (tester) async {
+        givenSession(SessionAuthenticated(user));
+        await pumpSettingsPage(tester);
+
+        final row = find.text(s(AppStrings.deleteAccount));
+        await tester.ensureVisible(row);
+        await tester.pumpAndSettle();
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text(s(AppStrings.deleteAccountConfirmMessage)),
+          findsOneWidget,
+        );
+
+        // Delete is the dialog's last TextButton (Cancel is first).
+        await tester.tap(
+          find
+              .descendant(
+                of: find.byType(AlertDialog),
+                matching: find.byType(TextButton),
+              )
+              .last,
+        );
+        await tester.pumpAndSettle();
+
+        verify(() => sessionCubit.deleteAccount()).called(1);
+        verify(() => notesRepository.wipeAllLocalData()).called(1);
+      },
+    );
+
+    testWidgets('declining the Delete Account confirmation deletes nothing', (
+      tester,
+    ) async {
+      givenSession(SessionAuthenticated(user));
+      await pumpSettingsPage(tester);
+
+      final row = find.text(s(AppStrings.deleteAccount));
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+
+      // Cancel is the dialog's first TextButton.
+      await tester.tap(
+        find
+            .descendant(
+              of: find.byType(AlertDialog),
+              matching: find.byType(TextButton),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing);
+      verifyNever(() => sessionCubit.deleteAccount());
+      verifyNever(() => notesRepository.wipeAllLocalData());
+    });
+
+    testWidgets(
+      'a failed Delete Account shows an error and does not wipe local data',
+      (tester) async {
+        when(
+          () => sessionCubit.deleteAccount(),
+        ).thenThrow(Exception('network error'));
+        givenSession(SessionAuthenticated(user));
+        await pumpSettingsPage(tester);
+
+        final row = find.text(s(AppStrings.deleteAccount));
+        await tester.ensureVisible(row);
+        await tester.pumpAndSettle();
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find
+              .descendant(
+                of: find.byType(AlertDialog),
+                matching: find.byType(TextButton),
+              )
+              .last,
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text(s(AppStrings.deleteAccountFailed)), findsOneWidget);
+        verifyNever(() => notesRepository.wipeAllLocalData());
       },
     );
 

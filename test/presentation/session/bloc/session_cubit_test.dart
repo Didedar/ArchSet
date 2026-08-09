@@ -103,6 +103,31 @@ void main() {
     );
   });
 
+  group('deleteAccount', () {
+    blocTest<SessionCubit, AppSession>(
+      'emits SessionUnauthenticated and calls repository.deleteAccount()',
+      setUp: () =>
+          when(() => repository.deleteAccount()).thenAnswer((_) async {}),
+      build: () => SessionCubit(repository: repository),
+      act: (cubit) => cubit.deleteAccount(),
+      expect: () => [const SessionUnauthenticated()],
+      verify: (_) {
+        verify(() => repository.deleteAccount()).called(1);
+      },
+    );
+
+    blocTest<SessionCubit, AppSession>(
+      'emits nothing and rethrows when repository.deleteAccount() fails',
+      setUp: () => when(
+        () => repository.deleteAccount(),
+      ).thenThrow(Exception('network error')),
+      build: () => SessionCubit(repository: repository),
+      act: (cubit) => cubit.deleteAccount(),
+      errors: () => [isA<Exception>()],
+      expect: () => <AppSession>[],
+    );
+  });
+
   group('sessionLost', () {
     blocTest<SessionCubit, AppSession>(
       'emits SessionUnauthenticated',
@@ -194,6 +219,18 @@ void main() {
       act: (cubit) async {
         cubit.loginSuccess(user);
         await cubit.logout();
+      },
+      verify: (_) => expect(holder.value, isNull),
+    );
+
+    blocTest<SessionCubit, AppSession>(
+      'reverts to null on deleteAccount after being set by loginSuccess',
+      setUp: () =>
+          when(() => repository.deleteAccount()).thenAnswer((_) async {}),
+      build: () => SessionCubit(repository: repository, ownerHolder: holder),
+      act: (cubit) async {
+        cubit.loginSuccess(user);
+        await cubit.deleteAccount();
       },
       verify: (_) => expect(holder.value, isNull),
     );

@@ -73,3 +73,18 @@ async def get_current_user_info(
     Requires valid JWT access token in Authorization header.
     """
     return UserResponse.model_validate(current_user)
+
+
+@router.delete("/me", status_code=204)
+async def delete_account(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Permanently delete the authenticated user's account and all their data.
+
+    This cannot be undone. Requires a valid JWT access token in the
+    Authorization header.
+    """
+    service = AuthService(db)
+    await service.delete_account(current_user)
